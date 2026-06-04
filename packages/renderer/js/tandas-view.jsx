@@ -299,14 +299,14 @@ function TandasView({ layout }) {
           <div className="tv-body tray">
             <div className="tv-body" style={{ flex: 1, minHeight: 0 }}>
               <FolderTree sel={node} onSelect={setSel} />
-              <SongList node={node} builderIds={inBuilder} onAdd={addSong} makeDrag={makeDrag} draggingId={draggingId} preview={preview} />
+              <SongList node={node} builderIds={inBuilder} onAdd={addSong} makeDrag={makeDrag} draggingId={draggingId} preview={preview} onSelect={setSel} />
             </div>
             <Builder builder={builder} api={api} />
           </div>
         ) : (
           <div className="tv-body">
             <FolderTree sel={node} onSelect={setSel} />
-            <SongList node={node} builderIds={inBuilder} onAdd={addSong} makeDrag={makeDrag} draggingId={draggingId} preview={preview} />
+            <SongList node={node} builderIds={inBuilder} onAdd={addSong} makeDrag={makeDrag} draggingId={draggingId} preview={preview} onSelect={setSel} />
             <Builder builder={builder} api={api} />
           </div>
         )

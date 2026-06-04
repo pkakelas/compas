@@ -519,10 +519,33 @@
 .tv-songs-head {
   flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 16px 24px 12px;
 }
-.tv-crumb { font-size: 13px; color: var(--ink-2); display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.tv-crumb { font-size: 13px; color: var(--ink-2); display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; flex-wrap: wrap; }
+.tv-crumb > svg { color: var(--accent); flex: 0 0 auto; }
 .tv-crumb b { color: var(--ink); font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
-.tv-crumb .sep { color: var(--ink-3s); }
+.tv-crumb .sep { color: var(--ink-3s); display: inline-flex; align-items: center; }
+.tv-crumb-link {
+  border: none; background: none; padding: 1px 3px; margin: 0; cursor: pointer; border-radius: 6px;
+  font: inherit; font-size: 13px; color: var(--ink-2); letter-spacing: -.01em;
+}
+.tv-crumb-link:hover { background: var(--surface-2); color: var(--accent-deep); }
 .tv-songs-hint { font-size: 12px; color: var(--ink-3s); display: inline-flex; align-items: center; gap: 6px; }
+
+/* immediate subfolders of the selected folder — quick drill-down */
+.tv-subfolders {
+  flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 24px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.tv-subfolder {
+  display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px;
+  border: 1px solid var(--line-2); background: var(--surface); cursor: pointer; color: var(--ink);
+  font-size: 12.5px; transition: all .12s;
+}
+.tv-subfolder:hover { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-deep); }
+.tv-subfolder .fic { color: var(--ink-3s); display: inline-flex; }
+.tv-subfolder:hover .fic { color: var(--accent); }
+.tv-subfolder .nm { font-weight: 500; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-subfolder .ct { font: 11px var(--mono); color: var(--ink-3s); }
+
 .tv-songs-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 24px 24px; }
 
 .tv-songhead {
@@ -568,6 +591,8 @@
 .tv-grouphdr .nm { font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
 .tv-grouphdr .ct { font: 11px var(--mono); color: var(--ink-3s); }
 .tv-grouphdr .ln { flex: 1; height: 1px; background: var(--line); }
+.tv-grouphdr[role="button"]:hover .nm { color: var(--accent-deep); }
+.tv-grouphdr[role="button"]:hover .fic { color: var(--accent-deep); }
 
 /* ============================================================
    BUILDER — Bench (side dock)

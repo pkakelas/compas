@@ -1,5 +1,27 @@
 // tandas-parts.jsx — folder tree, song list, manage grid + meta helpers
-const { useState: useS, useMemo: useM } = React;
+const { useState: useS, useMemo: useM, useEffect: useE } = React;
+
+/* ---------- locate a node anywhere in the tree by its path ---------- */
+function findByPath(nodes, path) {
+  for (const n of nodes) {
+    if (n.path === path) return n;
+    if (n.children) {
+      const hit = findByPath(n.children, path);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/* ---------- split a node path into cumulative breadcrumb segments ---------- */
+function pathCrumbs(path) {
+  if (!path) return [];
+  let acc = "";
+  return path.split(" / ").map((seg) => {
+    acc = acc ? acc + " / " + seg : seg;
+    return { seg, path: acc };
+  });
+}
 
 /* ---------- tanda meta ---------- */
 function tandaMeta(t) {
@@ -62,6 +84,17 @@ function FolderTree({ sel, onSelect }) {
   const toggle = (path) => setOpenSet((s) => {
     const n = new Set(s); n.has(path) ? n.delete(path) : n.add(path); return n;
   });
+
+  // Always reveal the selected folder by opening every ancestor on its path, so
+  // a selection made from the breadcrumb or a subfolder chip stays visible here.
+  useE(() => {
+    if (!sel) return;
+    setOpenSet((s) => {
+      const n = new Set(s);
+      for (const c of pathCrumbs(sel.path)) n.add(c.path);
+      return n;
+    });
+  }, [sel && sel.path]);
 
   // when searching, surface matching folders flat
   const matches = useM(() => {
@@ -131,41 +164,93 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
   );
 }
 
-function SongList({ node, builderIds, onAdd, makeDrag, draggingId, preview }) {
+/* breadcrumb across the selected folder's ancestors (each segment jumps there) */
+function SongCrumb({ node, tree, onSelect }) {
+  const crumbs = pathCrumbs(node.path);
+  const jump = (path) => { const n = findByPath(tree, path); if (n) onSelect(n); };
+  return (
+    <div className="tv-crumb">
+      <I.folderOpen s={17} />
+      {crumbs.map((c, i) => {
+        const last = i === crumbs.length - 1;
+        return (
+          <React.Fragment key={c.path}>
+            {i > 0 && <span className="sep"><I.chev s={12} /></span>}
+            {last
+              ? <b>{c.seg}</b>
+              : <button className="tv-crumb-link" onClick={() => jump(c.path)}>{c.seg}</button>}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function SongList({ node, builderIds, onAdd, makeDrag, draggingId, preview, onSelect }) {
+  const { tree } = useStore();
   const groups = useM(() => groupsOf(node), [node]);
-  const showHeaders = groups.length > 1;
+  const subfolders = node.children || [];
+  // Label each group by where it sits relative to the current folder, so the
+  // nested structure stays legible even when songs come from deep subfolders.
+  const relLabel = (g) => {
+    if (g.path === node.path) return null;                       // songs in this folder
+    const prefix = node.path + " / ";
+    return g.path.startsWith(prefix) ? g.path.slice(prefix.length) : g.path;
+  };
+  const showHeaders = groups.length > 1 || (groups[0] && relLabel(groups[0]));
+
   return (
     <div className="tv-songs">
       <div className="tv-songs-head">
-        <div className="tv-crumb">
-          <I.folderOpen s={17} />
-          <b>{node.name}</b>
-          {node.path.includes(" / ") && <><span className="sep">·</span><span>{node.path}</span></>}
-        </div>
+        <SongCrumb node={node} tree={tree} onSelect={onSelect} />
         <div className="tv-songs-hint"><I.drag s={13} /> Drag songs into the builder, or tap +</div>
       </div>
-      <div className="tv-songs-scroll">
-        <div className="tv-songhead">
-          <span></span><span>Track</span><span>Year</span><span>Time</span><span></span>
+
+      {subfolders.length > 0 && (
+        <div className="tv-subfolders">
+          {subfolders.map((c) => (
+            <button key={c.path} className="tv-subfolder" onClick={() => onSelect(c)} title={"Open " + c.name}>
+              <span className="fic"><I.folder s={14} /></span>
+              <span className="nm">{c.name}</span>
+              <span className="ct">{countSongs(c)}</span>
+            </button>
+          ))}
         </div>
-        {groups.map((g) => (
-          <div key={g.path}>
-            {showHeaders && (
-              <div className="tv-grouphdr">
-                <span className="fic"><I.folder s={14} /></span>
-                <span className="nm">{g.name}</span>
-                <span className="ct">{g.songs.length}</span>
-                <span className="ln"></span>
-              </div>
-            )}
-            {g.songs.map((s) => (
-              <SongRow key={s.id} s={s} inBuilder={builderIds.has(s.id)}
-                onAdd={() => onAdd(s)} dragHandlers={makeDrag(s)} dragging={draggingId === s.id}
-                isPreview={preview && preview.previewId === s.id} isPlaying={preview && preview.playing}
-                onPreview={() => preview && preview.toggle(s)} />
-            ))}
-          </div>
-        ))}
+      )}
+
+      <div className="tv-songs-scroll">
+        {groups.length === 0 ? (
+          <div className="tp-empty">This folder has no songs of its own — open a subfolder above.</div>
+        ) : (
+          <>
+            <div className="tv-songhead">
+              <span></span><span>Track</span><span>Year</span><span>Time</span><span></span>
+            </div>
+            {groups.map((g) => {
+              const rel = relLabel(g);
+              return (
+                <div key={g.path}>
+                  {showHeaders && (
+                    <div className="tv-grouphdr" role={rel ? "button" : undefined}
+                      onClick={rel ? () => { const n = findByPath(tree, g.path); if (n) onSelect(n); } : undefined}
+                      style={rel ? { cursor: "pointer" } : undefined}>
+                      <span className="fic"><I.folder s={14} /></span>
+                      <span className="nm">{rel || "In this folder"}</span>
+                      <span className="ct">{g.songs.length}</span>
+                      <span className="ln"></span>
+                    </div>
+                  )}
+                  {g.songs.map((s) => (
+                    <SongRow key={s.id} s={s} inBuilder={builderIds.has(s.id)}
+                      onAdd={() => onAdd(s)} dragHandlers={makeDrag(s)} dragging={draggingId === s.id}
+                      isPreview={preview && preview.previewId === s.id} isPlaying={preview && preview.playing}
+                      onPreview={() => preview && preview.toggle(s)} />
+                  ))}
+                </div>
+              );
+            })}
+          </>
+        )}
       </div>
     </div>
   );
