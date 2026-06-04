@@ -1,0 +1,15 @@
+node_modules
+.DS_Store
+
+# Build output: electron-builder output (root /dist) and each package's Vite
+# build (packages/*/dist) all live in folders named "dist".
+dist
+
+*.local
+*.log
+.eslintcache
+thumbs.db
+
+# JetBrains / editor cruft
+.idea
+*.iml
