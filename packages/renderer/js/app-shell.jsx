@@ -3,20 +3,29 @@ const { useState } = React;
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "builderWidth": 380,
-  "accent": "#BE2C3B",
+  "theme": "light",
   "startView": "Tandas"
 }/*EDITMODE-END*/;
 
 function AppShell() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
 
-  // Load the library + tandas from the database once on launch.
-  React.useEffect(() => { Store.loadAll(); }, []);
+  // Load the library + tandas from the database once on launch, and wire the
+  // background-analysis banner to the main process's progress broadcasts.
+  React.useEffect(() => { Store.loadAll(); Store.initAnalysis(); Store.initLibraryWatch(); }, []);
 
-  // live accent override from tweaks
+  // Restore the saved theme on launch (tweaks themselves are session-only).
   React.useEffect(() => {
-    document.documentElement.style.setProperty("--accent", t.accent);
-  }, [t.accent]);
+    const saved = localStorage.getItem("compas.theme");
+    if (saved && saved !== t.theme) setTweak("theme", saved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Apply the active theme to <html> and persist it across restarts.
+  React.useEffect(() => {
+    document.documentElement.dataset.theme = t.theme;
+    localStorage.setItem("compas.theme", t.theme);
+  }, [t.theme]);
 
   // The player engine lives above every view so the transport bar stays mounted
   // and audible no matter which tab the DJ is on.
@@ -47,6 +56,7 @@ function AppBody({ t, setTweak }) {
   return (
     <div className="tp-app">
       <TopBar active={view} onNav={setView} />
+      <AnalysisBanner />
 
       <div className="tp-view" style={{ display: view === "Live" ? undefined : "none" }}>
         <LivePlayer />

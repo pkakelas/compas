@@ -47,6 +47,9 @@ let _state = {
   tandas: [],
   playlists: [],
   imported: false,
+  // Background loudness/silence analysis progress (drives the "still processing"
+  // banner). running=false hides it.
+  analysis: { running: false, paused: false, total: 0, completed: 0, failed: 0 },
 };
 const _subs = new Set();
 function _set(patch) {
@@ -126,6 +129,23 @@ const Store = {
     ]);
     _set({ tandas: tandas || [], playlists: playlists || [] });
   },
+  // Edit a single song's metadata. The main process writes the file's tags and
+  // the database, then returns the fresh library; we re-apply it and refresh
+  // tandas/playlists since they embed copies of the song. Returns the updated
+  // song (or null if the id was unknown / the write failed).
+  async updateSong(input) {
+    if (!window.compas.updateSong) return null;
+    const res = await window.compas.updateSong(input);
+    if (res && res.library) {
+      _applyLibrary(res.library);
+      const [tandas, playlists] = await Promise.all([
+        window.compas.listTandas(),
+        window.compas.listPlaylists(),
+      ]);
+      _set({ tandas: tandas || [], playlists: playlists || [] });
+    }
+    return res ? res.song : null;
+  },
   // Opens the folder picker + scans. Returns the library, or null if cancelled.
   async importLibrary() {
     _set({ importing: true });
@@ -189,6 +209,47 @@ const Store = {
   },
   songById(id) {
     return _state.byId[id];
+  },
+  // Wire up the background-analysis banner: fetch the current state once, then
+  // keep it live from the main process's progress broadcasts. Safe to call more
+  // than once — it only subscribes a single time.
+  async initAnalysis() {
+    if (this._analysisWired) return;
+    this._analysisWired = true;
+    if (!window.compas.onAnalysisProgress) return;
+    try {
+      window.compas.onAnalysisProgress((state) => {
+        if (state) _set({ analysis: state });
+      });
+    } catch (_e) { /* older main without the channel */ }
+    try {
+      if (window.compas.analysisState) {
+        const s = await window.compas.analysisState();
+        if (s) _set({ analysis: s });
+      }
+    } catch (_e) { /* ignore */ }
+  },
+  // Keep the library live with the filesystem: the main process watches every
+  // imported folder and pushes a fresh library whenever songs are added,
+  // removed, or renamed on disk. Safe to call more than once. A removed song
+  // can empty a tanda/playlist, so refresh those alongside the tree.
+  initLibraryWatch() {
+    if (this._libraryWired) return;
+    this._libraryWired = true;
+    if (!window.compas.onLibraryChanged) return;
+    try {
+      window.compas.onLibraryChanged(async (library) => {
+        if (!library) return;
+        _applyLibrary(library);
+        try {
+          const [tandas, playlists] = await Promise.all([
+            window.compas.listTandas(),
+            window.compas.listPlaylists(),
+          ]);
+          _set({ tandas: tandas || [], playlists: playlists || [] });
+        } catch (_e) { /* ignore */ }
+      });
+    } catch (_e) { /* older main without the channel */ }
   },
 };
 

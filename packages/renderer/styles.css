@@ -12,26 +12,26 @@
    re-skins the whole app. Avoid raw hex/rgba below this block.
    ------------------------------------------------------------ */
 :root {
-  /* surfaces */
-  --bg:          #FAF9F6;   /* warm near-white app field */
+  /* surfaces — warm ivory, paper-like */
+  --bg:          #FAF7F2;   /* warm near-white app field */
   --surface:     #FFFFFF;   /* cards / panels */
-  --surface-2:   #F4F2EC;   /* subtle insets */
-  --surface-3:   #EEEBE3;   /* deeper inset */
-  --line:        #E9E5DC;   /* hairline */
-  --line-2:      #DCD7CB;   /* stronger hairline */
+  --surface-2:   #F4F1E9;   /* subtle insets */
+  --surface-3:   #EDE9DF;   /* deeper inset */
+  --line:        #ECE7DC;   /* hairline */
+  --line-2:      #DCD6C8;   /* stronger hairline */
 
-  /* ink */
-  --ink:   #1C1A16;         /* primary, warm near-black */
-  --ink-2: #6B665C;         /* secondary */
-  --ink-3: #9A938668;       /* faint */
-  --ink-3s:#9A9386;         /* faint solid */
+  /* ink — warm sepia-black hierarchy */
+  --ink:   #211C16;         /* primary, warm near-black */
+  --ink-2: #6E675A;         /* secondary */
+  --ink-3: #9A938655;       /* faint */
+  --ink-3s:#978E7E;         /* faint solid */
   --on-accent: #FFFFFF;     /* text/icons sitting on accent/ink fills */
 
   /* the one accent — tango red. Tints & shadows derive from it. */
-  --accent:      #BE2C3B;
-  --accent-deep: color-mix(in srgb, var(--accent) 82%, #000);
-  --accent-soft: color-mix(in srgb, var(--accent) 8%, #fff);
-  --accent-line: color-mix(in srgb, var(--accent) 24%, #fff);
+  --accent:      #B82A3A;
+  --accent-deep: color-mix(in srgb, var(--accent) 84%, #000);
+  --accent-soft: color-mix(in srgb, var(--accent) 7%, #fff);
+  --accent-line: color-mix(in srgb, var(--accent) 22%, #fff);
 
   /* monitor / cue — a cool blue channel, deliberately distinct from the accent
      so the DJ never confuses headphone preview with what's on the floor. */
@@ -70,6 +70,71 @@
   --sans: "Schibsted Grotesk", system-ui, sans-serif;
   --serif: "Newsreader", Georgia, serif;
   --mono: "Geist Mono", ui-monospace, monospace;
+
+  color-scheme: light;
+}
+
+/* ------------------------------------------------------------
+   DARK THEME — "after-hours milonga": a warm espresso palette that
+   extends the brand's own candlelit cortina tones (Gruvbox-family
+   warm darks) rather than a cool slate, so it stays cohesive with
+   the tango-red accent and the warm cream ink. Only colour tokens
+   are overridden; every component re-skins automatically. Tints,
+   lines and shadows are re-derived against the dark --bg so
+   color-mix() never washes out on a dark field.
+   ------------------------------------------------------------ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* surfaces — warm espresso, gently lifted in steps */
+  --bg:          #17130E;   /* deepest app field */
+  --surface:     #1F1A14;   /* cards / panels */
+  --surface-2:   #262019;   /* subtle insets */
+  --surface-3:   #2E271E;   /* deeper inset */
+  --line:        #2B241B;   /* hairline */
+  --line-2:      #3B3327;   /* stronger hairline */
+
+  /* ink — warm candlelit cream */
+  --ink:    #EFE8DA;        /* primary */
+  --ink-2:  #ADA28D;        /* secondary */
+  --ink-3:  #EFE8DA22;      /* faint */
+  --ink-3s: #847A68;        /* faint solid */
+  --on-accent: #FFFFFF;
+
+  /* accent — tango red, lifted so it glows on the dark field */
+  --accent:      #D8454F;
+  --accent-deep: color-mix(in srgb, var(--accent) 76%, #fff);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--bg));
+  --accent-line: color-mix(in srgb, var(--accent) 30%, var(--bg));
+
+  /* monitor / cue — a calm steel blue, still clearly not the accent */
+  --cue:      #6BA1DA;
+  --cue-deep: color-mix(in srgb, var(--cue) 76%, #fff);
+  --cue-soft: color-mix(in srgb, var(--cue) 14%, var(--bg));
+  --cue-line: color-mix(in srgb, var(--cue) 30%, var(--bg));
+
+  /* cortina — the deepest, most recessed band */
+  --dark:     #110D09;
+  --dark-2:   #191410;
+  --dark-3:   #1F1812;
+  --dark-ink: #EFE8DA;
+  --dark-ink-2: color-mix(in srgb, #EFE8DA 50%, var(--dark));
+  --dark-line: #2B241B;
+
+  /* status / categorical hues — warm, muted, candlelit */
+  --vals:         #94B97C;  /* sage green */
+  --vals-line:    color-mix(in srgb, var(--vals) 34%, var(--bg));
+  --vals-soft:    color-mix(in srgb, var(--vals) 12%, var(--bg));
+  --milonga:      #D8A23E;  /* warm gold */
+  --milonga-line: color-mix(in srgb, var(--milonga) 34%, var(--bg));
+  --milonga-soft: color-mix(in srgb, var(--milonga) 12%, var(--bg));
+  --ok:           #84D49B;
+
+  /* drop shadows — deep, against true black so they read on dark */
+  --shadow-accent:   color-mix(in srgb, var(--accent) 38%, transparent);
+  --shadow-ink:      color-mix(in srgb, #000 58%, transparent);
+  --shadow-ink-soft: color-mix(in srgb, #000 36%, transparent);
+  --shadow-drop:     color-mix(in srgb, #000 70%, transparent);
 }
 
 * { box-sizing: border-box; }
@@ -130,20 +195,6 @@
 .tp-nav.is-active { background: var(--surface-2); color: var(--ink); }
 
 .tp-spacer { flex: 1; }
-
-.tp-clock {
-  font-family: var(--mono); font-size: 14px; color: var(--ink-2);
-  display: flex; align-items: baseline; gap: 8px;
-}
-.tp-clock b { color: var(--ink); font-weight: 600; }
-
-.tp-ai-pill {
-  display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px;
-  border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface);
-  font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer;
-}
-.tp-ai-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft); }
 
 /* ---- now playing ---- */
 .tp-now-orq {
@@ -602,18 +653,33 @@
 /* Transparent so the title sits on the panel field — matching the Live page's
    header (.tp-lib-head) for a consistent look across both pages. */
 .tv-head {
-  flex: 0 0 auto; display: flex; align-items: flex-end; justify-content: space-between;
-  gap: 20px; padding: 22px 30px 16px;
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; padding: 24px 30px 18px;
 }
-.tv-title { font-size: 24px; font-weight: 700; letter-spacing: -.02em; margin-top: 4px; }
-.tv-sub { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
+.tv-head-l { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.tv-head-badge {
+  width: 46px; height: 46px; flex: 0 0 auto; border-radius: 14px;
+  display: grid; place-items: center; color: var(--accent);
+  background: var(--accent-soft); border: 1px solid var(--accent-line);
+}
+.tv-head-text { min-width: 0; }
+.tv-title { font-size: 23px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.tv-sub { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
 .tv-sub b { color: var(--ink); font-weight: 600; }
-.tv-head-r { display: flex; align-items: center; gap: 12px; }
+.tv-head-r { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
 .tv-reimport {
-  display: inline-flex; align-items: center; gap: 7px; font: 600 12.5px var(--sans);
-  color: var(--ink-2); background: none; border: none; cursor: pointer; padding: 8px 4px;
+  display: inline-flex; align-items: center; gap: 8px; font: 600 13px var(--sans);
+  color: var(--ink); background: var(--surface); border: 1px solid var(--line-2);
+  cursor: pointer; height: 40px; padding: 0 16px; border-radius: 11px;
+  transition: border-color .12s, box-shadow .12s, background .12s, transform .12s;
 }
-.tv-reimport:hover { color: var(--ink); }
+.tv-reimport svg { color: var(--ink-2); transition: color .12s; }
+.tv-reimport:hover {
+  border-color: var(--ink-3s); background: var(--surface);
+  box-shadow: 0 2px 8px -3px var(--shadow-ink-soft);
+}
+.tv-reimport:hover svg { color: var(--accent); }
+.tv-reimport:active { transform: translateY(1px); }
 
 /* segmented build / manage */
 .tv-seg { display: flex; gap: 3px; background: var(--surface-2); border-radius: 11px; padding: 3px; }
@@ -688,12 +754,63 @@
 /* Controls row sits on the panel field (like the Tandas/Playlists tabs) so the
    white search pill reads as a field instead of washing out on a white band. */
 .tv-tree-head {
-  flex: 0 0 auto; display: flex; align-items: center; gap: 16px; padding: 2px 30px 16px;
+  flex: 0 0 auto; display: flex; align-items: center; gap: 14px;
+  padding: 2px 30px 16px; border-bottom: 1px solid var(--line);
 }
-.tv-tree-head .tp-search { height: 40px; flex: 1; max-width: 420px; }
+.tv-tree-head .tp-search { height: 42px; flex: 1; max-width: none; }
 .tv-tree-head .tv-songs-hint { margin-left: auto; }
-.tv-songs-hint { font-size: 12px; color: var(--ink-3s); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.tv-songs-hint {
+  font-size: 12px; font-weight: 500; color: var(--ink-2); display: inline-flex;
+  align-items: center; gap: 7px; white-space: nowrap; padding: 7px 13px;
+  border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line);
+}
+.tv-songs-hint svg { color: var(--ink-3s); flex: 0 0 auto; }
 .tv-tree-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 24px 28px; }
+
+/* ---- advanced song search (fuzzy + scoped metadata filters) ----
+   Shared by the library tree (build view) and the Library view. The pill keeps
+   the .tp-search look; a relative wrapper anchors the filters popover. */
+.tp-asearch { position: relative; flex: 1; min-width: 220px; display: flex; }
+.tv-tree-head .tp-asearch { flex: 1; }
+.tp-asearch .tp-search { flex: 1; }
+.tp-asearch-clear {
+  flex: 0 0 auto; width: 24px; height: 24px; display: grid; place-items: center;
+  border: none; background: transparent; color: var(--ink-3s); border-radius: 7px; cursor: pointer;
+}
+.tp-asearch-clear:hover { background: var(--surface-3); color: var(--ink); }
+.tp-asearch-toggle {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid var(--line); background: var(--surface-3); color: var(--ink-2);
+  font: 600 11.5px var(--sans); padding: 5px 10px; border-radius: 999px; cursor: pointer;
+  white-space: nowrap; transition: border-color .12s, color .12s, background .12s;
+}
+.tp-asearch-toggle:hover { color: var(--ink); border-color: var(--line-2); }
+.tp-asearch-toggle.is-open { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.tp-asearch-toggle svg { flex: 0 0 auto; }
+
+.tp-asearch-pop {
+  position: absolute; z-index: 60; top: calc(100% + 6px); left: 0; right: 0;
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 13px;
+  box-shadow: 0 18px 44px -14px var(--shadow-drop); padding: 13px; animation: tvFade .12s ease both;
+}
+.tp-asearch-pop-head {
+  font: 600 10px var(--sans); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-3s); margin: 0 2px 9px;
+}
+.tp-asearch-chips { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+.tp-asearch-chip {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
+  border: 1px solid var(--line); background: var(--surface-2); border-radius: 10px;
+  padding: 8px 11px; cursor: pointer; transition: border-color .12s, background .12s;
+}
+.tp-asearch-chip:hover { border-color: var(--accent-line); background: var(--accent-soft); }
+.tp-asearch-chip .k { font: 600 13px var(--sans); color: var(--ink); }
+.tp-asearch-chip .ex { font: 11.5px var(--mono); color: var(--ink-3s); }
+.tp-asearch-chip:hover .ex { color: var(--accent); }
+.tp-asearch-pop-foot {
+  margin: 11px 2px 1px; font-size: 11.5px; line-height: 1.5; color: var(--ink-2);
+}
+.tp-asearch-pop-foot b { font: 600 11.5px var(--mono); color: var(--ink); }
 
 .tv-tnode { user-select: none; }
 .tv-tnode-kids {
@@ -792,6 +909,62 @@
 .tv-song .play.monitor { color: var(--cue); border-color: var(--cue-line); }
 .tv-song .play.monitor:hover { background: var(--cue); border-color: var(--cue); color: var(--on-accent); }
 .tv-song .play.monitor.on { background: var(--cue); border-color: var(--cue); color: var(--on-accent); }
+
+/* edit (pencil) affordance on the read-only Library rows — appears on hover */
+.tv-song .edit {
+  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--surface);
+  color: var(--ink-2); display: grid; place-items: center; cursor: pointer; transition: all .12s; justify-self: end;
+  opacity: 0;
+}
+.tv-song:hover .edit { opacity: 1; }
+.tv-song .edit:hover { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+/* inline metadata editor — replaces a song row while editing it */
+.tv-song-edit {
+  border: 1px solid var(--accent-line); background: var(--accent-soft);
+  border-radius: 10px; padding: 12px; margin: 2px 0;
+}
+.tv-song-edit-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 12px; }
+.tv-song-edit .f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tv-song-edit .f.wide { grid-column: 1 / -1; }
+.tv-song-edit .f > span {
+  font: 600 10.5px var(--sans); letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3s);
+}
+.tv-song-edit input, .tv-song-edit select {
+  font: 13.5px var(--sans); color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 9px; width: 100%; box-sizing: border-box;
+}
+.tv-song-edit input:focus, .tv-song-edit select:focus { outline: none; border-color: var(--accent); }
+.tv-song-edit-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; justify-content: flex-end; }
+.tv-song-edit-err { margin-right: auto; font-size: 12px; color: var(--accent-deep); }
+.tv-song-edit-cancel, .tv-song-edit-save {
+  font: 600 12.5px var(--sans); border-radius: 8px; padding: 7px 14px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line-2);
+}
+.tv-song-edit-cancel { background: var(--surface); color: var(--ink); }
+.tv-song-edit-cancel:hover { background: var(--bg); }
+.tv-song-edit-save { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.tv-song-edit-save:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
+.tv-song-edit-save:disabled, .tv-song-edit-cancel:disabled { opacity: .6; cursor: default; }
+
+/* ============================================================
+   MONITOR (CUE) BADGE — the single, shared "listen in headphones"
+   affordance. Same blue circle as the library's listen button, reused
+   by every preview row (tanda search, tanda cards, builder bench,
+   playlist editor) so cueing reads the same everywhere.
+   ============================================================ */
+.tp-cuebadge {
+  width: 26px; height: 26px; flex: 0 0 auto; border-radius: 50%;
+  border: 1px solid var(--cue-line); background: var(--surface); color: var(--cue);
+  display: grid; place-items: center;
+}
+/* defeat the per-row svg rules that hide the glyph on hover and tint it the
+   accent (red) color — the badge is always blue, always shown */
+.tp-cuebadge svg { display: block !important; color: var(--cue) !important; }
+/* let the fixed-width number columns make room for the round badge */
+.tp-songrow .n:has(.tp-cuebadge),
+.tv-tcard-song .n:has(.tp-cuebadge) { width: auto; }
+.tv-slot .num:has(.tp-cuebadge) { width: auto; height: auto; background: none; padding: 0; }
 
 /* ============================================================
    BUILDER — Bench (side dock)
@@ -1272,12 +1445,70 @@
 }
 .tp-set-range-val { font: 12.5px var(--mono); color: var(--ink-2); width: 46px; text-align: right; }
 
-/* accent swatches */
-.tp-set-swatches { display: flex; gap: 10px; }
-.tp-set-swatch {
-  position: relative; width: 34px; height: 34px; border: 0; border-radius: 9px; cursor: pointer;
-  box-shadow: 0 0 0 1px var(--line-2); transition: box-shadow .12s, transform .12s;
+/* theme picker */
+.tp-set-themes { display: flex; gap: 12px; }
+.tp-set-theme {
+  position: relative; display: flex; flex-direction: column; gap: 9px; width: 138px; padding: 9px;
+  border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface); cursor: pointer;
+  transition: border-color .12s, transform .12s, box-shadow .12s;
 }
-.tp-set-swatch:hover { transform: translateY(-1px); }
-.tp-set-swatch[data-on="1"] { box-shadow: 0 0 0 2px var(--ink); }
-.tp-set-swatch svg { position: absolute; inset: 0; margin: auto; color: #fff; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }
+.tp-set-theme:hover { transform: translateY(-1px); }
+.tp-set-theme[data-on="1"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+.tp-set-theme-pv { position: relative; height: 60px; border-radius: 8px; overflow: hidden; }
+.tp-set-theme-pv i { position: absolute; display: block; }
+.tp-set-theme-pv .bg   { inset: 0; }
+.tp-set-theme-pv .card { left: 9px; top: 10px; right: 9px; height: 23px; border-radius: 4px; }
+.tp-set-theme-pv .ac   { left: 14px; top: 40px; width: 26px; height: 8px; border-radius: 999px; }
+.tp-set-theme-pv .ln   { left: 48px; top: 41px; width: 42px; height: 6px; border-radius: 3px; }
+
+.tp-set-theme-pv.light .bg   { background: #FAF7F2; }
+.tp-set-theme-pv.light .card { background: #FFFFFF; box-shadow: 0 0 0 1px #ECE7DC; }
+.tp-set-theme-pv.light .ac   { background: #B82A3A; }
+.tp-set-theme-pv.light .ln   { background: #DCD6C8; }
+
+.tp-set-theme-pv.dark .bg   { background: #17130E; }
+.tp-set-theme-pv.dark .card { background: #1F1A14; box-shadow: 0 0 0 1px #2B241B; }
+.tp-set-theme-pv.dark .ac   { background: #D8454F; }
+.tp-set-theme-pv.dark .ln   { background: #3B3327; }
+
+.tp-set-theme-lb { display: flex; align-items: center; gap: 6px; font: 600 12.5px var(--sans); color: var(--ink); }
+.tp-set-theme-lb svg { color: var(--ink-2); }
+.tp-set-theme-ck {
+  position: absolute; top: 9px; right: 9px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent); color: var(--on-accent); display: grid; place-items: center;
+}
+
+/* ---- background-analysis banner (loudness + silence trim) ---- */
+.tp-analyze-banner {
+  display: flex; align-items: center; gap: 14px;
+  padding: 11px 18px;
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--accent-line);
+  color: var(--ink);
+  flex: 0 0 auto;
+}
+.tp-analyze-spinner {
+  width: 18px; height: 18px; flex: 0 0 auto; border-radius: 50%;
+  border: 2px solid var(--accent-line);
+  border-top-color: var(--accent);
+  animation: tp-analyze-spin .8s linear infinite;
+}
+@keyframes tp-analyze-spin { to { transform: rotate(360deg); } }
+.tp-analyze-text { flex: 1; min-width: 0; }
+.tp-analyze-title { font-size: 13px; font-weight: 700; color: var(--accent-deep); }
+.tp-analyze-sub { font-size: 12px; color: var(--ink-2); margin-top: 1px; }
+.tp-analyze-bar {
+  height: 4px; margin-top: 7px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, #fff);
+  overflow: hidden;
+}
+.tp-analyze-bar-fill {
+  height: 100%; background: var(--accent); border-radius: 999px;
+  transition: width .3s ease;
+}
+.tp-analyze-count {
+  flex: 0 0 auto; text-align: right; display: flex; flex-direction: column; align-items: flex-end;
+}
+.tp-analyze-count .tp-mono { font-size: 17px; font-weight: 700; color: var(--accent-deep); line-height: 1; }
+.tp-analyze-count-lbl { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; color: var(--ink-3s); text-transform: uppercase; margin-top: 3px; }

@@ -16,6 +16,8 @@ export default /** @type import('electron-builder').Configuration */
   asarUnpack: [
     '**/*.node',
     '**/node_modules/better-sqlite3/**',
+    // The ffmpeg binary must live on the real filesystem so it can be spawned.
+    '**/node_modules/ffmpeg-static/**',
   ],
   mac: {
     category: 'public.app-category.music',

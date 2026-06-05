@@ -1,5 +1,5 @@
 // tandas-parts.jsx — unified library tree (folders + songs), manage grid + meta helpers
-const { useState, useMemo, useEffect } = React;
+const { useState, useMemo, useEffect, useRef } = React;
 
 /* ---------- tanda meta ---------- */
 function tandaMeta(t) {
@@ -86,11 +86,92 @@ function TandaLibCard({ t, preview, onAdd, added, addTitle }) {
   );
 }
 
+/* ============================ SONG EDITOR ============================
+ * The inline metadata editor that replaces a SongRow while editing. Saving
+ * writes both the file's tags (on disk) and the database (via Store.updateSong),
+ * so the change is durable and reflected everywhere the song appears. */
+function SongEditRow({ s, onClose }) {
+  const [draft, setDraft] = useState({
+    title: s.title || "",
+    orq: s.orq || "",
+    singer: s.singer || "",
+    year: s.year != null ? String(s.year) : "",
+    album: s.album || "",
+    genre: s.genre || "tango",
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(false);
+  const set = (k) => (e) => setDraft((d) => ({ ...d, [k]: e.target.value }));
+
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    setErr(false);
+    const yearTrim = draft.year.trim();
+    const yearNum = yearTrim ? parseInt(yearTrim, 10) : null;
+    try {
+      const updated = await Store.updateSong({
+        id: s.id,
+        title: draft.title.trim() || s.title,
+        orq: draft.orq.trim(),
+        singer: draft.singer.trim(),
+        album: draft.album.trim() || null,
+        year: Number.isFinite(yearNum) ? yearNum : null,
+        genre: draft.genre,
+      });
+      if (!updated) { setErr(true); setSaving(false); return; }
+      onClose();
+    } catch (e) {
+      setErr(true);
+      setSaving(false);
+    }
+  };
+
+  const onKey = (e) => {
+    if (e.key === "Enter" && e.target.tagName !== "SELECT") { e.preventDefault(); save(); }
+    else if (e.key === "Escape") { e.preventDefault(); if (!saving) onClose(); }
+  };
+
+  return (
+    <div className="tv-song-edit" onKeyDown={onKey} onClick={(e) => e.stopPropagation()}>
+      <div className="tv-song-edit-grid">
+        <label className="f wide"><span>Title</span>
+          <input autoFocus value={draft.title} onChange={set("title")} placeholder="Title" /></label>
+        <label className="f"><span>Orchestra</span>
+          <input value={draft.orq} onChange={set("orq")} placeholder="Orchestra" /></label>
+        <label className="f"><span>Singer</span>
+          <input value={draft.singer} onChange={set("singer")} placeholder="Instrumental" /></label>
+        <label className="f"><span>Year</span>
+          <input value={draft.year} onChange={set("year")} inputMode="numeric" placeholder="—" maxLength={4} /></label>
+        <label className="f"><span>Genre</span>
+          <select value={draft.genre} onChange={set("genre")}>
+            <option value="tango">Tango</option>
+            <option value="vals">Vals</option>
+            <option value="milonga">Milonga</option>
+            <option value="cortina">Cortina</option>
+          </select></label>
+        <label className="f wide"><span>Album</span>
+          <input value={draft.album} onChange={set("album")} placeholder="Album" /></label>
+      </div>
+      <div className="tv-song-edit-foot">
+        {err && <span className="tv-song-edit-err">Couldn’t save — please try again.</span>}
+        <button className="tv-song-edit-cancel" onClick={onClose} disabled={saving}>Cancel</button>
+        <button className="tv-song-edit-save" onClick={save} disabled={saving}>
+          {saving ? "Saving…" : <><I.check s={14} /> Save</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ============================ SONG ROW ============================
  * `library` renders the read-only variant used by the Library view: it keeps
- * the listen affordance but drops the builder drag handle and the +/add button. */
+ * the listen affordance but drops the builder drag handle and the +/add button,
+ * and adds a pencil to edit the song's metadata in place. */
 function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPlaying, onPreview, previewViaMonitor, library }) {
   const isCort = s.genre === "cortina";
+  const [editing, setEditing] = useState(false);
+  if (editing) return <SongEditRow s={s} onClose={() => setEditing(false)} />;
   return (
     <div className={"tv-song" + (isCort ? " cortina" : "") + (inBuilder ? " in-builder" : "") + (dragging ? " dragging" : "") + (isPreview ? " playing" : "")}
       draggable={!library} {...(library ? {} : dragHandlers)}>
@@ -106,11 +187,268 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
       </div>
       <span className="yr">{s.year}</span>
       <span className="du">{s.dur}</span>
-      {!library && (
+      {!library ? (
         <button className={"add" + (inBuilder ? " in" : "")} onClick={(e) => { e.stopPropagation(); onAdd(); }}
           title={inBuilder ? "Already in the tanda" : "Add to tanda"}>
           {inBuilder ? <I.check s={15} /> : <I.plus s={15} />}
         </button>
+      ) : (
+        <button className="edit" onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+          title="Edit song details">
+          <I.pencil s={14} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ============================ SONG SEARCH ============================
+ * One shared search engine for browsing songs — used by the Library view and
+ * the Tanda builder (both render through <LibraryTree>). It blends two modes:
+ *
+ *   • Fuzzy free text — every bare word must match (as an ordered subsequence)
+ *     somewhere in a song's combined metadata, so "disar" finds "Di Sarli" and
+ *     "poemarufino" finds Poema sung by Rufino. Contiguous and word-start hits
+ *     score higher, so the best matches float to the top.
+ *
+ *   • Scoped metadata filters — `field:value` tokens narrow to one attribute,
+ *     e.g. orq:di sarli · singer:rufino · genre:vals · year:1940s · album:rca ·
+ *     folder:cortinas. Years accept an exact year, a decade (1940s), a range
+ *     (1935-1945) or a comparator (>1940, <=1945).
+ *
+ * The pieces are pure functions exported on window so any view can reuse them. */
+
+function _norm(v) { return v == null ? "" : String(v).toLowerCase(); }
+
+// Aliases let DJs type the field name that comes naturally to them.
+const SEARCH_FIELDS = {
+  title: "title", t: "title", song: "title", name: "title",
+  orq: "orq", orch: "orq", orchestra: "orq", artist: "orq", by: "orq",
+  singer: "singer", voz: "singer", voice: "singer", vocal: "singer", vocalist: "singer",
+  genre: "genre", type: "genre", g: "genre",
+  year: "year", y: "year", decade: "year",
+  album: "album", alb: "album", record: "album",
+  folder: "folder", dir: "folder", path: "folder",
+};
+
+// The user-facing menu of filters (label + example), shown in the help popover.
+const SEARCH_FIELD_HELP = [
+  { key: "orq", label: "Orchestra", example: "orq:di sarli" },
+  { key: "singer", label: "Singer", example: "singer:rufino" },
+  { key: "genre", label: "Genre", example: "genre:vals" },
+  { key: "year", label: "Year / decade", example: "year:1940s" },
+  { key: "album", label: "Album", example: "album:rca" },
+  { key: "folder", label: "Folder", example: "folder:cortinas" },
+];
+
+// Split a raw query into scoped {field,value} filters + bare fuzzy words. A
+// field token with an empty value (the DJ is mid-type, e.g. "orq:") is ignored
+// so the list doesn't blank out before they've typed anything to match.
+function parseSearch(raw) {
+  const tokens = _norm(raw).trim().split(/\s+/).filter(Boolean);
+  const filters = [];
+  const words = [];
+  for (const tok of tokens) {
+    const m = tok.match(/^([a-z]+):(.*)$/);
+    if (m && SEARCH_FIELDS[m[1]]) {
+      if (m[2]) filters.push({ field: SEARCH_FIELDS[m[1]], value: m[2] });
+    } else {
+      words.push(tok);
+    }
+  }
+  return { filters, words, active: filters.length > 0 || words.length > 0 };
+}
+
+// Ordered-subsequence fuzzy score over already-lowercased strings. Returns -1
+// when `q` isn't a subsequence of `text`; otherwise a score that rewards hits at
+// word boundaries and runs of consecutive characters (tighter matches win).
+function fuzzyScore(q, text) {
+  if (!q) return 0;
+  let qi = 0, score = 0, run = 0, prev = -2;
+  for (let ti = 0; ti < text.length && qi < q.length; ti++) {
+    if (text[ti] === q[qi]) {
+      let bonus = 1;
+      const before = ti === 0 ? " " : text[ti - 1];
+      if (before === " " || before === "/" || before === "·" || before === "-") bonus += 4;
+      if (ti === prev + 1) { run += 1; bonus += run * 3; } else run = 0;
+      score += bonus;
+      prev = ti;
+      qi++;
+    }
+  }
+  return qi === q.length ? score : -1;
+}
+
+// Score a single field value against a sought string: prefer a literal
+// substring (with a prefix kicker) and fall back to a fuzzy subsequence.
+function scoreText(value, hay) {
+  if (!hay) return -1;
+  const idx = hay.indexOf(value);
+  if (idx >= 0) return 14 - Math.min(idx, 8) + (idx === 0 ? 6 : 0);
+  return fuzzyScore(value, hay);
+}
+
+// Year filters: exact (1940), decade (1940s), range (1935-1945) or comparators
+// (>1940, >=1940, <1945, <=1945); partial digits fall back to a prefix match.
+function matchYear(year, value) {
+  if (!year) return false;
+  let m;
+  if ((m = value.match(/^(\d{4})\s*-\s*(\d{4})$/))) return year >= +m[1] && year <= +m[2];
+  if ((m = value.match(/^>(=?)(\d{4})$/))) return m[1] ? year >= +m[2] : year > +m[2];
+  if ((m = value.match(/^<(=?)(\d{4})$/))) return m[1] ? year <= +m[2] : year < +m[2];
+  if ((m = value.match(/^(\d{2,4})s$/))) return Math.floor(year / 10) * 10 === Math.floor(+m[1] / 10) * 10;
+  if ((m = value.match(/^(\d{4})$/))) return year === +m[1];
+  return String(year).startsWith(value);
+}
+
+function songFieldText(song, field) {
+  switch (field) {
+    case "title": return _norm(song.title);
+    case "orq": return _norm(song.orq);
+    case "singer": return _norm(song.singer);
+    case "genre": return _norm(song.genre);
+    case "album": return _norm(song.album);
+    case "folder": return _norm(song.folder) + " " + _norm(song.folderPath);
+    default: return "";
+  }
+}
+
+// The blob every bare word is fuzzy-matched against.
+function songHaystack(song) {
+  return [song.title, song.orq, song.singer, song.album, song.folder, song.genre,
+    song.year ? String(song.year) : ""].map(_norm).join("  ");
+}
+
+// Score a song against a parsed query. Returns null when any filter or word
+// fails to match (AND semantics); otherwise the summed relevance score.
+function scoreSong(song, parsed) {
+  let score = 0;
+  for (const f of parsed.filters) {
+    if (f.field === "year") { if (!matchYear(song.year, f.value)) return null; score += 6; continue; }
+    const s = scoreText(f.value, songFieldText(song, f.field));
+    if (s < 0) return null;
+    score += s;
+  }
+  if (parsed.words.length) {
+    const hay = songHaystack(song);
+    for (const w of parsed.words) {
+      const s = scoreText(w, hay);
+      if (s < 0) return null;
+      score += s;
+    }
+  }
+  return score;
+}
+
+// Flat search over a song array → best matches first. Empty query = unchanged.
+function searchSongs(songs, raw) {
+  const parsed = parseSearch(raw);
+  if (!parsed.active) return (songs || []).slice();
+  const hits = [];
+  for (const s of songs || []) {
+    const sc = scoreSong(s, parsed);
+    if (sc != null) hits.push({ s, sc });
+  }
+  hits.sort((a, b) => b.sc - a.sc);
+  return hits.map((h) => h.s);
+}
+
+// A folder row can satisfy a query on its own — but only for bare words and
+// `folder:` filters (no song-attribute filter can be met by a folder name).
+// Returns true when the folder name/path matches all such terms.
+function folderMatches(node, parsed) {
+  if (parsed.filters.some((f) => f.field !== "folder")) return false;
+  const hay = _norm(node.name) + "  " + _norm(node.path);
+  for (const f of parsed.filters) if (scoreText(f.value, hay) < 0) return false;
+  for (const w of parsed.words) if (scoreText(w, hay) < 0) return false;
+  return true;
+}
+
+// Prune the library tree to matching folders/songs. A folder that matches by
+// name keeps all its own songs; otherwise only its matching songs survive, best
+// match first. Branches with any surviving content are kept (and force-opened
+// by the caller). Empty query returns the tree untouched.
+function searchTree(tree, raw) {
+  const parsed = parseSearch(raw);
+  if (!parsed.active) return tree || [];
+  const prune = (node) => {
+    const nameHit = folderMatches(node, parsed);
+    const songs = nameHit
+      ? (node.songs || [])
+      : searchSongs(node.songs || [], raw);
+    const children = (node.children || []).map(prune).filter(Boolean);
+    if (nameHit || songs.length || children.length) return { ...node, songs, children };
+    return null;
+  };
+  return (tree || []).map(prune).filter(Boolean);
+}
+
+/* ============================ ADVANCED SEARCH INPUT ============================
+ * The shared search pill. Beyond plain text it advertises the scoped metadata
+ * filters via a "Filters" popover whose chips drop a `field:` prefix straight
+ * into the box, and offers a clear (×) button once there's a query. Reused by
+ * the Library view and the Tanda builder so both speak the same search language. */
+function AdvancedSearch({ value, onChange, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef(null);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  // Drop a `field:` prefix at the end of the query, then focus the box so the
+  // DJ can keep typing the value straight away.
+  const insertField = (key) => {
+    const base = value && !/\s$/.test(value) ? value + " " : (value || "");
+    onChange(base + key + ":");
+    setOpen(false);
+    requestAnimationFrame(() => inputRef.current && inputRef.current.focus());
+  };
+
+  const clear = () => { onChange(""); inputRef.current && inputRef.current.focus(); };
+
+  return (
+    <div className="tp-asearch" ref={wrapRef}>
+      <label className="tp-search">
+        <I.search s={15} />
+        <input ref={inputRef} value={value} onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder || "Search songs… (try orq:di sarli, year:1940s)"}
+          onFocus={() => setOpen(true)} />
+        {value ? (
+          <button type="button" className="tp-asearch-clear" onClick={clear} title="Clear search">
+            <I.x s={13} />
+          </button>
+        ) : null}
+        <button type="button" className={"tp-asearch-toggle" + (open ? " is-open" : "")}
+          onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen((o) => !o)}
+          title="Search filters">
+          <I.tag s={13} /> Filters
+        </button>
+      </label>
+      {open && (
+        <div className="tp-asearch-pop" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="tp-asearch-pop-head">Narrow by field</div>
+          <div className="tp-asearch-chips">
+            {SEARCH_FIELD_HELP.map((f) => (
+              <button key={f.key} type="button" className="tp-asearch-chip" onClick={() => insertField(f.key)}>
+                <span className="k">{f.label}</span>
+                <span className="ex">{f.example}</span>
+              </button>
+            ))}
+          </div>
+          <div className="tp-asearch-pop-foot">
+            Combine freely — bare words fuzzy-match every field. e.g. <b>poema orq:canaro</b>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -197,20 +535,9 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
     if (tree.length) setOpenSet((s) => (s.size ? s : new Set(tree.map((n) => n.path))));
   }, [tree]);
 
-  // Searching prunes the tree to matching folders/songs and force-opens it.
-  const filtered = useMemo(() => {
-    const ql = q.trim().toLowerCase();
-    if (!ql) return tree;
-    const f = (node) => {
-      const nameHit = node.name.toLowerCase().includes(ql);
-      const songs = nameHit ? (node.songs || [])
-        : (node.songs || []).filter((s) => (s.title + " " + s.orq + " " + (s.singer || "")).toLowerCase().includes(ql));
-      const children = (node.children || []).map(f).filter(Boolean);
-      if (nameHit || songs.length || children.length) return { ...node, songs, children };
-      return null;
-    };
-    return tree.map(f).filter(Boolean);
-  }, [q, tree]);
+  // Fuzzy + metadata search prunes the tree to matching folders/songs (best
+  // match first) and force-opens it. See the shared engine above.
+  const filtered = useMemo(() => searchTree(tree, q), [q, tree]);
 
   const searching = !!q.trim();
   const songProps = { builderIds, onAdd, makeDrag, draggingId, preview, library, onFolderContext: openMenu };
@@ -219,13 +546,9 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
   return (
     <div className="tv-tree">
       <div className="tv-tree-head">
-        <label className="tp-search">
-          <I.search s={15} />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a folder or song…" />
-        </label>
-        {library
-          ? (hint && <div className="tv-songs-hint">{hint}</div>)
-          : <div className="tv-songs-hint"><I.drag s={13} /> {hint || "Drag songs into the builder, or tap +"}</div>}
+        <AdvancedSearch value={q} onChange={setQ}
+          placeholder="Search songs & folders… (try orq:di sarli, year:1940s)" />
+        {library && hint && <div className="tv-songs-hint">{hint}</div>}
       </div>
       <div className="tv-tree-scroll">
         {filtered.length === 0 ? (
@@ -268,7 +591,7 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
 }
 
 /* ============================ MANAGE GRID ============================ */
-function TandaCard({ t, onEdit, onDelete, onTagClick, activeTagKeys, preview }) {
+function TandaCard({ t, onEdit, onDelete, preview }) {
   const m = tandaMeta(t);
   return (
     <div className="tv-tcard">
@@ -280,7 +603,7 @@ function TandaCard({ t, onEdit, onDelete, onTagClick, activeTagKeys, preview }) 
           )}
           {t.tags && t.tags.length > 0 && (
             <div className="tv-tcard-tags">
-              <TagPills tags={t.tags} onClick={onTagClick} activeKeys={activeTagKeys} />
+              <TagPills tags={t.tags} />
             </div>
           )}
         </div>
@@ -336,4 +659,8 @@ function ManageGrid({ tandas, onEdit, onDelete, onNew, preview }) {
   );
 }
 
-Object.assign(window, { tandaMeta, tandaTypes, TandaLibCard, LibraryTree, ManageGrid });
+Object.assign(window, {
+  tandaMeta, tandaTypes, TandaLibCard, LibraryTree, ManageGrid,
+  // Shared song-search engine + input, reusable by any view (library, builder…).
+  AdvancedSearch, searchSongs, searchTree, parseSearch, scoreSong, fuzzyScore,
+});

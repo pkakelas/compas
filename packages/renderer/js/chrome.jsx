@@ -1,8 +1,7 @@
 // chrome.jsx — shared app chrome (top bar)
 
-function TopBar({ active = "Live", onNav, setTime = "1:42", clock = "23:11" }) {
+function TopBar({ active = "Live", onNav }) {
   const navs = ["Library", "Builder", "Tandas", "Playlists", "Live", "Settings"];
-  const routable = { Library: true, Builder: true, Tandas: true, Playlists: true, Live: true, Settings: true };
   return (
     <div className="tp-topbar">
       <div className="tp-brand">
@@ -16,19 +15,13 @@ function TopBar({ active = "Live", onNav, setTime = "1:42", clock = "23:11" }) {
       <div className="tp-navset">
         {navs.map((n) => (
           <div key={n}
-            className={"tp-nav" + (n === active ? " is-active" : "") + (routable[n] ? " is-link" : "")}
-            onClick={routable[n] && onNav ? () => onNav(n) : undefined}>
+            className={"tp-nav is-link" + (n === active ? " is-active" : "")}
+            onClick={onNav ? () => onNav(n) : undefined}>
             {n}
           </div>
         ))}
       </div>
       <div className="tp-spacer"></div>
-
-      <button className="tp-ai-pill"><span className="tp-ai-dot"></span> Assistant</button>
-
-      <div className="tp-clock" title="time of night · set elapsed">
-        <b>{clock}</b><span style={{ opacity: .5 }}>·</span> set {setTime}
-      </div>
     </div>
   );
 }

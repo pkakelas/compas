@@ -18,7 +18,7 @@ export default /**
       formats: ['es'],
     },
     rollupOptions: {
-      external: ['better-sqlite3', 'music-metadata'],
+      external: ['better-sqlite3', 'music-metadata', 'chokidar'],
       output: {
         entryFileNames: '[name].js',
       },

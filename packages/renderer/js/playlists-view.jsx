@@ -156,7 +156,7 @@ function PlEditorCortina({ it, slot, onRemove, preview }) {
       onClick={() => preview && preview.toggle(c)} title={previewTitle(preview, playing, "Audition this cortina")}>
       <div className="curtain"></div>
       <span className="tp-grip dark" title="Drag to reorder"><I.grip s={15} /></span>
-      <span className="tp-cort-glyph">{playing ? <EQ /> : (preview && preview.viaMonitor ? <I.headphones s={17} /> : <I.curtain s={17} />)}</span>
+      <span className="tp-cort-glyph">{playing ? <EQ /> : (preview && preview.viaMonitor ? <span className="tp-cuebadge"><I.headphones s={14} /></span> : <I.curtain s={17} />)}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="tp-cortina-label">{playing ? "Cortina · playing" : "Cortina"}</div>
         <div className="tp-cortina-sub">“{c.title}” · {c.orq || "Cortina"}</div>

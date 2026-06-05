@@ -32,6 +32,8 @@ const I = {
   tag:   (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12.6 3.6H20a1 1 0 011 1v7.4a2 2 0 01-.6 1.4l-6.4 6.4a2 2 0 01-2.8 0l-4.4-4.4a2 2 0 010-2.8l6.4-6.4a2 2 0 011.4-.6z"/><circle cx="16" cy="8" r="1.25" fill="currentColor" stroke="none"/></svg>,
   headphones:(p)=> <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 13v-1a8 8 0 0116 0v1"/><path d="M4 14a2 2 0 012-2h1v6H6a2 2 0 01-2-2zM20 14a2 2 0 00-2-2h-1v6h1a2 2 0 002-2z"/></svg>,
   speaker:(p)=> <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><circle cx="12" cy="15" r="3.2"/><circle cx="12" cy="6.5" r="1"/></svg>,
+  sun:   (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>,
+  moon:  (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M20 14.5A8 8 0 119.5 4a6.5 6.5 0 1010.5 10.5z"/></svg>,
 };
 
 /* deterministic pseudo-random so waveforms are stable across renders/exports */
@@ -71,11 +73,16 @@ function EQ() { return <span className="tp-eq"><i></i><i></i><i></i></span>; }
    to prefix the track number (rows that have their own glyph can omit it). */
 function PreviewGlyph({ preview, playing, n, s = 12 }) {
   if (playing) return <EQ />;
-  const viaMonitor = !!(preview && preview.viaMonitor);
+  // Monitor (cue) routing gets the one shared affordance: a blue circular
+  // headphone badge, always visible, identical to the library's listen button —
+  // never a second, smaller glyph. Floor previews keep the number↔play hover swap.
+  if (preview && preview.viaMonitor) {
+    return <span className="tp-cuebadge"><I.headphones s={14} /></span>;
+  }
   return (
     <React.Fragment>
       {n != null && <span className="qn">{n}</span>}
-      {viaMonitor ? <I.headphones s={s} /> : <I.play s={s} />}
+      <I.play s={s} />
     </React.Fragment>
   );
 }

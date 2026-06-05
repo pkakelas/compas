@@ -19,6 +19,16 @@ export type SongRow = {
   folder_path: string;
   root: string;
   added_at: number;
+  // Loudness/silence analysis (see services/loudness.ts). Null until analyzed.
+  loudness_lufs: number | null;
+  loudness_peak: number | null;
+  content_start_samples: number | null;
+  content_end_samples: number | null;
+  sample_rate: number | null;
+  detect_threshold_db: number | null;
+  analysis_status: string;
+  analysis_version: number;
+  analyzed_at: number | null;
 };
 
 /** UI-facing song shape (mirrors the legacy renderer contract). */
@@ -35,6 +45,14 @@ export type Song = {
   folder: string;
   folderPath: string;
   root: string;
+  // Loudness/silence analysis — the player reads these to normalize volume and
+  // skip leading/trailing silence. Null/false until the background pass runs.
+  loudnessLufs: number | null;
+  loudnessPeak: number | null;
+  contentStartSamples: number | null;
+  contentEndSamples: number | null;
+  sampleRate: number | null;
+  analyzed: boolean;
 };
 
 export type TreeNode = {
@@ -86,6 +104,24 @@ function getDb(): Database.Database {
   db.pragma('foreign_keys = ON');
   migrate(db);
   return db;
+}
+
+/**
+ * Add any missing columns to an existing table. SQLite has no
+ * `ADD COLUMN IF NOT EXISTS`, so we diff against `PRAGMA table_info` first.
+ * This lets us evolve the schema without a wipe-and-reimport.
+ */
+function addColumns(
+  d: Database.Database,
+  table: string,
+  columns: [name: string, def: string][],
+): void {
+  const existing = new Set(
+    (d.prepare(`PRAGMA table_info(${table})`).all() as {name: string}[]).map(c => c.name),
+  );
+  for (const [name, def] of columns) {
+    if (!existing.has(name)) d.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${def}`);
+  }
 }
 
 function migrate(d: Database.Database): void {
@@ -148,6 +184,25 @@ function migrate(d: Database.Database): void {
       PRIMARY KEY (playlist_id, position)
     );
   `);
+
+  // Loudness/silence analysis columns. Raw measurements only — the player
+  // derives the playback gain (from a target LUFS setting) and the trim offsets
+  // (from a pad setting) on the fly, so changing those never needs a re-analysis.
+  addColumns(d, 'songs', [
+    ['loudness_lufs', 'REAL'],
+    ['loudness_peak', 'REAL'],
+    ['content_start_samples', 'INTEGER'],
+    ['content_end_samples', 'INTEGER'],
+    ['sample_rate', 'INTEGER'],
+    ['detect_threshold_db', 'REAL'],
+    ['analysis_status', "TEXT NOT NULL DEFAULT 'pending'"], // 'pending' | 'done' | 'failed'
+    ['analysis_version', 'INTEGER NOT NULL DEFAULT 0'],
+    ['analyzed_at', 'INTEGER'],
+  ]);
+  // The background worker repeatedly asks "what's left?" — keep that cheap.
+  d.exec(
+    `CREATE INDEX IF NOT EXISTS idx_songs_analysis_status ON songs(analysis_status)`,
+  );
 }
 
 function fmtDur(sec: number | null | undefined): string {
@@ -172,6 +227,12 @@ function rowToSong(r: SongRow): Song {
     folder: r.folder,
     folderPath: r.folder_path,
     root: r.root,
+    loudnessLufs: r.loudness_lufs,
+    loudnessPeak: r.loudness_peak,
+    contentStartSamples: r.content_start_samples,
+    contentEndSamples: r.content_end_samples,
+    sampleRate: r.sample_rate,
+    analyzed: r.analysis_status === 'done',
   };
 }
 
@@ -188,37 +249,52 @@ export type ScannedSong = {
   folderPath: string;
 };
 
+/** Record an import root if it isn't already known. */
+function upsertRoot(d: Database.Database, root: string): void {
+  d.prepare(
+    'INSERT INTO library_roots (path, added_at) VALUES (?, ?) ON CONFLICT(path) DO NOTHING',
+  ).run(root, Date.now());
+}
+
 /** Upsert scanned songs (keyed by absolute path) and record the import root. */
 export function importSongs(root: string, songs: ScannedSong[]): void {
   const d = getDb();
   const now = Date.now();
 
-  const upsertRoot = d.prepare(
-    'INSERT INTO library_roots (path, added_at) VALUES (?, ?) ON CONFLICT(path) DO NOTHING',
-  );
   const upsertSong = d.prepare(`
     INSERT INTO songs (path, title, artist, singer, album, year, duration_sec, genre, folder, folder_path, root, added_at)
     VALUES (@path, @title, @artist, @singer, @album, @year, @durationSec, @genre, @folder, @folderPath, @root, @added_at)
     ON CONFLICT(path) DO UPDATE SET
       title = excluded.title,
       artist = excluded.artist,
-      singer = excluded.singer,
       album = excluded.album,
       year = excluded.year,
       duration_sec = excluded.duration_sec,
-      genre = excluded.genre,
       folder = excluded.folder,
       folder_path = excluded.folder_path,
       root = excluded.root
   `);
+  // Note: `singer` and `genre` are intentionally NOT refreshed on conflict.
+  // `singer` is app-only (the scanner never reads it from tags), and both are
+  // editable by the DJ — so a re-scan of an existing song (e.g. the watcher
+  // reacting to an in-place tag edit) must preserve those user-set values
+  // instead of resetting singer to '' and genre to its folder-derived default.
 
   const tx = d.transaction(() => {
-    upsertRoot.run(root, now);
+    upsertRoot(d, root);
     for (const s of songs) {
       upsertSong.run({...s, root, added_at: now});
     }
   });
   tx();
+}
+
+/** Absolute paths of every imported library root (oldest first). */
+export function listLibraryRoots(): string[] {
+  const d = getDb();
+  return (
+    d.prepare('SELECT path FROM library_roots ORDER BY added_at').all() as {path: string}[]
+  ).map(r => r.path);
 }
 
 export function clearLibrary(): void {
@@ -478,6 +554,66 @@ export function getSongPath(id: string): string | null {
   return row ? row.path : null;
 }
 
+/** Editable metadata for a single song. `orq` maps to the DB's `artist` column. */
+export type UpdateSongInput = {
+  id: string;
+  title: string;
+  orq: string;
+  singer: string;
+  album: string | null;
+  year: number | null;
+  genre: string;
+};
+
+/**
+ * Update a song's editable metadata in the database (the on-disk file tags are
+ * written separately, see services/tags.ts). The id, file path and all
+ * loudness/analysis fields are preserved, so editing metadata never triggers a
+ * re-analysis or drops the song from its tandas/playlists. Returns the updated
+ * song, or null if the id is unknown.
+ */
+export function updateSong(input: UpdateSongInput): Song | null {
+  const d = getDb();
+  const id = Number(input.id);
+  if (!Number.isFinite(id)) return null;
+  const exists = d.prepare('SELECT id FROM songs WHERE id = ?').get(id);
+  if (!exists) return null;
+  d.prepare(
+    `UPDATE songs SET
+       title = @title,
+       artist = @orq,
+       singer = @singer,
+       album = @album,
+       year = @year,
+       genre = @genre
+     WHERE id = @id`,
+  ).run({
+    id,
+    title: input.title ?? '',
+    orq: input.orq ?? '',
+    singer: input.singer ?? '',
+    album: input.album ?? null,
+    year: input.year ?? null,
+    genre: input.genre || 'tango',
+  });
+  const row = d.prepare('SELECT * FROM songs WHERE id = ?').get(id) as SongRow;
+  return rowToSong(row);
+}
+
+/** Resolve a song's editable, file-backed tags (used before writing the file). */
+export function getSongTags(
+  id: string,
+): {path: string; title: string; orq: string; album: string | null; year: number | null; genre: string} | null {
+  const d = getDb();
+  const row = d.prepare('SELECT path, title, artist, album, year, genre FROM songs WHERE id = ?').get(
+    Number(id),
+  ) as
+    | {path: string; title: string; artist: string; album: string | null; year: number | null; genre: string}
+    | undefined;
+  if (!row) return null;
+  return {path: row.path, title: row.title, orq: row.artist, album: row.album, year: row.year, genre: row.genre};
+}
+
 /**
  * Delete the given song ids in one transaction, then clean up anything left
  * dangling: library roots that no longer hold any songs (so the empty folder
@@ -511,6 +647,67 @@ export function deleteSongsByIds(ids: string[]): Library {
 }
 
 /**
+ * Remove a single song identified by its absolute file `path` (used by the
+ * filesystem watcher when a track is deleted on disk). Empty roots and tandas
+ * are cleaned up by deleteSongs. Returns whether a row was removed.
+ */
+export function removeSongByPath(path: string): boolean {
+  const d = getDb();
+  const row = d.prepare('SELECT id FROM songs WHERE path = ?').get(path) as
+    | {id: number}
+    | undefined;
+  if (!row) return false;
+  deleteSongs(d, [row.id]);
+  return true;
+}
+
+/** Whether a song exists for `path`, and its duration (used to pair renames). */
+export function getSongMetaByPath(
+  path: string,
+): {id: number; durationSec: number | null} | null {
+  const d = getDb();
+  const row = d.prepare('SELECT id, duration_sec FROM songs WHERE path = ?').get(path) as
+    | {id: number; duration_sec: number | null}
+    | undefined;
+  return row ? {id: row.id, durationSec: row.duration_sec} : null;
+}
+
+/**
+ * Move a song from `oldPath` to a new path/metadata in place (used when the
+ * watcher detects a rename or folder move). Crucially this keeps the song's id,
+ * so its loudness/silence analysis and any tanda/playlist membership survive the
+ * rename instead of being dropped and re-analyzed. Returns whether it moved.
+ */
+export function renameSong(oldPath: string, root: string, song: ScannedSong): boolean {
+  const d = getDb();
+  const row = d.prepare('SELECT id FROM songs WHERE path = ?').get(oldPath) as
+    | {id: number}
+    | undefined;
+  if (!row) return false;
+  const tx = d.transaction(() => {
+    // Guard against a stray row already sitting on the destination path.
+    const clash = d.prepare('SELECT id FROM songs WHERE path = ?').get(song.path) as
+      | {id: number}
+      | undefined;
+    if (clash && clash.id !== row.id) deleteSongs(d, [clash.id]);
+    upsertRoot(d, root);
+    d.prepare(
+      `UPDATE songs SET
+         path = @path, title = @title, artist = @artist, singer = @singer,
+         album = @album, year = @year, duration_sec = @durationSec, genre = @genre,
+         folder = @folder, folder_path = @folderPath, root = @root
+       WHERE id = @id`,
+    ).run({...song, root, id: row.id});
+    // The previous root may now be empty (a move across libraries).
+    d.prepare(
+      'DELETE FROM library_roots WHERE path NOT IN (SELECT DISTINCT root FROM songs)',
+    ).run();
+  });
+  tx();
+  return true;
+}
+
+/**
  * Remove a single song from the library, but only if its file is actually gone
  * from disk. Used reactively when playback fails so we never delete a track for
  * a transient/codec error. Returns whether it was removed and the fresh library.
@@ -541,6 +738,81 @@ export function pruneMissingSongs(): {removed: number; library: Library} {
   const missing = rows.filter(r => !existsSync(r.path)).map(r => r.id);
   deleteSongs(d, missing);
   return {removed: missing.length, library: getLibrary()};
+}
+
+/**
+ * Bump when the analysis algorithm or thresholds change so the startup sweep
+ * re-processes everything measured by an older version.
+ */
+export const ANALYSIS_VERSION = 1;
+
+/** Result of one loudness/silence pass (raw measurements, see services/loudness.ts). */
+export type AnalysisResult = {
+  loudnessLufs: number | null;
+  loudnessPeak: number | null;
+  sampleRate: number | null;
+  contentStartSamples: number;
+  contentEndSamples: number;
+  detectThresholdDb: number;
+};
+
+/** Songs that still need analysis (never analyzed, or analyzed by an older version). */
+export function listPendingAnalysis(): {id: number; path: string}[] {
+  const d = getDb();
+  return d
+    .prepare(
+      `SELECT id, path FROM songs
+       WHERE analysis_status = 'pending' OR analysis_version < ?
+       ORDER BY added_at`,
+    )
+    .all(ANALYSIS_VERSION) as {id: number; path: string}[];
+}
+
+/** Persist a successful measurement and mark the song done. */
+export function saveAnalysisResult(id: number, r: AnalysisResult): void {
+  const d = getDb();
+  d.prepare(
+    `UPDATE songs SET
+       loudness_lufs = @loudnessLufs,
+       loudness_peak = @loudnessPeak,
+       sample_rate = @sampleRate,
+       content_start_samples = @contentStartSamples,
+       content_end_samples = @contentEndSamples,
+       detect_threshold_db = @detectThresholdDb,
+       analysis_status = 'done',
+       analysis_version = @version,
+       analyzed_at = @now
+     WHERE id = @id`,
+  ).run({...r, id, version: ANALYSIS_VERSION, now: Date.now()});
+}
+
+/** Mark a song as failed (e.g. unreadable file) so we don't retry it forever. */
+export function markAnalysisFailed(id: number): void {
+  const d = getDb();
+  d.prepare(
+    `UPDATE songs SET analysis_status = 'failed', analysis_version = ?, analyzed_at = ? WHERE id = ?`,
+  ).run(ANALYSIS_VERSION, Date.now(), id);
+}
+
+/** Counts for the renderer's initial banner state. */
+export function getAnalysisStats(): {pending: number; done: number; failed: number; total: number} {
+  const d = getDb();
+  const row = d
+    .prepare(
+      `SELECT
+         COUNT(*) AS total,
+         SUM(CASE WHEN analysis_status = 'done'   THEN 1 ELSE 0 END) AS done,
+         SUM(CASE WHEN analysis_status = 'failed' THEN 1 ELSE 0 END) AS failed,
+         SUM(CASE WHEN analysis_status = 'pending' OR analysis_version < ? THEN 1 ELSE 0 END) AS pending
+       FROM songs`,
+    )
+    .get(ANALYSIS_VERSION) as {total: number; done: number; failed: number; pending: number};
+  return {
+    pending: row.pending || 0,
+    done: row.done || 0,
+    failed: row.failed || 0,
+    total: row.total || 0,
+  };
 }
 
 export class DatabaseModule implements AppModule {

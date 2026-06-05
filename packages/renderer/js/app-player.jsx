@@ -9,6 +9,45 @@ const mk = (type, data, extra = {}) => ({ key: kid(), type, data, ...extra });
 
 const FADE_TO_TANDA_MS = 2500;
 
+/* ---------- sound leveling (loudness + silence trim) ----------
+   Both derive from the raw per-song measurements stored by the background
+   analysis pass (loudnessLufs, content{Start,End}Samples, sampleRate). Gain and
+   trim are computed here at playback time so the target/pad settings can change
+   without re-analyzing anything. */
+
+// Per-song volume multiplier (0..1) to pull a song toward the target loudness.
+// The live engine uses Howler's html5 mode, whose <audio> volume can't exceed
+// 1.0 — so we attenuate loud songs toward the target and leave quiet ones alone
+// (the DJ raises the master to compensate). No measurement → no change.
+function gainForSong(song, s) {
+  if (!s || !s.normalizeEnabled) return 1;
+  const lufs = song && typeof song.loudnessLufs === "number" ? song.loudnessLufs : null;
+  if (lufs == null) return 1;
+  const gainDb = Math.min(0, (s.targetLufs || -18) - lufs);
+  return Math.max(0, Math.min(1, Math.pow(10, gainDb / 20)));
+}
+
+// Content onset/offset in seconds (with a small safety pad), derived from the
+// detected silence boundaries. Falls back to the whole file when there's no
+// measurement or trimming is off. Never returns an inverted range.
+function trimBoundsSec(song, s, realDur) {
+  const out = { startSec: 0, endSec: realDur || 0 };
+  if (!s || !s.trimSilenceEnabled || !song || !song.sampleRate) return out;
+  // Live-set only unless the DJ opted into applying it to library previews too.
+  if (s.preview && !s.trimEverywhere) return out;
+  const sr = song.sampleRate;
+  const pad = (s.trimPadMs || 30) / 1000;
+  if (typeof song.contentStartSamples === "number" && song.contentStartSamples > 0) {
+    out.startSec = Math.max(0, song.contentStartSamples / sr - pad);
+  }
+  if (typeof song.contentEndSamples === "number" && song.contentEndSamples > 0) {
+    const e = song.contentEndSamples / sr + pad;
+    if (!realDur || e < realDur) out.endSec = e;
+  }
+  if (!(out.endSec > out.startSec)) { out.startSec = 0; out.endSec = realDur || 0; }
+  return out;
+}
+
 /* ---------- live-state persistence ----------
    The live queue (and which item/song is "now") is the DJ's working set, so it
    survives an app restart. We keep the whole serialized queue in localStorage —
@@ -549,6 +588,15 @@ function usePlayerEngine(mainDeviceId, playback) {
   // Defensive default so the engine works even before settings are wired in.
   const cortinaSnippetEnabled = !!(playback && playback.cortinaSnippetEnabled);
   const cortinaSnippetSec = (playback && playback.cortinaSnippetSec) || CORTINA_SNIPPET_DEFAULT_SEC;
+  // Sound-leveling settings (with safe defaults).
+  const normalizeEnabled = !playback || playback.normalizeEnabled !== false;
+  const targetLufs = (playback && playback.targetLufs) || TARGET_LUFS_DEFAULT;
+  const trimSilenceEnabled = !playback || playback.trimSilenceEnabled !== false;
+  const trimPadMs = (playback && playback.trimPadMs) || TRIM_PAD_MS_DEFAULT;
+  // Scope: trimming + inter-song gaps apply to the live set always, and to
+  // library previews only when the DJ opts in. Gap is seconds between songs.
+  const trimEverywhere = !!(playback && playback.trimEverywhere);
+  const songGapSec = playback && typeof playback.songGapSec === "number" ? playback.songGapSec : SONG_GAP_DEFAULT_SEC;
   const restored = useMemo(loadLiveState, []);
   const [queue, setQueue] = useState(() => restored.queue || []);
   const [nowKey, setNowKey] = useState(() => restored.nowKey || null);
@@ -567,6 +615,13 @@ function usePlayerEngine(mainDeviceId, playback) {
   const howlRef = useRef(null);
   const tickRef = useRef(null);
   const advancingRef = useRef(false);    // guards double-advance (rAF fade vs onend)
+  const snippetFiredRef = useRef(false); // cortina snippet: armed once per cortina
+  // Silence trimming: the resolved content window for the current song (real
+  // file seconds), the displayed duration offset, and per-song fire guards.
+  const trimRef = useRef({ startSec: 0, endSec: 0, realDur: 0 });
+  const trimStartAppliedRef = useRef(false); // seek-past-intro done once per song
+  const trimEndFiredRef = useRef(false);     // end-trim advance fired once per song
+  const gapTimerRef = useRef(null);          // pending inter-song silence gap
 
   const queueNow = queue.find((i) => i.key === nowKey) || null;
   // A preview is shown in the bar as a one-song pseudo-tanda so the existing UI just works.
@@ -582,7 +637,7 @@ function usePlayerEngine(mainDeviceId, playback) {
 
   // Keep mutable copies for use inside Howl callbacks.
   const stateRef = useRef({});
-  stateRef.current = { queue, nowKey, nowIx, playing, preview, mainDeviceId };
+  stateRef.current = { queue, nowKey, nowIx, playing, preview, mainDeviceId, cortinaSnippetEnabled, cortinaSnippetSec, normalizeEnabled, targetLufs, trimSilenceEnabled, trimPadMs, trimEverywhere, songGapSec };
 
   const stopTick = () => { if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; } };
   const startTick = () => {
@@ -592,9 +647,67 @@ function usePlayerEngine(mainDeviceId, playback) {
       if (!h) return;
       const p = h.seek();
       const cur = typeof p === "number" ? p : 0;
-      setPos(cur);
+      const { startSec, endSec } = trimRef.current;
+      // Position/duration are reported relative to the trimmed window so the
+      // seek bar and timecodes stay honest.
+      const shown = Math.max(0, cur - (startSec || 0));
+      setPos(shown);
+      // Trailing-silence trim: end the song at the detected content offset.
+      if (endSec > 0 && cur >= endSec && !advancingRef.current && !trimEndFiredRef.current) {
+        trimEndFiredRef.current = true;
+        stopTick();
+        advanceWithGap();
+        return;
+      }
+      maybeFireCortinaSnippet(h, shown);
     }, 200);
   };
+
+  // "Cortina snippet": once a cortina has played its first N seconds, auto-fade to
+  // the next tanda. We run this off the playback clock (the tick) rather than a
+  // React effect so it fires reliably — exactly like the manual "Fade to next
+  // tanda" button — reading the latest settings/queue from stateRef. Armed once
+  // per cortina (snippetFiredRef is reset whenever the now-playing item changes).
+  function maybeFireCortinaSnippet(h, cur) {
+    const s = stateRef.current;
+    if (!s.cortinaSnippetEnabled || s.preview) return;
+    if (advancingRef.current || snippetFiredRef.current) return;
+    const item = s.queue.find((i) => i.key === s.nowKey);
+    if (!item || item.type !== "cortina") return;
+    if (cur < s.cortinaSnippetSec) return;
+    const t = nextTandaAfter(s.queue, s.nowKey);
+    if (!t) return;   // nothing to fade into — let it play out
+    snippetFiredRef.current = true;
+    advancingRef.current = true;
+    h.fade(h.volume(), 0, FADE_TO_TANDA_MS);
+    setTimeout(() => {
+      advancingRef.current = false;
+      setPreview(null); setNowKey(t.key); setNowIx(0); setPlaying(true);
+    }, FADE_TO_TANDA_MS);
+  }
+
+  // Advance after a configurable beat of silence between songs. The gap is a
+  // live-set affordance: previews are single songs (nothing to advance to), and
+  // an empty/last-song queue just stops. The trailing-trim path can stop the
+  // file mid-stream, so we silence the current Howl to keep the gap truly quiet.
+  function clearGapTimer() {
+    if (gapTimerRef.current) { clearTimeout(gapTimerRef.current); gapTimerRef.current = null; }
+  }
+  function advanceWithGap() {
+    const s = stateRef.current;
+    const gapMs = Math.max(0, Math.round((s.songGapSec || 0) * 1000));
+    if (gapMs <= 0 || s.preview || !hasNext()) { advance(); return; }
+    advancingRef.current = true;
+    stopTick();
+    const h = howlRef.current;
+    if (h) { try { h.stop(); } catch (_e) { /* already stopped */ } }
+    clearGapTimer();
+    gapTimerRef.current = setTimeout(() => {
+      gapTimerRef.current = null;
+      advancingRef.current = false;
+      advance();
+    }, gapMs);
+  }
 
   function hasNext() {
     const { preview, queue, nowKey, nowIx } = stateRef.current;
@@ -607,6 +720,7 @@ function usePlayerEngine(mainDeviceId, playback) {
   }
 
   function advance() {
+    clearGapTimer();
     advancingRef.current = false;
     const { preview, queue, nowKey, nowIx } = stateRef.current;
     if (preview) { setPreview(null); setPlaying(false); return; }
@@ -647,28 +761,53 @@ function usePlayerEngine(mainDeviceId, playback) {
   // Load the current song into a fresh Howl whenever it changes.
   useEffect(() => {
     stopTick();
+    clearGapTimer();
     if (howlRef.current) { howlRef.current.unload(); howlRef.current = null; }
     setPos(0); setDur(0);
     advancingRef.current = false;
+    // Reset per-song trim state.
+    trimRef.current = { startSec: 0, endSec: 0, realDur: 0 };
+    trimStartAppliedRef.current = false;
+    trimEndFiredRef.current = false;
     if (!currentId) return;
 
     const failing = currentSong;   // captured for error reporting in callbacks
+    // Prefer the live library copy: a song queued before analysis finished may
+    // carry a stale snapshot without measurements, but the DB row is current.
+    const song = (Store.songById && Store.songById(currentId)) || currentSong;
+    const baseGain = gainForSong(song, stateRef.current);
+
+    // Resolve the trimmed window once duration is known, and report the trimmed
+    // duration to the UI. Idempotent — safe to call from onload and onplay.
+    const applyTrimMeta = () => {
+      const realDur = howl.duration() || 0;
+      const tb = trimBoundsSec(song, stateRef.current, realDur);
+      trimRef.current = { startSec: tb.startSec, endSec: tb.endSec, realDur };
+      setDur(Math.max(0, tb.endSec - tb.startSec));
+    };
+
     const howl = new Howl({
       src: [window.compas.audioUrl(currentId)],
       html5: true,
       // compas-audio:// URLs carry no extension; hint a format so Howler's codec
       // gate passes. In html5 mode the browser decodes the real stream itself.
       format: ["mp3"],
-      onload: () => { setDur(howl.duration() || 0); applySinkId(howlNode(howl), stateRef.current.mainDeviceId); },
+      volume: baseGain,
+      onload: () => { applyTrimMeta(); applySinkId(howlNode(howl), stateRef.current.mainDeviceId); },
       onplay: () => {
-        setDur(howl.duration() || 0);
+        applyTrimMeta();
         applySinkId(howlNode(howl), stateRef.current.mainDeviceId);
+        // Skip the leading silence once, at the very start of the song.
+        if (!trimStartAppliedRef.current) {
+          trimStartAppliedRef.current = true;
+          if (trimRef.current.startSec > 0.05) howl.seek(trimRef.current.startSec);
+        }
         setPlaying(true);
         startTick();
       },
       onpause: () => { setPlaying(false); stopTick(); },
       onstop: () => { stopTick(); },
-      onend: () => { stopTick(); if (!advancingRef.current) advance(); },
+      onend: () => { stopTick(); if (!advancingRef.current) advanceWithGap(); },
       onloaderror: () => { handleLoadError(failing); },
       onplayerror: () => { howl.once("unlock", () => howl.play()); },
     });
@@ -696,7 +835,7 @@ function usePlayerEngine(mainDeviceId, playback) {
   // top of per-song fades), so crossfades keep working relative to this level.
   useEffect(() => { Howler.volume(muted ? 0 : volume); }, [volume, muted]);
 
-  useEffect(() => () => { stopTick(); if (howlRef.current) howlRef.current.unload(); }, []);
+  useEffect(() => () => { stopTick(); clearGapTimer(); if (howlRef.current) howlRef.current.unload(); }, []);
 
   // Persist the live working set so it's still here after a restart. We store
   // the queue plus which item/song is current; playback resumes paused.
@@ -780,7 +919,8 @@ function usePlayerEngine(mainDeviceId, playback) {
     if (preview) { setPreview(null); setPlaying(false); return; }
     advancingRef.current = false; advance(); setPlaying(true);
   };
-  const seek = (sec) => { const h = howlRef.current; if (h) { h.seek(sec); setPos(sec); } };
+  // UI seconds are relative to the trimmed window; map back to real file time.
+  const seek = (sec) => { const h = howlRef.current; if (h) { h.seek((trimRef.current.startSec || 0) + sec); setPos(sec); } };
 
   const fadeToTanda = () => {
     const t = nextTandaAfter(queue, nowKey);
@@ -795,22 +935,16 @@ function usePlayerEngine(mainDeviceId, playback) {
     }
   };
 
-  // "Cortina snippet": when enabled, a cortina only plays its first N seconds and
-  // then auto-fades to the next tanda. We arm once per cortina (reset whenever the
-  // now-playing item changes) so the fade fires exactly once at the threshold.
-  const snippetFiredRef = useRef(false);
+  // Re-arm the cortina snippet whenever the now-playing item changes, so the
+  // auto-fade (driven from the playback tick above) fires once per cortina.
   useEffect(() => { snippetFiredRef.current = false; }, [nowKey]);
+
+  // Let the main process pause the background analysis pool while the floor is
+  // live, so ffmpeg never competes with playback for CPU.
   useEffect(() => {
-    if (!cortinaSnippetEnabled) return;
-    if (preview) return;
-    if (advancingRef.current || snippetFiredRef.current) return;
-    if (!queueNow || queueNow.type !== "cortina") return;
-    if (pos < cortinaSnippetSec) return;
-    if (!nextTandaAfter(queue, nowKey)) return;   // nothing to fade into — let it play out
-    snippetFiredRef.current = true;
-    fadeToTanda();
-    // eslint-disable-next-line
-  }, [pos, cortinaSnippetEnabled, cortinaSnippetSec, queueNow, queue, nowKey, preview]);
+    try { if (window.compas.setAnalysisPlaying) window.compas.setAnalysisPlaying(playing); }
+    catch (_e) { /* older main without the channel */ }
+  }, [playing]);
 
   // Play a single song outside the queue (the Tandas-view song preview).
   const previewSong = (song) => {
@@ -859,12 +993,34 @@ function usePlayerEngine(mainDeviceId, playback) {
 // DJ playback preferences that aren't about devices. Right now: "cortina snippet"
 // — only play the first few seconds of a cortina, then auto-fade to the next
 // tanda. Persisted in localStorage so the choice survives restarts.
-const CORTINA_SNIPPET_DEFAULT_SEC = 10;
+const CORTINA_SNIPPET_DEFAULT_SEC = 90;
+// Sound-leveling defaults. Target loudness is where every song is pulled toward;
+// -18 LUFS is a comfortable level for a tango set. Trim pad keeps a hair of
+// silence so a hard cut never clips the first attack / final note.
+const TARGET_LUFS_DEFAULT = -18;
+const TRIM_PAD_MS_DEFAULT = 30;
+// A short breath of silence inserted between songs in the live set, on top of
+// any trailing-silence trim. Seconds, so the slider reads naturally.
+const SONG_GAP_DEFAULT_SEC = 1.5;
 function usePlaybackSettings() {
   const [cortinaSnippetEnabled, setSnippet] = useState(() => localStorage.getItem("compas.cortinaSnippetEnabled") === "1");
   const [cortinaSnippetSec, setSnippetSecState] = useState(() => {
     const v = parseInt(localStorage.getItem("compas.cortinaSnippetSec"), 10);
     return Number.isFinite(v) && v > 0 ? v : CORTINA_SNIPPET_DEFAULT_SEC;
+  });
+  // Sound leveling — default on so a freshly-analyzed library "just works".
+  const [normalizeEnabled, setNorm] = useState(() => localStorage.getItem("compas.normalizeEnabled") !== "0");
+  const [targetLufs, setTargetState] = useState(() => {
+    const v = parseFloat(localStorage.getItem("compas.targetLufs"));
+    return Number.isFinite(v) ? v : TARGET_LUFS_DEFAULT;
+  });
+  const [trimSilenceEnabled, setTrim] = useState(() => localStorage.getItem("compas.trimSilenceEnabled") !== "0");
+  // Trimming + gaps are a live-set behaviour by default; opt in to also apply
+  // them when previewing a song straight from the library.
+  const [trimEverywhere, setTrimEverywhere] = useState(() => localStorage.getItem("compas.trimEverywhere") === "1");
+  const [songGapSec, setGapState] = useState(() => {
+    const v = parseFloat(localStorage.getItem("compas.songGapSec"));
+    return Number.isFinite(v) && v >= 0 ? v : SONG_GAP_DEFAULT_SEC;
   });
 
   const setCortinaSnippetEnabled = useCallback((v) => {
@@ -874,8 +1030,30 @@ function usePlaybackSettings() {
     const n = Math.max(1, Math.round(Number(v) || CORTINA_SNIPPET_DEFAULT_SEC));
     setSnippetSecState(n); localStorage.setItem("compas.cortinaSnippetSec", String(n));
   }, []);
+  const setNormalizeEnabled = useCallback((v) => {
+    setNorm(!!v); localStorage.setItem("compas.normalizeEnabled", v ? "1" : "0");
+  }, []);
+  const setTargetLufs = useCallback((v) => {
+    const n = Math.max(-30, Math.min(-6, Math.round(Number(v) || TARGET_LUFS_DEFAULT)));
+    setTargetState(n); localStorage.setItem("compas.targetLufs", String(n));
+  }, []);
+  const setTrimSilenceEnabled = useCallback((v) => {
+    setTrim(!!v); localStorage.setItem("compas.trimSilenceEnabled", v ? "1" : "0");
+  }, []);
+  const setTrimEverywhereCb = useCallback((v) => {
+    setTrimEverywhere(!!v); localStorage.setItem("compas.trimEverywhere", v ? "1" : "0");
+  }, []);
+  const setSongGapSec = useCallback((v) => {
+    const n = Math.max(0, Math.min(8, Math.round((Number(v) || 0) * 2) / 2));
+    setGapState(n); localStorage.setItem("compas.songGapSec", String(n));
+  }, []);
 
-  return { cortinaSnippetEnabled, cortinaSnippetSec, setCortinaSnippetEnabled, setCortinaSnippetSec };
+  return {
+    cortinaSnippetEnabled, cortinaSnippetSec, setCortinaSnippetEnabled, setCortinaSnippetSec,
+    normalizeEnabled, targetLufs, trimSilenceEnabled, trimPadMs: TRIM_PAD_MS_DEFAULT,
+    setNormalizeEnabled, setTargetLufs, setTrimSilenceEnabled,
+    trimEverywhere, songGapSec, setTrimEverywhere: setTrimEverywhereCb, setSongGapSec,
+  };
 }
 
 /* ============================ AUDIO OUTPUT DEVICES ============================ */
@@ -1172,4 +1350,36 @@ function PlayerBar() {
   );
 }
 
-Object.assign(window, { LivePlayer, PlayerProvider, PlayerBar, usePlayer });
+// Slim banner shown while the background analysis pass is running. Explains
+// what's happening (and why) and reassures the DJ the library is usable now.
+// Hidden whenever nothing is being processed.
+function AnalysisBanner() {
+  const { analysis } = useStore();
+  const a = analysis || {};
+  if (!a.running) return null;
+  const total = a.total || 0;
+  const completed = a.completed || 0;
+  const remaining = Math.max(0, total - completed);
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  return (
+    <div className="tp-analyze-banner" role="status">
+      <span className="tp-analyze-spinner" aria-hidden="true" />
+      <div className="tp-analyze-text">
+        <div className="tp-analyze-title">
+          Preparing your music{a.paused ? " · paused while playing" : ""}
+        </div>
+        <div className="tp-analyze-sub">
+          Leveling each song’s volume and trimming silence at the start and end so every
+          tanda plays evenly — you can keep using everything while this finishes.
+        </div>
+        <div className="tp-analyze-bar"><div className="tp-analyze-bar-fill" style={{ width: pct + "%" }} /></div>
+      </div>
+      <div className="tp-analyze-count">
+        <span className="tp-mono">{remaining}</span>
+        <span className="tp-analyze-count-lbl">{remaining === 1 ? "song left" : "songs left"}</span>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { LivePlayer, PlayerProvider, PlayerBar, usePlayer, AnalysisBanner });

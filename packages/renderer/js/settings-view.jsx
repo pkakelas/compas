@@ -2,7 +2,10 @@
 // appearance. A proper routable view (not the floating tweak tray) so more
 // settings can be added over time.
 
-const ACCENTS = ["#BE2C3B", "#1F6FEB", "#0E7C66", "#8A4FD6", "#1A1714"];
+const THEMES = [
+  { id: "light", label: "Light", icon: (p) => <I.sun {...p} /> },
+  { id: "dark", label: "Dark", icon: (p) => <I.moon {...p} /> },
+];
 
 // Play a short tone out a specific output card so the DJ can confirm cabling
 // before the night starts. Routed via a MediaStream + setSinkId, which works
@@ -144,6 +147,12 @@ function AudioOutputsCard() {
 /* ============================ CORTINA PLAYBACK ============================ */
 // Let the DJ play only the first few seconds of every cortina, then auto-fade to
 // the next tanda — handy when cortinas are just a floor-clearing cue, not a song.
+function fmtSnippetLen(sec) {
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return s ? `${m}m ${s}s` : `${m}m`;
+}
 function CortinaPlaybackCard() {
   const { playback } = usePlayer();
   return (
@@ -156,12 +165,71 @@ function CortinaPlaybackCard() {
 
       {playback.cortinaSnippetEnabled && (
         <SetRow label="Snippet length" desc="How long the cortina plays before fading.">
-          <input className="tp-set-range" type="range" min={3} max={60} step={1}
+          <input className="tp-set-range" type="range" min={3} max={300} step={1}
             value={playback.cortinaSnippetSec}
             onChange={(e) => playback.setCortinaSnippetSec(Number(e.target.value))} />
-          <span className="tp-set-range-val">{playback.cortinaSnippetSec}s</span>
+          <span className="tp-set-range-val">{fmtSnippetLen(playback.cortinaSnippetSec)}</span>
         </SetRow>
       )}
+    </SettingsCard>
+  );
+}
+
+/* ============================ SOUND LEVELING ============================ */
+// Volume normalization, applied at playback from the background analysis
+// measurements. Loud songs are pulled down toward a target level.
+function SoundLevelingCard() {
+  const { playback } = usePlayer();
+  return (
+    <SettingsCard icon={<I.wave s={17} />} title="Sound leveling"
+      desc="Even out volume across songs. Applied from a one-time background analysis of your library.">
+      <SetRow label="Normalize volume"
+        desc="Pull loud songs down toward a consistent level so tandas don’t jump in volume.">
+        <SetSwitch checked={playback.normalizeEnabled} onChange={playback.setNormalizeEnabled} />
+      </SetRow>
+
+      {playback.normalizeEnabled && (
+        <SetRow label="Target loudness" desc="Where songs are leveled to. Lower is quieter; raise the master to taste.">
+          <input className="tp-set-range" type="range" min={-30} max={-6} step={1}
+            value={playback.targetLufs}
+            onChange={(e) => playback.setTargetLufs(Number(e.target.value))} />
+          <span className="tp-set-range-val">{playback.targetLufs} LUFS</span>
+        </SetRow>
+      )}
+    </SettingsCard>
+  );
+}
+
+/* ============================ SILENCE & SPACING ============================ */
+// Trim dead air at the edges of each song, and add a short breath of silence
+// between tracks. By default this shapes the live set only; the DJ can opt into
+// applying it to library previews too. Gap is in seconds.
+function fmtGap(sec) {
+  if (!sec) return "None";
+  return Number.isInteger(sec) ? `${sec}s` : `${sec.toFixed(1)}s`;
+}
+function SilenceSpacingCard() {
+  const { playback } = usePlayer();
+  return (
+    <SettingsCard icon={<I.scissor s={16} />} title="Silence &amp; spacing"
+      desc="Trim dead air at the start and end of each song and add a breath between tracks during a live set.">
+      <SetRow label="Trim silence"
+        desc="Skip complete silence at the very start and end of each song.">
+        <SetSwitch checked={playback.trimSilenceEnabled} onChange={playback.setTrimSilenceEnabled} />
+      </SetRow>
+
+      <SetRow label="Gap between songs"
+        desc="A short pause inserted before the next track plays in the live set.">
+        <input className="tp-set-range" type="range" min={0} max={8} step={0.5}
+          value={playback.songGapSec}
+          onChange={(e) => playback.setSongGapSec(Number(e.target.value))} />
+        <span className="tp-set-range-val">{fmtGap(playback.songGapSec)}</span>
+      </SetRow>
+
+      <SetRow label="Apply to library previews"
+        desc="By default trimming shapes the live set only. Turn on to also trim when you preview a song from your library.">
+        <SetSwitch checked={playback.trimEverywhere} onChange={playback.setTrimEverywhere} />
+      </SetRow>
     </SettingsCard>
   );
 }
@@ -181,6 +249,10 @@ function SettingsView({ t, setTweak }) {
         <div className="tp-set-col">
           <AudioOutputsCard />
 
+          <SoundLevelingCard />
+
+          <SilenceSpacingCard />
+
           <CortinaPlaybackCard />
 
           <SettingsCard icon={<I.scissor s={17} />} title="Tanda builder"
@@ -193,15 +265,18 @@ function SettingsView({ t, setTweak }) {
           </SettingsCard>
 
           <SettingsCard icon={<I.spark s={16} />} title="Appearance"
-            desc="The single accent colour everything else is derived from.">
-            <SetRow label="Accent">
-              <div className="tp-set-swatches" role="radiogroup">
-                {ACCENTS.map((hex) => (
-                  <button key={hex} type="button" role="radio" aria-checked={t.accent === hex}
-                    className="tp-set-swatch" data-on={t.accent === hex ? "1" : "0"}
-                    style={{ background: hex }} title={hex}
-                    onClick={() => setTweak("accent", hex)}>
-                    {t.accent === hex && <I.check s={15} />}
+            desc="Choose how Compás looks.">
+            <SetRow label="Theme" desc="Switch between the light and dark colour schemes.">
+              <div className="tp-set-themes" role="radiogroup" aria-label="Theme">
+                {THEMES.map((th) => (
+                  <button key={th.id} type="button" role="radio" aria-checked={t.theme === th.id}
+                    className="tp-set-theme" data-on={t.theme === th.id ? "1" : "0"}
+                    onClick={() => setTweak("theme", th.id)}>
+                    <span className={"tp-set-theme-pv " + th.id}>
+                      <i className="bg" /><i className="card" /><i className="ac" /><i className="ln" />
+                    </span>
+                    <span className="tp-set-theme-lb"><th.icon s={14} />{th.label}</span>
+                    {t.theme === th.id && <span className="tp-set-theme-ck"><I.check s={13} /></span>}
                   </button>
                 ))}
               </div>

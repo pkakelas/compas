@@ -247,21 +247,24 @@ function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthCh
   // seam instead of starting partway down beneath a full-width header).
   const header = (
     <div className="tv-head">
-      <div>
-        <div className="tv-title">{mode === "build" ? "Tanda builder" : "My tandas"}</div>
-        <div className="tv-sub">
-          {mode === "build" ? (
-            <><b>{totalSongs}</b> songs across <b>{totalFolders}</b> folders
-              {roots && roots.length > 1 && <> in <b>{roots.length}</b> libraries</>}</>
-          ) : (
-            <><b>{tandas.length}</b> {tandas.length === 1 ? "tanda" : "tandas"} in your collection</>
-          )}
+      <div className="tv-head-l">
+        <div className="tv-head-badge">{mode === "build" ? <I.scissor s={20} /> : <I.note s={19} />}</div>
+        <div className="tv-head-text">
+          <div className="tv-title">{mode === "build" ? "Tanda builder" : "My tandas"}</div>
+          <div className="tv-sub">
+            {mode === "build" ? (
+              <><b>{totalSongs}</b> songs across <b>{totalFolders}</b> folders
+                {roots && roots.length > 1 && <> in <b>{roots.length}</b> libraries</>}</>
+            ) : (
+              <><b>{tandas.length}</b> {tandas.length === 1 ? "tanda" : "tandas"} in your collection</>
+            )}
+          </div>
         </div>
       </div>
       <div className="tv-head-r">
         {mode === "build" && (
           <button className="tv-reimport" onClick={addFolder} title="Import another folder into your library">
-            <I.upload s={15} /> Add folder
+            <I.upload s={16} /> Add folder
           </button>
         )}
       </div>

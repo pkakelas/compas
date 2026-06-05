@@ -14,18 +14,10 @@ const TAG_PRESETS = [
     options: [
       "D'Arienzo", "Di Sarli", "Pugliese", "Troilo", "Tanturi", "Canaro",
       "Fresedo", "Caló", "Biagi", "Laurenz", "D'Agostino", "De Angelis",
-      "Demare", "Donato", "Rodríguez",
+      "Demare", "Donato", "Rodríguez"
     ],
   },
 ];
-
-/* Infer the category for a typed label: a preset match keeps its category,
- * everything else is a custom tag. */
-function tagCat(label) {
-  const l = (label || "").trim().toLowerCase();
-  for (const g of TAG_PRESETS) for (const o of g.options) if (o.toLowerCase() === l) return g.cat;
-  return "custom";
-}
 
 /* Human label for a category, used by the "add as…" create chips. */
 const CAT_LABELS = { custom: "Custom" };
@@ -197,4 +189,4 @@ function TagPills({ tags, onClick, activeKeys, max }) {
   );
 }
 
-Object.assign(window, { TAG_PRESETS, tagCat, tagKey, catLabel, TagField, TagPills });
+Object.assign(window, { TAG_PRESETS, tagKey, catLabel, TagField, TagPills });

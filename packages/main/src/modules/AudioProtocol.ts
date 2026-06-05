@@ -1,15 +1,71 @@
 import type {AppModule} from '../AppModule.js';
 import type {ModuleContext} from '../ModuleContext.js';
-import {net, protocol} from 'electron';
-import {pathToFileURL} from 'node:url';
+import {protocol} from 'electron';
+import {createReadStream} from 'node:fs';
+import {stat} from 'node:fs/promises';
+import {Readable} from 'node:stream';
+import {extname} from 'node:path';
 import {getSongPath} from './Database.js';
 
 export const AUDIO_SCHEME = 'compas-audio';
 
+const MIME_BY_EXT: Record<string, string> = {
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.mp4': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.flac': 'audio/flac',
+  '.ogg': 'audio/ogg',
+  '.oga': 'audio/ogg',
+  '.opus': 'audio/opus',
+  '.wav': 'audio/wav',
+  '.aiff': 'audio/aiff',
+  '.aif': 'audio/aiff',
+};
+
+function contentTypeFor(filePath: string): string {
+  return MIME_BY_EXT[extname(filePath).toLowerCase()] || 'audio/mpeg';
+}
+
+// Parse a single-range HTTP `Range` header (e.g. `bytes=1000-` or `bytes=0-1023`).
+// Returns null when the header is absent or not a form we serve, so the caller
+// falls back to a full 200 response.
+function parseRange(header: string | null, size: number): {start: number; end: number} | null {
+  if (!header) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match) return null;
+
+  const [, rawStart, rawEnd] = match;
+  let start: number;
+  let end: number;
+
+  if (rawStart === '') {
+    // suffix range: last N bytes
+    if (rawEnd === '') return null;
+    const suffix = parseInt(rawEnd, 10);
+    if (suffix <= 0) return null;
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = parseInt(rawStart, 10);
+    end = rawEnd === '' ? size - 1 : parseInt(rawEnd, 10);
+  }
+
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  if (start > end || start >= size) return null;
+  end = Math.min(end, size - 1);
+  return {start, end};
+}
+
 /**
  * Streams imported audio files to the renderer via `compas-audio://song/<id>`.
- * The song's absolute on-disk path is resolved from the DB and proxied through
- * `net.fetch`, which provides HTTP range support (so the player can seek).
+ *
+ * Seeking in an HTML5 `<audio>` element (Howler `html5: true`) requires the
+ * source to honor HTTP range requests — without a `206 Partial Content`
+ * response the element reports `seekable = [0,0]` and clicking ahead in the
+ * waveform snaps back to the start. Electron's `net.fetch` does NOT serve ranges
+ * for `file://` URLs, so we read the requested byte slice off disk ourselves and
+ * return it with the proper `Content-Range` / `Accept-Ranges` headers.
  *
  * The scheme must be registered as privileged BEFORE app ready — see
  * `registerAudioScheme()` which is called at module load in `index.ts`.
@@ -29,9 +85,53 @@ export class AudioProtocolModule implements AppModule {
         return new Response('Not found', {status: 404});
       }
 
-      return net.fetch(pathToFileURL(filePath).toString(), {
-        headers: request.headers,
-        method: request.method,
+      let size: number;
+      try {
+        const info = await stat(filePath);
+        if (!info.isFile()) return new Response('Not found', {status: 404});
+        size = info.size;
+      } catch {
+        return new Response('Not found', {status: 404});
+      }
+
+      const contentType = contentTypeFor(filePath);
+      const range = parseRange(request.headers.get('range'), size);
+
+      // A bare HEAD/metadata probe still needs the headers that advertise range
+      // support, but no body.
+      if (request.method === 'HEAD') {
+        return new Response(null, {
+          status: 200,
+          headers: {
+            'Content-Type': contentType,
+            'Content-Length': String(size),
+            'Accept-Ranges': 'bytes',
+          },
+        });
+      }
+
+      if (range) {
+        const {start, end} = range;
+        const stream = createReadStream(filePath, {start, end});
+        return new Response(Readable.toWeb(stream) as unknown as ReadableStream, {
+          status: 206,
+          headers: {
+            'Content-Type': contentType,
+            'Content-Range': `bytes ${start}-${end}/${size}`,
+            'Content-Length': String(end - start + 1),
+            'Accept-Ranges': 'bytes',
+          },
+        });
+      }
+
+      const stream = createReadStream(filePath);
+      return new Response(Readable.toWeb(stream) as unknown as ReadableStream, {
+        status: 200,
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': String(size),
+          'Accept-Ranges': 'bytes',
+        },
       });
     });
   }

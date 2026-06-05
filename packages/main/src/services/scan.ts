@@ -16,6 +16,11 @@ const AUDIO_EXTENSIONS = new Set([
   '.wma',
 ]);
 
+/** True if `file` has an audio extension we import. */
+export function isAudioFile(file: string): boolean {
+  return AUDIO_EXTENSIONS.has(extname(file).toLowerCase());
+}
+
 async function collectAudioFiles(dir: string, acc: string[] = []): Promise<string[]> {
   let entries;
   try {
@@ -28,7 +33,7 @@ async function collectAudioFiles(dir: string, acc: string[] = []): Promise<strin
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       await collectAudioFiles(full, acc);
-    } else if (entry.isFile() && AUDIO_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
+    } else if (entry.isFile() && isAudioFile(entry.name)) {
       acc.push(full);
     }
   }
@@ -49,6 +54,51 @@ function mapGenre(segments: string[], tag: string | undefined): string {
 export type ScanResult = {root: string; songs: ScannedSong[]};
 
 /**
+ * Read the tags from a single audio `file` (located under `root`) and build the
+ * DB row, deriving `folder`/`folderPath`/`genre` from its position in the tree.
+ * The file is never moved or modified.
+ */
+export async function scanFile(root: string, file: string): Promise<ScannedSong> {
+  const relDir = relative(root, file).split(sep).slice(0, -1);
+  const segments = relDir.length ? relDir : [];
+  const folderPath = segments.join(' / ');
+  const folder = segments.length ? segments[segments.length - 1] : basename(root);
+
+  let title = basename(file, extname(file));
+  let artist = '';
+  let album: string | null = null;
+  let year: number | null = null;
+  let durationSec: number | null = null;
+  let genreTag: string | undefined;
+
+  try {
+    const meta = await parseFile(file, {duration: true});
+    const c = meta.common;
+    if (c.title) title = c.title;
+    if (c.artist) artist = c.artist;
+    if (c.album) album = c.album;
+    if (typeof c.year === 'number') year = c.year;
+    if (Array.isArray(c.genre) && c.genre.length) genreTag = c.genre[0];
+    if (typeof meta.format.duration === 'number') durationSec = meta.format.duration;
+  } catch {
+    // Unreadable/corrupt tags — keep the file with filename-derived defaults.
+  }
+
+  return {
+    path: file,
+    title,
+    artist,
+    singer: '',
+    album,
+    year,
+    durationSec,
+    genre: mapGenre(segments, genreTag),
+    folder,
+    folderPath,
+  };
+}
+
+/**
  * Walk `root` recursively, extract tags from every audio file, and return rows
  * ready for the DB. Files are never moved or modified.
  */
@@ -60,46 +110,9 @@ export async function scanFolder(
   const songs: ScannedSong[] = [];
 
   for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const relDir = relative(root, file).split(sep).slice(0, -1);
-    const segments = relDir.length ? relDir : [];
-    const folderPath = segments.join(' / ');
-    const folder = segments.length ? segments[segments.length - 1] : basename(root);
-
-    let title = basename(file, extname(file));
-    let artist = '';
-    let album: string | null = null;
-    let year: number | null = null;
-    let durationSec: number | null = null;
-    let genreTag: string | undefined;
-
-    try {
-      const meta = await parseFile(file, {duration: true});
-      const c = meta.common;
-      if (c.title) title = c.title;
-      if (c.artist) artist = c.artist;
-      if (c.album) album = c.album;
-      if (typeof c.year === 'number') year = c.year;
-      if (Array.isArray(c.genre) && c.genre.length) genreTag = c.genre[0];
-      if (typeof meta.format.duration === 'number') durationSec = meta.format.duration;
-    } catch {
-      // Unreadable/corrupt tags — keep the file with filename-derived defaults.
-    }
-
-    songs.push({
-      path: file,
-      title,
-      artist,
-      singer: '',
-      album,
-      year,
-      durationSec,
-      genre: mapGenre(segments, genreTag),
-      folder,
-      folderPath,
-    });
-
-    onProgress?.(i + 1, files.length, folderPath || folder);
+    const song = await scanFile(root, files[i]);
+    songs.push(song);
+    onProgress?.(i + 1, files.length, song.folderPath || song.folder);
   }
 
   return {root, songs};

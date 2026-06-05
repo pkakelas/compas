@@ -28,30 +28,12 @@ export async function initApp(initConfig: AppInitConfig) {
     .init(hardwareAccelerationMode({enable: false}))
     .init(autoUpdater())
 
-    // Install DevTools extension if needed
-    // .init(chromeDevToolsExtension({extension: 'VUEJS3_DEVTOOLS'}))
-
-    // Security
+    // Security: only allow navigation within the app's own origin, and deny
+    // opening new windows to any external origin.
     .init(allowInternalOrigins(
       new Set(initConfig.renderer instanceof URL ? [initConfig.renderer.origin] : []),
     ))
-    .init(allowExternalUrls(
-      new Set(
-        initConfig.renderer instanceof URL
-          ? [
-            'https://vite.dev',
-            'https://developer.mozilla.org',
-            'https://solidjs.com',
-            'https://qwik.dev',
-            'https://lit.dev',
-            'https://react.dev',
-            'https://preactjs.com',
-            'https://www.typescriptlang.org',
-            'https://vuejs.org',
-          ]
-          : [],
-      )),
-    );
+    .init(allowExternalUrls(new Set()));
 
   await moduleRunner;
 }
