@@ -1,8 +1,8 @@
-// app-shell.jsx — top-level: top-nav switches Live ↔ Tandas; Tweaks toggles builder layout
-const { useState: useSh } = React;
+// app-shell.jsx — top-level: top-nav switches Live · Tandas · Playlists · Settings
+const { useState } = React;
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "builderLayout": "bench",
+  "builderWidth": 380,
   "accent": "#BE2C3B",
   "startView": "Tandas"
 }/*EDITMODE-END*/;
@@ -28,7 +28,7 @@ function AppShell() {
 }
 
 function AppBody({ t, setTweak }) {
-  const [view, setView] = useSh(TWEAK_DEFAULTS.startView);
+  const [view, setView] = useState(TWEAK_DEFAULTS.startView);
   const player = usePlayer();
 
   const playPlaylist = (pl) => {
@@ -36,40 +36,37 @@ function AppBody({ t, setTweak }) {
     setView("Live");
   };
 
+  // The builder and the saved-tandas collection are two top-level tabs now, but
+  // they share one mounted TandasView so the builder's in-progress state never
+  // gets thrown away when the DJ flips between them.
+  const showTandas = view === "Builder" || view === "Tandas";
+
   // All views stay mounted (hidden via display) so playback keeps running while
   // the DJ browses tandas/playlists. The transport bar is a sibling of the views
   // so it sits at the bottom on every tab.
   return (
     <div className="tp-app">
-      <TopBar active={view} onNav={setView} accent={t.accent} />
+      <TopBar active={view} onNav={setView} />
 
       <div className="tp-view" style={{ display: view === "Live" ? undefined : "none" }}>
         <LivePlayer />
       </div>
-      <div className="tp-view" style={{ display: view === "Tandas" ? undefined : "none" }}>
-        <TandasView layout={t.builderLayout} />
+      <div className="tp-view" style={{ display: view === "Library" ? undefined : "none" }}>
+        <LibraryView />
+      </div>
+      <div className="tp-view" style={{ display: showTandas ? undefined : "none" }}>
+        <TandasView mode={view === "Builder" ? "build" : "manage"} onNavigate={setView}
+          builderWidth={t.builderWidth}
+          onBuilderWidthChange={(v) => setTweak("builderWidth", v)} />
       </div>
       <div className="tp-view" style={{ display: view === "Playlists" ? undefined : "none" }}>
         <PlaylistsView onPlay={playPlaylist} />
       </div>
+      <div className="tp-view" style={{ display: view === "Settings" ? undefined : "none" }}>
+        <SettingsView t={t} setTweak={setTweak} />
+      </div>
 
       <PlayerBar />
-
-      <TweaksPanel>
-        <TweakSection label="Tanda builder" />
-        <TweakRadio label="Layout" value={t.builderLayout}
-          options={["bench", "tray"]}
-          onChange={(v) => setTweak("builderLayout", v)} />
-        <div style={{ fontSize: 11.5, color: "var(--ink-2)", lineHeight: 1.45, margin: "-2px 2px 4px" }}>
-          {t.builderLayout === "bench"
-            ? "Bench — a fixed dock on the right with numbered slots."
-            : "Tray — a staging strip pinned along the bottom."}
-        </div>
-        <TweakSection label="Appearance" />
-        <TweakColor label="Accent" value={t.accent}
-          options={["#BE2C3B", "#1F6FEB", "#0E7C66", "#8A4FD6", "#1A1714"]}
-          onChange={(v) => setTweak("accent", v)} />
-      </TweaksPanel>
     </div>
   );
 }

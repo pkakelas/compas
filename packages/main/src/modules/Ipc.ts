@@ -5,11 +5,14 @@ import {scanFolder} from '../services/scan.js';
 import {
   clearLibrary,
   deletePlaylist,
+  deleteSongsByIds,
   deleteTanda,
   getLibrary,
   importSongs,
   listPlaylists,
   listTandas,
+  pruneMissingSongs,
+  removeSongIfMissing,
   savePlaylist,
   saveTanda,
   type Library,
@@ -47,6 +50,18 @@ export class IpcModule implements AppModule {
       clearLibrary();
       return getLibrary();
     });
+
+    // Drop every song whose file has gone missing from disk (and any folder/
+    // tanda left empty as a result). Runs on load to keep the tree honest.
+    ipcMain.handle('library:pruneMissing', () => pruneMissingSongs());
+
+    // Remove a single song, but only if its file is truly gone — used when
+    // playback fails so we self-heal the library instead of looping on errors.
+    ipcMain.handle('songs:removeIfMissing', (_event, id: string) => removeSongIfMissing(id));
+
+    // Delete songs from the library by id (e.g. removing a whole folder). The
+    // files are left untouched on disk — this only forgets them in the app.
+    ipcMain.handle('songs:delete', (_event, ids: string[]) => deleteSongsByIds(ids));
 
     ipcMain.handle('tandas:list', () => listTandas());
 

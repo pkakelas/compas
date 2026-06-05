@@ -27,6 +27,13 @@ function countSongs(node) {
   return n;
 }
 
+/* ---------- collect every song id under a tree node (folder + subfolders) ---------- */
+function collectSongIds(node) {
+  let ids = node && node.songs ? node.songs.map((s) => s.id) : [];
+  if (node && node.children) node.children.forEach((c) => { ids = ids.concat(collectSongIds(c)); });
+  return ids;
+}
+
 /* ---------- reactive store ---------- */
 let _state = {
   loaded: false,
@@ -67,12 +74,56 @@ const Store = {
     return () => _subs.delete(fn);
   },
   async loadAll() {
-    const [lib, tandas, playlists] = await Promise.all([
-      window.compas.getLibrary(),
+    // Prune songs whose files vanished while the app was closed first, so the
+    // tree (and the tandas/playlists we read next) reflect what's really there.
+    // Fall back to a plain read if the main process predates the prune handler.
+    let library = null;
+    try {
+      if (window.compas.pruneMissing) {
+        const pruned = await window.compas.pruneMissing();
+        library = pruned && pruned.library;
+      }
+    } catch (e) { /* older main without the handler — fall through to getLibrary */ }
+    if (!library) library = await window.compas.getLibrary();
+    _applyLibrary(library);
+    const [tandas, playlists] = await Promise.all([
       window.compas.listTandas(),
       window.compas.listPlaylists(),
     ]);
-    _applyLibrary(lib);
+    _set({ tandas: tandas || [], playlists: playlists || [] });
+  },
+  // Reactive cleanup: drop a song only if its file is truly gone (used when
+  // playback fails). Refreshes library + tandas/playlists. Returns the result.
+  async removeSongIfMissing(id) {
+    if (!window.compas.removeSongIfMissing) return { removed: false, song: null };
+    let res;
+    try {
+      res = await window.compas.removeSongIfMissing(id);
+    } catch (e) {
+      return { removed: false, song: null };
+    }
+    if (res && res.removed && res.library) {
+      _applyLibrary(res.library);
+      const [tandas, playlists] = await Promise.all([
+        window.compas.listTandas(),
+        window.compas.listPlaylists(),
+      ]);
+      _set({ tandas: tandas || [], playlists: playlists || [] });
+    }
+    return res;
+  },
+  // Remove a whole folder (and its subfolders) from the library. Only forgets
+  // the songs in the app — the files stay on disk. Refreshes library + tandas/
+  // playlists since deleting songs can empty out tandas that referenced them.
+  async deleteFolder(node) {
+    const ids = collectSongIds(node);
+    if (!ids.length || !window.compas.deleteSongs) return;
+    const library = await window.compas.deleteSongs(ids);
+    if (library) _applyLibrary(library);
+    const [tandas, playlists] = await Promise.all([
+      window.compas.listTandas(),
+      window.compas.listPlaylists(),
+    ]);
     _set({ tandas: tandas || [], playlists: playlists || [] });
   },
   // Opens the folder picker + scans. Returns the library, or null if cancelled.

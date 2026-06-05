@@ -1,27 +1,5 @@
-// tandas-parts.jsx — folder tree, song list, manage grid + meta helpers
-const { useState: useS, useMemo: useM, useEffect: useE } = React;
-
-/* ---------- locate a node anywhere in the tree by its path ---------- */
-function findByPath(nodes, path) {
-  for (const n of nodes) {
-    if (n.path === path) return n;
-    if (n.children) {
-      const hit = findByPath(n.children, path);
-      if (hit) return hit;
-    }
-  }
-  return null;
-}
-
-/* ---------- split a node path into cumulative breadcrumb segments ---------- */
-function pathCrumbs(path) {
-  if (!path) return [];
-  let acc = "";
-  return path.split(" / ").map((seg) => {
-    acc = acc ? acc + " / " + seg : seg;
-    return { seg, path: acc };
-  });
-}
+// tandas-parts.jsx — unified library tree (folders + songs), manage grid + meta helpers
+const { useState, useMemo, useEffect } = React;
 
 /* ---------- tanda meta ---------- */
 function tandaMeta(t) {
@@ -32,255 +10,294 @@ function tandaMeta(t) {
   const genres = [...new Set(songs.map((s) => s.genre))];
   const genre = genres.length === 1 ? genres[0] : "tango";
   const singers = [...new Set(songs.map((s) => s.singer).filter(Boolean))];
-  const singer = singers.length === 0 ? "Instrumental" : singers.length === 1 ? singers[0] : "Various singers";
+  const singer = singers.length === 1 ? singers[0] : singers.length > 1 ? "Various singers" : "";
   const years = songs.map((s) => s.year).filter(Boolean);
   const decade = years.length ? Math.floor(Math.min(...years) / 10) * 10 + "s" : "";
   return { orq, genre, singer, decade, total: tandaTotal(songs) };
 }
 
-/* ---------- songs under a node, grouped by leaf folder ---------- */
-function groupsOf(node) {
-  const groups = [];
-  const walk = (n) => {
-    if (n.songs && n.songs.length) groups.push({ name: n.name, path: n.path, songs: n.songs });
-    if (n.children) n.children.forEach(walk);
-  };
-  walk(node);
-  return groups;
+/* The lowercased labels of a tanda's "type" tags (Tango / Vals / Milonga /
+ * Cortina). This is the DJ-assigned classification — unlike tandaMeta().genre,
+ * which is merely inferred from the songs' file metadata. */
+function tandaTypes(t) {
+  return (t.tags || []).filter((tg) => tg.cat === "type").map((tg) => (tg.label || "").toLowerCase());
 }
 
-/* ============================ FOLDER TREE ============================ */
-function FolderNode({ node, sel, onSelect, openSet, toggle }) {
-  const hasKids = !!(node.children && node.children.length);
-  const isOpen = openSet.has(node.path);
-  const isSel = sel && sel.path === node.path;
+/* ============================ TANDA LIB CARD ============================
+ * One shared "browse a tanda" card, used by both the Live page's library and
+ * the Playlists editor. Collapsed it's a minified summary (name, genre/tags,
+ * singer · songs · length); the caret (or tapping the row) expands it to reveal
+ * every song, each of which auditions on click. `onAdd` shows a +/✓ add button;
+ * `preview` is the shared listen affordance (omit either to drop that feature). */
+function TandaLibCard({ t, preview, onAdd, added, addTitle }) {
+  const [open, setOpen] = useState(false);
+  const m = tandaMeta(t);
+  const hasTags = t.tags && t.tags.length > 0;
+  const toggle = () => setOpen((o) => !o);
   return (
-    <div className="tv-folder">
-      <div className={"tv-folder-row" + (isSel ? " sel" : "")}
-        onClick={() => { onSelect(node); if (hasKids && !isOpen) toggle(node.path); }}>
-        <span className={"caret" + (hasKids ? (isOpen ? " open" : "") : " leaf")}
-          onClick={(e) => { e.stopPropagation(); if (hasKids) toggle(node.path); }}>
-          <I.chev s={12} />
-        </span>
-        <span className="fic">{hasKids && isOpen ? <I.folderOpen s={15} /> : <I.folder s={15} />}</span>
-        <span className="nm">{node.name}</span>
-        <span className="ct">{countSongs(node)}</span>
+    <div className={"tp-tandax" + (open ? " is-open" : "")}>
+      <div className="tp-tandax-head">
+        <button className={"tp-tandax-caret" + (open ? " is-open" : "")} onClick={toggle}
+          title={open ? "Hide songs" : "Show songs"} aria-expanded={open}>
+          <I.chev s={14} />
+        </button>
+        <div className="tp-tandax-main" onClick={toggle}>
+          <div className="tp-libcard-top">
+            <span className="tp-libcard-orq">{t.name || m.orq}</span>
+            {hasTags ? <TagPills tags={t.tags} max={3} /> : <GenreTag genre={m.genre} small />}
+            {m.decade && <span className="tp-tag is-plain sm">{m.decade}</span>}
+          </div>
+          <div className="tp-libcard-meta">
+            {m.singer ? <>{m.singer}<span className="tp-dotsep">·</span></> : null}
+            {t.songs.length} {t.songs.length === 1 ? "song" : "songs"}
+            <span className="tp-dotsep">·</span><span className="tp-mono">{m.total}</span>
+          </div>
+        </div>
+        {onAdd && (
+          <button className={"tp-addbtn" + (added ? " is-added" : "")}
+            onClick={(e) => { e.stopPropagation(); onAdd(); }} title={addTitle || "Add tanda"}>
+            {added ? <I.check s={16} /> : <I.plus s={16} />}
+          </button>
+        )}
       </div>
-      {hasKids && isOpen && (
-        <div className="tv-folder-kids">
-          {node.children.map((c) => (
-            <FolderNode key={c.path} node={c} sel={sel} onSelect={onSelect} openSet={openSet} toggle={toggle} />
-          ))}
+      {open && (
+        <div className="tp-tandax-songs">
+          {t.songs.map((s, i) => {
+            const playing = preview && preview.previewId === s.id && preview.playing;
+            return (
+              <div key={s.id + ":" + i}
+                className={"tp-songrow" + (preview ? " is-clickable" : "") + (playing ? " is-now" : "")}
+                onClick={preview ? (e) => { e.stopPropagation(); preview.toggle(s); } : undefined}
+                title={previewTitle(preview, playing)}>
+                <span className="n"><PreviewGlyph preview={preview} playing={playing} n={i + 1} s={12} /></span>
+                <span className="tt">
+                  <div className="tp-song-title">{s.title}</div>
+                  {(s.singer || s.year) && (
+                    <div className="tp-song-meta">{[s.singer, s.year].filter(Boolean).join(" · ")}</div>
+                  )}
+                </span>
+                <span className="tp-song-dur">{s.dur}</span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-function FolderTree({ sel, onSelect }) {
-  const { tree } = useStore();
-  const [openSet, setOpenSet] = useS(() => new Set(tree[0] ? [tree[0].path] : []));
-  const [q, setQ] = useS("");
-  const toggle = (path) => setOpenSet((s) => {
-    const n = new Set(s); n.has(path) ? n.delete(path) : n.add(path); return n;
-  });
-
-  // Always reveal the selected folder by opening every ancestor on its path, so
-  // a selection made from the breadcrumb or a subfolder chip stays visible here.
-  useE(() => {
-    if (!sel) return;
-    setOpenSet((s) => {
-      const n = new Set(s);
-      for (const c of pathCrumbs(sel.path)) n.add(c.path);
-      return n;
-    });
-  }, [sel && sel.path]);
-
-  // when searching, surface matching folders flat
-  const matches = useM(() => {
-    if (!q.trim()) return null;
-    const ql = q.toLowerCase(); const out = [];
-    const walk = (n) => {
-      const hit = n.name.toLowerCase().includes(ql) ||
-        (n.songs && n.songs.some((s) => (s.title + s.orq + s.singer).toLowerCase().includes(ql)));
-      if (hit) out.push(n);
-      if (n.children) n.children.forEach(walk);
-    };
-    tree.forEach(walk);
-    return out;
-  }, [q, tree]);
-
-  return (
-    <div className="tv-rail">
-      <div className="tv-rail-head">
-        <label className="tp-search">
-          <I.search s={15} />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a folder or song…" />
-        </label>
-      </div>
-      <div className="tv-rail-scroll">
-        {matches
-          ? matches.map((n) => (
-              <div key={n.path} className={"tv-folder-row" + (sel && sel.path === n.path ? " sel" : "")}
-                onClick={() => onSelect(n)} style={{ paddingLeft: 11 }}>
-                <span className="fic"><I.folder s={15} /></span>
-                <span className="nm">{n.name}</span>
-                <span className="ct">{countSongs(n)}</span>
-              </div>
-            ))
-          : tree.map((n) => (
-              <FolderNode key={n.path} node={n} sel={sel} onSelect={onSelect} openSet={openSet} toggle={toggle} />
-            ))}
-        {matches && matches.length === 0 && <div className="tp-empty">No folders match.</div>}
-      </div>
-    </div>
-  );
-}
-
-/* ============================ SONG LIST ============================ */
-function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPlaying, onPreview }) {
+/* ============================ SONG ROW ============================
+ * `library` renders the read-only variant used by the Library view: it keeps
+ * the listen affordance but drops the builder drag handle and the +/add button. */
+function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPlaying, onPreview, previewViaMonitor, library }) {
   const isCort = s.genre === "cortina";
   return (
     <div className={"tv-song" + (isCort ? " cortina" : "") + (inBuilder ? " in-builder" : "") + (dragging ? " dragging" : "") + (isPreview ? " playing" : "")}
-      draggable {...dragHandlers}>
-      <button className={"play" + (isPreview && isPlaying ? " on" : "")} onClick={(e) => { e.stopPropagation(); onPreview(); }}
-        title={isPreview && isPlaying ? "Pause" : "Play"}>
-        {isPreview && isPlaying ? <I.pause s={14} /> : <I.play s={14} />}
+      draggable={!library} {...(library ? {} : dragHandlers)}>
+      <button className={"play" + (isPreview && isPlaying ? " on" : "") + (previewViaMonitor ? " monitor" : "")} onClick={(e) => { e.stopPropagation(); onPreview(); }}
+        title={isPreview && isPlaying ? "Pause" : previewViaMonitor ? "Listen in headphones (monitor)" : "Play preview"}>
+        {isPreview && isPlaying ? <I.pause s={14} /> : (previewViaMonitor ? <I.headphones s={14} /> : <I.play s={14} />)}
       </button>
       <div className="tt">
         <div className="tv-song-title">
           {s.title}
-          {!s.singer && !isCort && <span className="ipill">Instr.</span>}
         </div>
         <div className="tv-song-sub">{s.orq}{s.singer ? " · " + s.singer : ""}</div>
       </div>
       <span className="yr">{s.year}</span>
       <span className="du">{s.dur}</span>
-      <button className={"add" + (inBuilder ? " in" : "")} onClick={(e) => { e.stopPropagation(); onAdd(); }}
-        title={inBuilder ? "Already in the tanda" : "Add to tanda"}>
-        {inBuilder ? <I.check s={15} /> : <I.plus s={15} />}
-      </button>
+      {!library && (
+        <button className={"add" + (inBuilder ? " in" : "")} onClick={(e) => { e.stopPropagation(); onAdd(); }}
+          title={inBuilder ? "Already in the tanda" : "Add to tanda"}>
+          {inBuilder ? <I.check s={15} /> : <I.plus s={15} />}
+        </button>
+      )}
     </div>
   );
 }
 
-/* breadcrumb across the selected folder's ancestors (each segment jumps there) */
-function SongCrumb({ node, tree, onSelect }) {
-  const crumbs = pathCrumbs(node.path);
-  const jump = (path) => { const n = findByPath(tree, path); if (n) onSelect(n); };
+/* ============================ LIBRARY TREE ============================
+ * One unified, collapsible tree: folders nest inside folders, and a folder's
+ * own songs sit right beneath it. Selecting a folder is no longer a separate
+ * step — you just open the branch you want and drag/add songs in place. */
+function TreeNode({ node, depth, openSet, toggle, forceOpen, songProps }) {
+  const kids = node.children || [];
+  const songs = node.songs || [];
+  const hasContent = kids.length > 0 || songs.length > 0;
+  const isOpen = forceOpen || openSet.has(node.path);
   return (
-    <div className="tv-crumb">
-      <I.folderOpen s={17} />
-      {crumbs.map((c, i) => {
-        const last = i === crumbs.length - 1;
-        return (
-          <React.Fragment key={c.path}>
-            {i > 0 && <span className="sep"><I.chev s={12} /></span>}
-            {last
-              ? <b>{c.seg}</b>
-              : <button className="tv-crumb-link" onClick={() => jump(c.path)}>{c.seg}</button>}
-          </React.Fragment>
-        );
-      })}
-    </div>
-  );
-}
-
-function SongList({ node, builderIds, onAdd, makeDrag, draggingId, preview, onSelect }) {
-  const { tree } = useStore();
-  const groups = useM(() => groupsOf(node), [node]);
-  const subfolders = node.children || [];
-  // Label each group by where it sits relative to the current folder, so the
-  // nested structure stays legible even when songs come from deep subfolders.
-  const relLabel = (g) => {
-    if (g.path === node.path) return null;                       // songs in this folder
-    const prefix = node.path + " / ";
-    return g.path.startsWith(prefix) ? g.path.slice(prefix.length) : g.path;
-  };
-  const showHeaders = groups.length > 1 || (groups[0] && relLabel(groups[0]));
-
-  return (
-    <div className="tv-songs">
-      <div className="tv-songs-head">
-        <SongCrumb node={node} tree={tree} onSelect={onSelect} />
-        <div className="tv-songs-hint"><I.drag s={13} /> Drag songs into the builder, or tap +</div>
+    <div className="tv-tnode">
+      <div className={"tv-folder-row" + (isOpen ? " open" : "") + (depth === 0 ? " root" : "")}
+        onClick={() => hasContent && toggle(node.path)}
+        onContextMenu={(e) => songProps.onFolderContext && songProps.onFolderContext(e, node)}>
+        <span className={"caret" + (hasContent ? (isOpen ? " open" : "") : " leaf")}>
+          <I.chev s={12} />
+        </span>
+        <span className="fic">{isOpen && hasContent ? <I.folderOpen s={15} /> : <I.folder s={15} />}</span>
+        <span className="nm">{node.name}</span>
+        <span className="ct">{countSongs(node)}</span>
       </div>
-
-      {subfolders.length > 0 && (
-        <div className="tv-subfolders">
-          {subfolders.map((c) => (
-            <button key={c.path} className="tv-subfolder" onClick={() => onSelect(c)} title={"Open " + c.name}>
-              <span className="fic"><I.folder s={14} /></span>
-              <span className="nm">{c.name}</span>
-              <span className="ct">{countSongs(c)}</span>
-            </button>
+      {isOpen && hasContent && (
+        <div className="tv-tnode-kids">
+          {kids.map((c) => (
+            <TreeNode key={c.path} node={c} depth={depth + 1} openSet={openSet} toggle={toggle} forceOpen={forceOpen} songProps={songProps} />
+          ))}
+          {songs.map((s) => (
+            <SongRow key={s.id} s={s} library={songProps.library}
+              inBuilder={!songProps.library && songProps.builderIds && songProps.builderIds.has(s.id)}
+              onAdd={() => songProps.onAdd && songProps.onAdd(s)}
+              dragHandlers={songProps.makeDrag ? songProps.makeDrag(s) : undefined} dragging={songProps.draggingId === s.id}
+              isPreview={songProps.preview && songProps.preview.previewId === s.id} isPlaying={songProps.preview && songProps.preview.playing}
+              onPreview={() => songProps.preview && songProps.preview.toggle(s)}
+              previewViaMonitor={songProps.preview && songProps.preview.viaMonitor} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
 
-      <div className="tv-songs-scroll">
-        {groups.length === 0 ? (
-          <div className="tp-empty">This folder has no songs of its own — open a subfolder above.</div>
+function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, library }) {
+  const { tree } = useStore();
+  const [openSet, setOpenSet] = useState(() => new Set(tree.map((n) => n.path)));
+  const [q, setQ] = useState("");
+  const [menu, setMenu] = useState(null);   // right-click folder menu: { node, x, y, confirm }
+  const toggle = (path) => setOpenSet((s) => {
+    const n = new Set(s); n.has(path) ? n.delete(path) : n.add(path); return n;
+  });
+
+  // Right-click a folder row to remove it from the library (files stay on disk).
+  const closeMenu = () => setMenu(null);
+  const openMenu = (e, node) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Clamp to the viewport so the menu never opens off the right/bottom edge.
+    const x = Math.min(e.clientX, window.innerWidth - 244);
+    const y = Math.min(e.clientY, window.innerHeight - 150);
+    setMenu({ node, x, y, confirm: false });
+  };
+  const confirmDelete = () => { if (menu) Store.deleteFolder(menu.node); closeMenu(); };
+
+  useEffect(() => {
+    if (!menu) return;
+    const onDown = () => closeMenu();
+    const onKey = (e) => { if (e.key === "Escape") closeMenu(); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("blur", onDown);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("blur", onDown);
+    };
+  }, [menu]);
+
+  // Open the root folders once the library has loaded (tree arrives async).
+  useEffect(() => {
+    if (tree.length) setOpenSet((s) => (s.size ? s : new Set(tree.map((n) => n.path))));
+  }, [tree]);
+
+  // Searching prunes the tree to matching folders/songs and force-opens it.
+  const filtered = useMemo(() => {
+    const ql = q.trim().toLowerCase();
+    if (!ql) return tree;
+    const f = (node) => {
+      const nameHit = node.name.toLowerCase().includes(ql);
+      const songs = nameHit ? (node.songs || [])
+        : (node.songs || []).filter((s) => (s.title + " " + s.orq + " " + (s.singer || "")).toLowerCase().includes(ql));
+      const children = (node.children || []).map(f).filter(Boolean);
+      if (nameHit || songs.length || children.length) return { ...node, songs, children };
+      return null;
+    };
+    return tree.map(f).filter(Boolean);
+  }, [q, tree]);
+
+  const searching = !!q.trim();
+  const songProps = { builderIds, onAdd, makeDrag, draggingId, preview, library, onFolderContext: openMenu };
+  const menuCount = menu ? countSongs(menu.node) : 0;
+
+  return (
+    <div className="tv-tree">
+      <div className="tv-tree-head">
+        <label className="tp-search">
+          <I.search s={15} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a folder or song…" />
+        </label>
+        {library
+          ? (hint && <div className="tv-songs-hint">{hint}</div>)
+          : <div className="tv-songs-hint"><I.drag s={13} /> {hint || "Drag songs into the builder, or tap +"}</div>}
+      </div>
+      <div className="tv-tree-scroll">
+        {filtered.length === 0 ? (
+          <div className="tp-empty">{searching ? "Nothing matches your search." : "No folders in your library yet."}</div>
         ) : (
-          <>
-            <div className="tv-songhead">
-              <span></span><span>Track</span><span>Year</span><span>Time</span><span></span>
-            </div>
-            {groups.map((g) => {
-              const rel = relLabel(g);
-              return (
-                <div key={g.path}>
-                  {showHeaders && (
-                    <div className="tv-grouphdr" role={rel ? "button" : undefined}
-                      onClick={rel ? () => { const n = findByPath(tree, g.path); if (n) onSelect(n); } : undefined}
-                      style={rel ? { cursor: "pointer" } : undefined}>
-                      <span className="fic"><I.folder s={14} /></span>
-                      <span className="nm">{rel || "In this folder"}</span>
-                      <span className="ct">{g.songs.length}</span>
-                      <span className="ln"></span>
-                    </div>
-                  )}
-                  {g.songs.map((s) => (
-                    <SongRow key={s.id} s={s} inBuilder={builderIds.has(s.id)}
-                      onAdd={() => onAdd(s)} dragHandlers={makeDrag(s)} dragging={draggingId === s.id}
-                      isPreview={preview && preview.previewId === s.id} isPlaying={preview && preview.playing}
-                      onPreview={() => preview && preview.toggle(s)} />
-                  ))}
-                </div>
-              );
-            })}
-          </>
+          filtered.map((n) => (
+            <TreeNode key={n.path} node={n} depth={0} openSet={openSet} toggle={toggle} forceOpen={searching} songProps={songProps} />
+          ))
         )}
       </div>
+
+      {menu && (
+        <div className="tv-ctx" style={{ top: menu.y, left: menu.x }}
+          onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
+          <div className="tv-ctx-head">
+            <span className="fic"><I.folder s={14} /></span>
+            <span className="nm" title={menu.node.name}>{menu.node.name}</span>
+            <span className="ct">{menuCount} song{menuCount === 1 ? "" : "s"}</span>
+          </div>
+          {!menu.confirm ? (
+            <button className="tv-ctx-item del" onClick={() => setMenu((m) => ({ ...m, confirm: true }))}>
+              <I.trash s={15} /> Remove folder from library
+            </button>
+          ) : (
+            <div className="tv-ctx-confirm">
+              <div className="tv-ctx-msg">
+                Remove {menuCount} song{menuCount === 1 ? "" : "s"} from your library?
+                Your files stay on disk.
+              </div>
+              <div className="tv-ctx-actions">
+                <button className="tv-ctx-cancel" onClick={closeMenu}>Cancel</button>
+                <button className="tv-ctx-del" onClick={confirmDelete}><I.trash s={14} /> Remove</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 /* ============================ MANAGE GRID ============================ */
-function GenreTagX({ genre }) {
-  const lbl = { tango: "Tango", vals: "Vals", milonga: "Milonga", cortina: "Cortina" }[genre] || "Tango";
-  return <span className={"tp-tag is-" + genre} style={{ height: 19, fontSize: 10, padding: "0 7px" }}>{lbl}</span>;
-}
-
-function TandaCard({ t, onEdit, onDelete }) {
+function TandaCard({ t, onEdit, onDelete, onTagClick, activeTagKeys, preview }) {
   const m = tandaMeta(t);
   return (
     <div className="tv-tcard">
       <div className="tv-tcard-top">
         <div className="tv-tcard-orq">
-          <div className="o">{t.name || m.orq} <GenreTagX genre={m.genre} />
-            {m.decade && <span className="tp-tag is-plain" style={{ height: 19, fontSize: 10, padding: "0 7px" }}>{m.decade}</span>}</div>
-          <div className="sub">{t.name ? m.orq + " · " : ""}{m.singer}</div>
+          <div className="o">{t.name || m.orq}</div>
+          {(t.name || m.singer) && (
+            <div className="sub">{[t.name ? m.orq : null, m.singer || null].filter(Boolean).join(" · ")}</div>
+          )}
+          {t.tags && t.tags.length > 0 && (
+            <div className="tv-tcard-tags">
+              <TagPills tags={t.tags} onClick={onTagClick} activeKeys={activeTagKeys} />
+            </div>
+          )}
         </div>
       </div>
       <div className="tv-tcard-songs">
-        {t.songs.map((s, i) => (
-          <div key={s.id + i} className="tv-tcard-song">
-            <span className="n">{i + 1}</span>
-            <span className="t">{s.title}</span>
-            <span className="d">{s.dur}</span>
-          </div>
-        ))}
+        {t.songs.map((s, i) => {
+          const isPlaying = preview && preview.previewId === s.id && preview.playing;
+          return (
+            <div key={s.id + i} className={"tv-tcard-song" + (preview ? " is-clickable" : "") + (isPlaying ? " playing" : "")}
+              onClick={preview ? () => preview.toggle(s) : undefined}
+              title={previewTitle(preview, isPlaying)}>
+              <span className="n"><PreviewGlyph preview={preview} playing={isPlaying} n={i + 1} s={11} /></span>
+              <span className="t">{s.title}</span>
+              <span className="d">{s.dur}</span>
+            </div>
+          );
+        })}
       </div>
       <div className="tv-tcard-foot">
         <div className="tv-tcard-total">{t.songs.length} songs · <b>{m.total}</b></div>
@@ -291,7 +308,7 @@ function TandaCard({ t, onEdit, onDelete }) {
   );
 }
 
-function ManageGrid({ tandas, onEdit, onDelete, onNew }) {
+function ManageGrid({ tandas, onEdit, onDelete, onNew, preview }) {
   if (!tandas.length) {
     return (
       <div className="tv-manage">
@@ -309,7 +326,7 @@ function ManageGrid({ tandas, onEdit, onDelete, onNew }) {
   return (
     <div className="tv-manage">
       <div className="tv-grid">
-        {tandas.map((t) => <TandaCard key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} />)}
+        {tandas.map((t) => <TandaCard key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} preview={preview} />)}
         <button className="tv-newcard" onClick={onNew}>
           <span className="ic"><I.plus s={22} /></span>
           <span className="lb">New tanda</span>
@@ -319,4 +336,4 @@ function ManageGrid({ tandas, onEdit, onDelete, onNew }) {
   );
 }
 
-Object.assign(window, { tandaMeta, groupsOf, FolderTree, SongList, ManageGrid, GenreTagX });
+Object.assign(window, { tandaMeta, tandaTypes, TandaLibCard, LibraryTree, ManageGrid });

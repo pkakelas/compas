@@ -2,6 +2,7 @@ import type {AppModule} from '../AppModule.js';
 import type {ModuleContext} from '../ModuleContext.js';
 import {app} from 'electron';
 import {basename, dirname, join} from 'node:path';
+import {existsSync} from 'node:fs';
 import Database from 'better-sqlite3';
 
 export type SongRow = {
@@ -43,10 +44,17 @@ export type TreeNode = {
   children?: TreeNode[];
 };
 
+/** A label attached to a tanda. `cat` groups it (type/age/orquesta) or is 'custom'. */
+export type TandaTag = {
+  cat: string;
+  label: string;
+};
+
 export type Tanda = {
   id: string;
   name: string | null;
   songs: Song[];
+  tags: TandaTag[];
 };
 
 /** A playlist item is either a saved tanda or a single cortina song. */
@@ -110,6 +118,16 @@ function migrate(d: Database.Database): void {
       position INTEGER NOT NULL,
       PRIMARY KEY (tanda_id, position)
     );
+
+    CREATE TABLE IF NOT EXISTS tanda_tags (
+      tanda_id INTEGER NOT NULL REFERENCES tandas(id) ON DELETE CASCADE,
+      cat      TEXT NOT NULL DEFAULT 'custom',  -- 'type' | 'age' | 'orquesta' | 'custom'
+      label    TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      PRIMARY KEY (tanda_id, position)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tanda_tags_label ON tanda_tags(label);
 
     CREATE TABLE IF NOT EXISTS library_roots (
       path     TEXT PRIMARY KEY,
@@ -304,19 +322,45 @@ export function listTandas(): Tanda[] {
     WHERE ts.tanda_id = ?
     ORDER BY ts.position
   `);
+  const tagStmt = d.prepare(
+    'SELECT cat, label FROM tanda_tags WHERE tanda_id = ? ORDER BY position',
+  );
   return tandaRows.map(t => ({
     id: String(t.id),
     name: t.name,
     songs: (songStmt.all(t.id) as SongRow[]).map(rowToSong),
+    tags: tagStmt.all(t.id) as TandaTag[],
   }));
 }
 
-export type SaveTandaInput = {id?: string | null; name?: string | null; songIds: string[]};
+export type SaveTandaInput = {
+  id?: string | null;
+  name?: string | null;
+  songIds: string[];
+  tags?: TandaTag[];
+};
+
+/** Trim, drop blanks, and de-dupe tags by (cat, case-insensitive label). */
+function cleanTags(tags: TandaTag[] | undefined): TandaTag[] {
+  const out: TandaTag[] = [];
+  const seen = new Set<string>();
+  for (const t of tags ?? []) {
+    const label = (t?.label ?? '').trim();
+    if (!label) continue;
+    const cat = (t?.cat ?? 'custom').trim() || 'custom';
+    const key = `${cat}|${label.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({cat, label});
+  }
+  return out;
+}
 
 export function saveTanda(input: SaveTandaInput): Tanda {
   const d = getDb();
   const name = input.name && input.name.trim() ? input.name.trim() : null;
   const songIds = input.songIds.map(Number).filter(n => Number.isFinite(n));
+  const tags = cleanTags(input.tags);
 
   const tx = d.transaction(() => {
     let tandaId: number;
@@ -324,6 +368,7 @@ export function saveTanda(input: SaveTandaInput): Tanda {
       tandaId = Number(input.id);
       d.prepare('UPDATE tandas SET name = ? WHERE id = ?').run(name, tandaId);
       d.prepare('DELETE FROM tanda_songs WHERE tanda_id = ?').run(tandaId);
+      d.prepare('DELETE FROM tanda_tags WHERE tanda_id = ?').run(tandaId);
     } else {
       const info = d
         .prepare('INSERT INTO tandas (name, created_at) VALUES (?, ?)')
@@ -334,6 +379,10 @@ export function saveTanda(input: SaveTandaInput): Tanda {
       'INSERT INTO tanda_songs (tanda_id, song_id, position) VALUES (?, ?, ?)',
     );
     songIds.forEach((songId, i) => link.run(tandaId, songId, i));
+    const tagLink = d.prepare(
+      'INSERT INTO tanda_tags (tanda_id, cat, label, position) VALUES (?, ?, ?, ?)',
+    );
+    tags.forEach((t, i) => tagLink.run(tandaId, t.cat, t.label, i));
     return tandaId;
   });
 
@@ -427,6 +476,71 @@ export function getSongPath(id: string): string | null {
     | {path: string}
     | undefined;
   return row ? row.path : null;
+}
+
+/**
+ * Delete the given song ids in one transaction, then clean up anything left
+ * dangling: library roots that no longer hold any songs (so the empty folder
+ * disappears from the tree) and tandas that lost all of their songs.
+ */
+function deleteSongs(d: Database.Database, ids: number[]): void {
+  if (!ids.length) return;
+  const del = d.prepare('DELETE FROM songs WHERE id = ?');
+  const tx = d.transaction(() => {
+    for (const id of ids) del.run(id);
+    d.prepare(
+      'DELETE FROM library_roots WHERE path NOT IN (SELECT DISTINCT root FROM songs)',
+    ).run();
+    d.prepare(
+      'DELETE FROM tandas WHERE id NOT IN (SELECT DISTINCT tanda_id FROM tanda_songs)',
+    ).run();
+  });
+  tx();
+}
+
+/**
+ * Remove the given songs from the library by id (used when the DJ deletes a
+ * folder from the app). Only the database records go — the files stay on disk.
+ * Empty roots and tandas are cleaned up by deleteSongs. Returns the fresh library.
+ */
+export function deleteSongsByIds(ids: string[]): Library {
+  const d = getDb();
+  const numeric = ids.map(Number).filter(n => Number.isFinite(n));
+  deleteSongs(d, numeric);
+  return getLibrary();
+}
+
+/**
+ * Remove a single song from the library, but only if its file is actually gone
+ * from disk. Used reactively when playback fails so we never delete a track for
+ * a transient/codec error. Returns whether it was removed and the fresh library.
+ */
+export function removeSongIfMissing(
+  id: string,
+): {removed: boolean; song: Song | null; library: Library} {
+  const d = getDb();
+  const row = d.prepare('SELECT * FROM songs WHERE id = ?').get(Number(id)) as
+    | SongRow
+    | undefined;
+  if (!row) return {removed: false, song: null, library: getLibrary()};
+  if (existsSync(row.path)) {
+    return {removed: false, song: rowToSong(row), library: getLibrary()};
+  }
+  deleteSongs(d, [row.id]);
+  return {removed: true, song: rowToSong(row), library: getLibrary()};
+}
+
+/**
+ * Sweep the whole library and drop any song whose file no longer exists on disk
+ * (e.g. the folder was moved or deleted while the app was closed). Runs on load
+ * so phantom folders never linger in the tree. Returns the count + fresh library.
+ */
+export function pruneMissingSongs(): {removed: number; library: Library} {
+  const d = getDb();
+  const rows = d.prepare('SELECT id, path FROM songs').all() as {id: number; path: string}[];
+  const missing = rows.filter(r => !existsSync(r.path)).map(r => r.id);
+  deleteSongs(d, missing);
+  return {removed: missing.length, library: getLibrary()};
 }
 
 export class DatabaseModule implements AppModule {

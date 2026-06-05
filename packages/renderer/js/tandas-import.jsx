@@ -1,17 +1,17 @@
 // tandas-import.jsx — pick a folder → real scan (main process) → animated reveal
-const { useState: useStateImp, useEffect: useEffectImp, useRef: useRefImp } = React;
+const { useState, useEffect, useRef } = React;
 
 function ImportScreen() {
-  const [phase, setPhase] = useStateImp("drop");      // drop | picking | scanning
-  const [hot, setHot] = useStateImp(false);
-  const [steps, setSteps] = useStateImp([]);           // [{ name, count }]
-  const [revealed, setRevealed] = useStateImp(0);      // how many folders shown
-  const [songCount, setSongCount] = useStateImp(0);
-  const [err, setErr] = useStateImp(null);
-  const timers = useRefImp([]);
+  const [phase, setPhase] = useState("drop");      // drop | picking | scanning
+  const [hot, setHot] = useState(false);
+  const [steps, setSteps] = useState([]);           // [{ name, count }]
+  const [revealed, setRevealed] = useState(0);      // how many folders shown
+  const [songCount, setSongCount] = useState(0);
+  const [err, setErr] = useState(null);
+  const timers = useRef([]);
 
   const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = []; };
-  useEffectImp(() => clearTimers, []);
+  useEffect(() => clearTimers, []);
 
   const begin = async () => {
     if (phase === "picking" || phase === "scanning") return;

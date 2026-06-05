@@ -21,11 +21,31 @@ function clearLibrary() {
   return ipcRenderer.invoke('library:clear');
 }
 
+/** Remove songs whose files no longer exist. Returns {removed, library}. */
+function pruneMissingLibrary() {
+  return ipcRenderer.invoke('library:pruneMissing');
+}
+
+/** Remove one song iff its file is gone. Returns {removed, song, library}. */
+function removeSongIfMissing(id: string) {
+  return ipcRenderer.invoke('songs:removeIfMissing', id);
+}
+
+/** Delete songs from the library by id (e.g. a whole folder). Files stay on disk. Returns the fresh library. */
+function deleteSongs(ids: string[]) {
+  return ipcRenderer.invoke('songs:delete', ids);
+}
+
 function listTandas() {
   return ipcRenderer.invoke('tandas:list');
 }
 
-function saveTanda(input: {id?: string | null; name?: string | null; songIds: string[]}) {
+function saveTanda(input: {
+  id?: string | null;
+  name?: string | null;
+  songIds: string[];
+  tags?: {cat: string; label: string}[];
+}) {
   return ipcRenderer.invoke('tandas:save', input);
 }
 
@@ -56,6 +76,9 @@ export {
   importLibrary,
   getLibrary,
   clearLibrary,
+  pruneMissingLibrary,
+  removeSongIfMissing,
+  deleteSongs,
   listTandas,
   saveTanda,
   deleteTanda,

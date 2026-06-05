@@ -1,5 +1,5 @@
-// shared.jsx — icons, waveform, meters, the night's data. Exports to window.
-const { useMemo } = React;
+// shared.jsx — icons, waveform, genre tag, toast. Exports to window.
+const { useMemo, useState, useRef, useCallback, useEffect } = React;
 
 /* ---------- icons (stroke, 1.6) ---------- */
 const I = {
@@ -12,6 +12,7 @@ const I = {
   spark: (p) => <svg viewBox="0 0 24 24" width={p.s||15} height={p.s||15} fill="currentColor"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6zM18.5 14l.8 2.7 2.7.8-2.7.8-.8 2.7-.8-2.7-2.7-.8 2.7-.8z"/></svg>,
   wave:  (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M3 12h2l2-6 3 14 3-11 2 5h6"/></svg>,
   vol:   (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9v6h3l5 4V5L7 9zM16 9.5a3.5 3.5 0 010 5M18.5 7a7 7 0 010 10"/></svg>,
+  volX:  (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9v6h3l5 4V5L7 9zM16 9.5l5 5M21 9.5l-5 5"/></svg>,
   curtain:(p)=> <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M3 3h18M5 3v15c2 0 3-1.5 3-4V3M19 3v15c-2 0-3-1.5-3-4V3"/></svg>,
   plus:  (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>,
   search:(p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>,
@@ -28,6 +29,9 @@ const I = {
   pencil:(p)=> <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 5l5 5M4 20l1-4L16 5a1.5 1.5 0 012 0l1 1a1.5 1.5 0 010 2L8 19z"/></svg>,
   arrowDn:(p)=> <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg>,
   drag:  (p) => <svg viewBox="0 0 24 24" width={p.s||15} height={p.s||15} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h8M8 12h8M8 18h8"/></svg>,
+  tag:   (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12.6 3.6H20a1 1 0 011 1v7.4a2 2 0 01-.6 1.4l-6.4 6.4a2 2 0 01-2.8 0l-4.4-4.4a2 2 0 010-2.8l6.4-6.4a2 2 0 011.4-.6z"/><circle cx="16" cy="8" r="1.25" fill="currentColor" stroke="none"/></svg>,
+  headphones:(p)=> <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 13v-1a8 8 0 0116 0v1"/><path d="M4 14a2 2 0 012-2h1v6H6a2 2 0 01-2-2zM20 14a2 2 0 00-2-2h-1v6h1a2 2 0 002-2z"/></svg>,
+  speaker:(p)=> <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><circle cx="12" cy="15" r="3.2"/><circle cx="12" cy="6.5" r="1"/></svg>,
 };
 
 /* deterministic pseudo-random so waveforms are stable across renders/exports */
@@ -56,23 +60,68 @@ function Waveform({ progress = 0.45, bars = 138, seed = 7, height = 92, classNam
   );
 }
 
-function Meter({ level = 0.7, count = 13 }) {
-  const lit = Math.round(level * count);
+/* small inline song-progress equalizer marker */
+function EQ() { return <span className="tp-eq"><i></i><i></i><i></i></span>; }
+
+/* The leading glyph for any clickable "listen / audition" row — used by the live
+   queue's tanda search, the tanda cards, the builder bench and the playlist
+   editor so they all speak the same language. While this row is the active
+   preview it shows the equalizer; otherwise it shows a play icon, or the
+   headphone glyph when previews are routed to the monitor (cue) output. Pass `n`
+   to prefix the track number (rows that have their own glyph can omit it). */
+function PreviewGlyph({ preview, playing, n, s = 12 }) {
+  if (playing) return <EQ />;
+  const viaMonitor = !!(preview && preview.viaMonitor);
   return (
-    <div className="tp-meter">
-      {Array.from({ length: count }).map((_, i) => {
-        const on = i < lit;
-        const hot = i >= count - 3;
-        return <i key={i} className={(hot && on ? "hot " : "") + (on ? "" : "dim")}
-          style={{ height: 5 + i * (13 / count) + "px" }} />;
-      })}
+    <React.Fragment>
+      {n != null && <span className="qn">{n}</span>}
+      {viaMonitor ? <I.headphones s={s} /> : <I.play s={s} />}
+    </React.Fragment>
+  );
+}
+
+/* The matching tooltip: "Pause" while playing, "Listen in headphones (monitor)"
+   when previews route to the cue output, otherwise the caller's verb. Returns
+   undefined when there's no preview affordance so the title attribute is dropped. */
+function previewTitle(preview, playing, verb = "Listen") {
+  if (!preview) return undefined;
+  if (playing) return "Pause";
+  return preview.viaMonitor ? "Listen in headphones (monitor)" : verb;
+}
+
+const GENRE_LABEL = { tango: "Tango", vals: "Vals", milonga: "Milonga", cortina: "Cortina" };
+
+/* one genre/era pill, used wherever a tanda's genre is shown. `small` is the
+   compact variant for dense rows (.sm utility). */
+function GenreTag({ genre, small }) {
+  return <span className={"tp-tag is-" + genre + (small ? " sm" : "")}>{GENRE_LABEL[genre] || "Tango"}</span>;
+}
+
+/* transient confirmation toast (e.g. "Tanda saved"), with an optional Undo
+   action. useToast owns the auto-dismiss timer; <Toast> renders it. Shared by
+   the Tandas & Playlists views so the flash logic lives in exactly one place. */
+function useToast() {
+  const [toast, setToast] = useState(null);
+  const timer = useRef(null);
+  const dismiss = useCallback(() => { clearTimeout(timer.current); setToast(null); }, []);
+  const flash = useCallback((msg, action) => {
+    setToast({ msg, action });
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setToast(null), action ? 5000 : 2400);
+  }, []);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return { toast, flash, dismiss };
+}
+
+function Toast({ toast, onDismiss }) {
+  if (!toast) return null;
+  return (
+    <div className="tv-toast">
+      <span className="ic"><I.check s={16} /></span>
+      {toast.msg}
+      {toast.action && <button onClick={() => { toast.action(); onDismiss(); }}>Undo</button>}
     </div>
   );
 }
 
-/* small inline song-progress equalizer marker */
-function EQ() { return <span className="tp-eq"><i></i><i></i><i></i></span>; }
-
-const GENRE_LABEL = { tango: "Tango", vals: "Vals", milonga: "Milonga" };
-
-Object.assign(window, { I, Waveform, Meter, EQ, GENRE_LABEL });
+Object.assign(window, { I, Waveform, EQ, PreviewGlyph, previewTitle, GENRE_LABEL, GenreTag, useToast, Toast });

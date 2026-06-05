@@ -1,24 +1,20 @@
 // tandas-view.jsx — the Tandas workspace: import → folder library → builder → manage
-// Two builder layouts (Bench dock / Tray) toggled via Tweaks.
-const { useState: useTV, useEffect: useEffTV, useRef: useRefTV } = React;
+const { useState, useEffect, useRef } = React;
 
 /* ---------- single-song preview, routed through the shared player ----------
  * Previewing a song here plays it through the one app-wide engine, so it shows
  * up in the transport bar and never overlaps with the live queue. */
 function useSongPreview() {
-  const player = usePlayer();
-  return {
-    previewId: player.previewId,
-    playing: player.playing,
-    toggle: player.previewSong,
-  };
+  // Unified listen affordance — routes to the monitor card when cueing is on,
+  // otherwise through the shared engine (see PlayerProvider).
+  return usePlayer().preview;
 }
 
 /* ---------- shared drag-and-drop for the builder ---------- */
 function useBuilderDnD(api) {
-  const [hot, setHot] = useTV(false);
-  const [drag, setDrag] = useTV(null);
-  const [over, setOver] = useTV(null);
+  const [hot, setHot] = useState(false);
+  const [drag, setDrag] = useState(null);
+  const [over, setOver] = useState(null);
   const readDrop = (e, i) => {
     const raw = e.dataTransfer.getData("text/plain") || "";
     if (raw.indexOf("idx:") === 0) {
@@ -53,18 +49,50 @@ function useBuilderDnD(api) {
   return { dropTarget, slot, dropAt };
 }
 
-function builderSummary(songs, editing) {
+function builderSummary(songs) {
   const m = tandaMeta({ songs });
   return (
     <div className="tv-dock-meta">
       <b>{songs.length}</b> {songs.length === 1 ? "song" : "songs"}
-      {songs.length > 0 && <><span>·</span> <b>{m.total}</b><span>·</span><GenreTagX genre={m.genre} /></>}
+      {songs.length > 0 && <><span>·</span> <b>{m.total}</b><span>·</span><GenreTag genre={m.genre} small /></>}
+    </div>
+  );
+}
+
+/* ---------- draggable divider between the library and the bench dock ----------
+ * Dragging left widens the dock (it's pinned to the right); dragging right
+ * gives the library more room. Width is clamped and committed on release. */
+function BuilderResizer({ width, min, max, onResize, onCommit }) {
+  const start = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = width;
+    let last = startW;
+    const move = (ev) => {
+      last = Math.max(min, Math.min(max, startW - (ev.clientX - startX)));
+      onResize(last);
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      if (onCommit) onCommit(last);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+  return (
+    <div className="tv-resizer" onMouseDown={start} title="Drag to resize the builder">
+      <span className="grip" />
     </div>
   );
 }
 
 /* ============================ BUILDER · BENCH (side dock) ============================ */
-function BuilderBench({ builder, api }) {
+function BuilderBench({ builder, api, width, preview }) {
   const songs = builder.songs;
   const { dropTarget, slot, dropAt } = useBuilderDnD(api);
   const m = tandaMeta({ songs });
@@ -72,8 +100,10 @@ function BuilderBench({ builder, api }) {
   const empties = [];
   for (let i = songs.length; i < target; i++) empties.push(i);
 
+  const dockStyle = width ? { flex: "0 0 " + width + "px", width: width } : undefined;
+
   return (
-    <div className={"tv-dock" + (dropTarget.hot ? " drop-hot" : "")}>
+    <div className={"tv-dock" + (dropTarget.hot ? " drop-hot" : "")} style={dockStyle}>
       <div className="tv-dock-head">
         <div className="tp-eyebrow">{api.editing ? "Editing tanda" : "New tanda"}</div>
         <div className="tv-dock-title-row">
@@ -81,31 +111,41 @@ function BuilderBench({ builder, api }) {
             placeholder={m.orq !== "Empty tanda" ? m.orq : "Name this tanda…"} />
           {api.editing && <span className="tv-edit-tag">Editing</span>}
         </div>
-        {builderSummary(songs, api.editing)}
+        {builderSummary(songs)}
+        <TagField tags={api.tags} onChange={api.setTags} />
       </div>
 
       <div className="tv-dock-scroll" {...{ onDragOver: dropTarget.onDragOver, onDragLeave: dropTarget.onDragLeave, onDrop: dropTarget.onDrop }}>
         {songs.map((s, i) => {
           const sp = slot(i);
+          const isPlaying = preview && preview.previewId === s.id && preview.playing;
           return (
-            <div key={s.id} className={"tv-slot filled" + (sp.dragging ? " dragging" : "") + (sp.over ? " over" : "")} {...sp.handlers}>
-              <span className="num">{i + 1}</span>
+            <div key={s.id} className={"tv-slot filled" + (sp.dragging ? " dragging" : "") + (sp.over ? " over" : "") + (preview ? " clickable" : "") + (isPlaying ? " playing" : "")}
+              {...sp.handlers}
+              onClick={preview ? () => preview.toggle(s) : undefined}
+              title={previewTitle(preview, isPlaying)}>
+              <span className="num"><PreviewGlyph preview={preview} playing={isPlaying} n={i + 1} s={12} /></span>
               <span className="gr"><I.drag s={14} /></span>
               <div className="tt">
                 <div className="t">{s.title}</div>
                 <div className="s">{s.orq}{s.singer ? " · " + s.singer : ""} · {s.year}</div>
               </div>
               <span className="du">{s.dur}</span>
-              <button className="rm" onClick={() => api.removeAt(i)} title="Remove"><I.x s={14} /></button>
+              <button className="rm" onClick={(e) => { e.stopPropagation(); api.removeAt(i); }} title="Remove"><I.x s={14} /></button>
             </div>
           );
         })}
-        {empties.map((i) => (
-          <div key={"e" + i} className="tv-slot-empty" {...dropAt(i)}>
-            <span className="num">{i + 1}</span>
-            <span>{i === songs.length ? "Drop a song here, or tap + in the list" : "Drop a song here"}</span>
-          </div>
-        ))}
+        {empties.map((i) => {
+          const isNext = i === songs.length;
+          return (
+            <div key={"e" + i} className={"tv-slot-empty" + (isNext ? " next" : " ghost")} {...dropAt(i)}>
+              <span className="num">{i + 1}</span>
+              {isNext
+                ? <span className="hint"><I.plus s={14} /> Drop a song here, or tap + to add</span>
+                : <span className="hint">Empty</span>}
+            </div>
+          );
+        })}
       </div>
 
       <div className="tv-dock-foot">
@@ -120,92 +160,22 @@ function BuilderBench({ builder, api }) {
   );
 }
 
-/* ============================ BUILDER · TRAY (bottom) ============================ */
-function BuilderTray({ builder, api }) {
-  const songs = builder.songs;
-  const { dropTarget, slot } = useBuilderDnD(api);
-  const m = tandaMeta({ songs });
-  return (
-    <div className={"tv-tray" + (dropTarget.hot ? " drop-hot" : "")}>
-      <div className="tv-tray-l">
-        <div className="tp-eyebrow">{api.editing ? "Editing tanda" : "New tanda"}</div>
-        <input className="tv-tray-name" value={builder.name} onChange={(e) => api.setName(e.target.value)}
-          placeholder={m.orq !== "Empty tanda" ? m.orq : "Name this tanda…"} />
-        <div className="tv-tray-meta">
-          <b>{songs.length}</b> {songs.length === 1 ? "song" : "songs"}
-          {songs.length > 0 && <><span>·</span><b>{m.total}</b></>}
-        </div>
-      </div>
-
-      <div className="tv-tray-mid" {...{ onDragOver: dropTarget.onDragOver, onDragLeave: dropTarget.onDragLeave, onDrop: dropTarget.onDrop }}>
-        {songs.length === 0 ? (
-          <div className="tv-tray-empty"><I.arrowDn s={18} /> Drag songs down here — or tap + on any track to add it</div>
-        ) : songs.map((s, i) => {
-          const sp = slot(i);
-          return (
-            <React.Fragment key={s.id}>
-              {i > 0 && <span className="tv-tray-arrow"><I.chev s={14} /></span>}
-              <div className={"tv-chip" + (sp.dragging ? " dragging" : "") + (sp.over ? " over" : "")} {...sp.handlers}>
-                <span className="num">{i + 1}</span>
-                <div className="tt">
-                  <div className="t">{s.title}</div>
-                  <div className="s">{s.orq.split(",")[0]} · {s.dur}</div>
-                </div>
-                <button className="rm" onClick={() => api.removeAt(i)} title="Remove"><I.x s={13} /></button>
-              </div>
-            </React.Fragment>
-          );
-        })}
-      </div>
-
-      <div className="tv-tray-r">
-        <button className="tv-save" disabled={!songs.length} onClick={api.save}>
-          <I.check s={16} /> {api.editing ? "Update tanda" : "Save tanda"}
-        </button>
-        <button className="tv-clear" disabled={!songs.length && !api.editing} onClick={api.clear}>
-          {api.editing ? "Cancel edit" : "Clear"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ---------- find a tree node by its path (tree identity changes on reload) ---------- */
-function findNode(nodes, path) {
-  for (const n of nodes) {
-    if (n.path === path) return n;
-    if (n.children) {
-      const hit = findNode(n.children, path);
-      if (hit) return hit;
-    }
-  }
-  return null;
-}
-
 /* ============================ TANDAS VIEW (orchestrator) ============================ */
-function TandasView({ layout }) {
-  const { imported, tree, tandas, totalSongs, totalFolders, roots } = useStore();
-  const [mode, setMode] = useTV("build");                  // build | manage
-  const [sel, setSel] = useTV(null);                       // selected folder node
-  const [builder, setBuilder] = useTV({ songs: [], name: "", editingId: null });
-  const [draggingId, setDraggingId] = useTV(null);
-  const [toast, setToast] = useTV(null);                   // { msg, action }
-  const toastTimer = useRefTV(null);
+const BUILDER_MIN_W = 300;
+const BUILDER_MAX_W = 640;
+
+function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthChange }) {
+  const { imported, tandas, totalSongs, totalFolders, roots } = useStore();
+  const goBuild = () => onNavigate && onNavigate("Builder");
+  const goManage = () => onNavigate && onNavigate("Tandas");
+  const [builder, setBuilder] = useState({ songs: [], name: "", tags: [], editingId: null });
+  const [draggingId, setDraggingId] = useState(null);
+  const { toast, flash, dismiss } = useToast();
   const preview = useSongPreview();
 
-  // Keep the selected folder pointed at a live node from the current tree.
-  useEffTV(() => {
-    if (!tree.length) { if (sel) setSel(null); return; }
-    const stillThere = sel && findNode(tree, sel.path);
-    if (!stillThere) setSel(tree[0]);
-    else if (stillThere !== sel) setSel(stillThere);
-  }, [tree]);
-
-  const flash = (msg, action) => {
-    setToast({ msg, action });
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), action ? 5000 : 2400);
-  };
+  // Live dock width while dragging the divider; seeded from the persisted tweak.
+  const [dockW, setDockW] = useState(builderWidth || 380);
+  useEffect(() => { setDockW(builderWidth || 380); }, [builderWidth]);
 
   /* ---- builder api ---- */
   const inBuilder = new Set(builder.songs.map((s) => s.id));
@@ -219,7 +189,7 @@ function TandasView({ layout }) {
     const a = b.songs.slice(); const [mv] = a.splice(from, 1); a.splice(to, 0, mv); return { ...b, songs: a };
   });
   const removeAt = (idx) => setBuilder((b) => ({ ...b, songs: b.songs.filter((_, i) => i !== idx) }));
-  const clear = () => setBuilder({ songs: [], name: "", editingId: null });
+  const clear = () => setBuilder({ songs: [], name: "", tags: [], editingId: null });
   const save = () => {
     if (!builder.songs.length) return;
     const editing = !!builder.editingId;
@@ -227,16 +197,20 @@ function TandasView({ layout }) {
       id: builder.editingId,
       name: builder.name.trim() || null,
       songIds: builder.songs.map((s) => s.id),
+      tags: builder.tags,
     });
     flash(editing ? "Tanda updated" : "Tanda saved to your collection");
     clear();
-    setMode("manage");
+    goManage();
   };
   const api = { songs: builder.songs, length: builder.songs.length, editing: !!builder.editingId,
-    setName: (v) => setBuilder((b) => ({ ...b, name: v })), addSong, insertSong, moveSong, removeAt, clear, save };
+    tags: builder.tags,
+    setName: (v) => setBuilder((b) => ({ ...b, name: v })),
+    setTags: (v) => setBuilder((b) => ({ ...b, tags: v })),
+    addSong, insertSong, moveSong, removeAt, clear, save };
 
-  const editTanda = (t) => { setBuilder({ songs: t.songs.slice(), name: t.name || "", editingId: t.id }); setMode("build"); };
-  const newTanda = () => { clear(); setMode("build"); };
+  const editTanda = (t) => { setBuilder({ songs: t.songs.slice(), name: t.name || "", tags: (t.tags || []).slice(), editingId: t.id }); goBuild(); };
+  const newTanda = () => { clear(); goBuild(); };
   const deleteTanda = (t) => {
     const snapshot = tandas.slice();
     Store.deleteTanda(t.id);
@@ -266,61 +240,54 @@ function TandasView({ layout }) {
 
   if (!imported) return <div className="tv"><ImportScreen /></div>;
 
-  const Builder = layout === "tray" ? BuilderTray : BuilderBench;
-  const node = sel || tree[0];
+  const commitWidth = (w) => { if (onBuilderWidthChange) onBuilderWidthChange(w); };
 
-  return (
-    <div className="tv">
-      <div className="tv-head">
-        <div>
-          <div className="tv-title">Tandas</div>
-          <div className="tv-sub">
-            <b>{totalSongs}</b> songs across <b>{totalFolders}</b> folders
-            {roots && roots.length > 1 && <> in <b>{roots.length}</b> libraries</>}
-          </div>
+  // The view header sits over the library column only, so the builder dock can
+  // run the full height of the workspace (its left hairline reads as one clean
+  // seam instead of starting partway down beneath a full-width header).
+  const header = (
+    <div className="tv-head">
+      <div>
+        <div className="tv-title">{mode === "build" ? "Tanda builder" : "My tandas"}</div>
+        <div className="tv-sub">
+          {mode === "build" ? (
+            <><b>{totalSongs}</b> songs across <b>{totalFolders}</b> folders
+              {roots && roots.length > 1 && <> in <b>{roots.length}</b> libraries</>}</>
+          ) : (
+            <><b>{tandas.length}</b> {tandas.length === 1 ? "tanda" : "tandas"} in your collection</>
+          )}
         </div>
-        <div className="tv-head-r">
-          <div className="tv-seg">
-            <button className={mode === "build" ? "on" : ""} onClick={() => setMode("build")}>
-              <I.scissor s={15} /> Build
-            </button>
-            <button className={mode === "manage" ? "on" : ""} onClick={() => setMode("manage")}>
-              My tandas <span className="pill">{tandas.length}</span>
-            </button>
-          </div>
+      </div>
+      <div className="tv-head-r">
+        {mode === "build" && (
           <button className="tv-reimport" onClick={addFolder} title="Import another folder into your library">
             <I.upload s={15} /> Add folder
           </button>
-        </div>
+        )}
       </div>
+    </div>
+  );
 
+  return (
+    <div className="tv">
       {mode === "build" ? (
-        layout === "tray" ? (
-          <div className="tv-body tray">
-            <div className="tv-body" style={{ flex: 1, minHeight: 0 }}>
-              <FolderTree sel={node} onSelect={setSel} />
-              <SongList node={node} builderIds={inBuilder} onAdd={addSong} makeDrag={makeDrag} draggingId={draggingId} preview={preview} onSelect={setSel} />
-            </div>
-            <Builder builder={builder} api={api} />
+        <div className="tv-body">
+          <div className="tv-main">
+            {header}
+            <LibraryTree builderIds={inBuilder} onAdd={addSong} makeDrag={makeDrag} draggingId={draggingId} preview={preview} />
           </div>
-        ) : (
-          <div className="tv-body">
-            <FolderTree sel={node} onSelect={setSel} />
-            <SongList node={node} builderIds={inBuilder} onAdd={addSong} makeDrag={makeDrag} draggingId={draggingId} preview={preview} onSelect={setSel} />
-            <Builder builder={builder} api={api} />
-          </div>
-        )
+          <BuilderResizer width={dockW} min={BUILDER_MIN_W} max={BUILDER_MAX_W}
+            onResize={setDockW} onCommit={commitWidth} />
+          <BuilderBench builder={builder} api={api} width={dockW} preview={preview} />
+        </div>
       ) : (
-        <ManageGrid tandas={tandas} onEdit={editTanda} onDelete={deleteTanda} onNew={newTanda} />
+        <>
+          {header}
+          <ManageGrid tandas={tandas} onEdit={editTanda} onDelete={deleteTanda} onNew={newTanda} preview={preview} />
+        </>
       )}
 
-      {toast && (
-        <div className="tv-toast">
-          <span className="ic"><I.check s={16} /></span>
-          {toast.msg}
-          {toast.action && <button onClick={() => { toast.action(); setToast(null); }}>Undo</button>}
-        </div>
-      )}
+      <Toast toast={toast} onDismiss={dismiss} />
     </div>
   );
 }

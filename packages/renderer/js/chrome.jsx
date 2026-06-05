@@ -1,8 +1,8 @@
 // chrome.jsx — shared app chrome (top bar)
 
-function TopBar({ active = "Live", onNav, setTime = "1:42", clock = "23:11", level = 0.72, accent }) {
-  const navs = ["Library", "Tandas", "Playlists", "Live", "Edit"];
-  const routable = { Tandas: true, Playlists: true, Live: true };
+function TopBar({ active = "Live", onNav, setTime = "1:42", clock = "23:11" }) {
+  const navs = ["Library", "Builder", "Tandas", "Playlists", "Live", "Settings"];
+  const routable = { Library: true, Builder: true, Tandas: true, Playlists: true, Live: true, Settings: true };
   return (
     <div className="tp-topbar">
       <div className="tp-brand">
@@ -28,11 +28,6 @@ function TopBar({ active = "Live", onNav, setTime = "1:42", clock = "23:11", lev
 
       <div className="tp-clock" title="time of night · set elapsed">
         <b>{clock}</b><span style={{ opacity: .5 }}>·</span> set {setTime}
-      </div>
-
-      <div className="tp-output" title="master output">
-        <I.vol s={16} />
-        <Meter level={level} />
       </div>
     </div>
   );

@@ -1,8 +1,9 @@
-// playlists-view.jsx — the Playlists workspace: build a set from saved tandas &
-// cortinas, manage saved playlists, and hand one off to the live player.
-const { useState: usePL, useMemo: useMemoPL } = React;
+// playlists-view.jsx — the Playlists workspace. The landing is a grid of saved
+// sets; opening one drops you into a live-style editor (a rich queue you can
+// reorder, trim, add to, and audition) that auto-saves as you work.
+const { useState, useMemo, useRef, useEffect, useCallback } = React;
 
-/* ---------- local key generator for builder rows ---------- */
+/* ---------- local key generator for editor rows ---------- */
 let _plKid = 1;
 const plKid = () => "pl" + (_plKid++);
 
@@ -18,6 +19,7 @@ function playlistMeta(items) {
   return {
     tandas: list.filter((i) => i.type === "tanda").length,
     cortinas: list.filter((i) => i.type === "cortina").length,
+    songs: list.reduce((a, it) => a + itemSongsPL(it).length, 0),
     total: fmtDur(list.reduce((a, it) => a + itemDurSecPL(it), 0)),
   };
 }
@@ -25,10 +27,10 @@ function itemTitle(it) {
   return it.type === "cortina" ? it.data.title : (it.data.name || tandaMeta(it.data).orq);
 }
 
-/* ---------- internal drag-to-reorder for the playlist dock ---------- */
+/* ---------- internal drag-to-reorder for the editor queue (index based) ---------- */
 function usePLReorder(onReorder) {
-  const [drag, setDrag] = usePL(null);
-  const [over, setOver] = usePL(null);
+  const [drag, setDrag] = useState(null);
+  const [over, setOver] = useState(null);
   return (i) => ({
     dragging: drag === i,
     over: over === i && drag !== null && drag !== i,
@@ -43,26 +45,6 @@ function usePLReorder(onReorder) {
 }
 
 /* ============================ ADD LIBRARY (left) ============================ */
-function PlAddTandaCard({ t, onAdd }) {
-  const m = tandaMeta(t);
-  return (
-    <div className="tp-libcard">
-      <div className="tp-libcard-main">
-        <div className="tp-libcard-top">
-          <span className="tp-libcard-orq">{t.name || m.orq}</span>
-          <GenreTagX genre={m.genre} />
-          {m.decade && <span className="tp-tag is-plain" style={{ height: 19, fontSize: 10, padding: "0 7px" }}>{m.decade}</span>}
-        </div>
-        <div className="tp-libcard-meta">
-          {m.singer}<span className="tp-dotsep">·</span>{t.songs.length} songs<span className="tp-dotsep">·</span>
-          <span className="tp-mono">{m.total}</span>
-        </div>
-      </div>
-      <button className="tp-addbtn" onClick={onAdd} title="Add to playlist"><I.plus s={16} /></button>
-    </div>
-  );
-}
-
 function PlAddCortinaRow({ c, onAdd }) {
   return (
     <div className="tp-cortrow">
@@ -76,17 +58,17 @@ function PlAddCortinaRow({ c, onAdd }) {
   );
 }
 
-function PlLibrary({ tandas, cortinas, onAdd }) {
-  const [tab, setTab] = usePL("tandas");
-  const [q, setQ] = usePL("");
+function PlLibrary({ tandas, cortinas, onAdd, preview }) {
+  const [tab, setTab] = useState("tandas");
+  const [q, setQ] = useState("");
 
-  const ft = useMemoPL(() => tandas.filter((t) => {
+  const ft = useMemo(() => tandas.filter((t) => {
     const m = tandaMeta(t);
     const hay = ((t.name || "") + " " + m.orq + " " + m.singer + " " + t.songs.map((s) => s.title).join(" ")).toLowerCase();
     return q.trim() === "" || hay.includes(q.toLowerCase());
   }), [tandas, q]);
 
-  const fc = useMemoPL(() => cortinas.filter((c) =>
+  const fc = useMemo(() => cortinas.filter((c) =>
     q.trim() === "" || ((c.title || "") + " " + (c.orq || "") + " " + (c.folder || "")).toLowerCase().includes(q.toLowerCase())
   ), [cortinas, q]);
 
@@ -113,7 +95,8 @@ function PlLibrary({ tandas, cortinas, onAdd }) {
 
       <div className="tp-lib-scroll">
         {tab === "tandas"
-          ? ft.map((t) => <PlAddTandaCard key={t.id} t={t} onAdd={() => onAdd("tanda", t)} />)
+          ? ft.map((t) => <TandaLibCard key={t.id} t={t} preview={preview}
+              onAdd={() => onAdd("tanda", t)} addTitle="Add to playlist" />)
           : fc.map((c) => <PlAddCortinaRow key={c.id} c={c} onAdd={() => onAdd("cortina", c)} />)}
         {tab === "tandas" && ft.length === 0 && (
           <div className="tp-empty">{tandas.length ? "No tandas match." : "No tandas yet — build some in the Tandas view."}</div>
@@ -126,72 +109,142 @@ function PlLibrary({ tandas, cortinas, onAdd }) {
   );
 }
 
-/* ============================ BUILDER DOCK (right) ============================ */
-function PlBuilder({ builder, api }) {
-  const items = builder.items;
+/* ============================ EDITOR QUEUE (right) ============================
+ * The same visual language as the live queue: tandas read as full cards with
+ * their song list, cortinas as the calm dark band. Rows are draggable to
+ * reorder, every song auditions on click, and the × trims an item. */
+function PlEditorSong({ n, title, dur, playing, onPlay, preview }) {
+  return (
+    <div className={"tp-songrow is-clickable" + (playing ? " is-now" : "")}
+      onClick={(e) => { e.stopPropagation(); onPlay(); }} title={previewTitle(preview, playing, "Audition this song")}>
+      <span className="n"><PreviewGlyph preview={preview} playing={playing} n={n} s={12} /></span>
+      <span className="tt"><div className="tp-song-title">{title}</div></span>
+      <span className="tp-song-dur">{dur}</span>
+    </div>
+  );
+}
+
+function PlEditorTanda({ it, ix, slot, onRemove, preview }) {
+  const t = it.data;
+  const m = tandaMeta(t);
+  return (
+    <div className={"tp-tandacard pl-tandacard tp-qdrag" + (slot.dragging ? " is-dragging" : "") + (slot.over ? " is-over" : "")}
+      {...slot.handlers}>
+      <div className="tp-tanda-head">
+        <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
+        <span className="ix">{String(ix).padStart(2, "0")}</span>
+        <span className="tp-now-orq" style={{ flex: 1 }}>{t.name || m.orq}</span>
+        <GenreTag genre={m.genre} small />
+        {m.decade && <span className="tp-tag is-plain sm">{m.decade}</span>}
+        <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove from playlist"><I.x s={14} /></button>
+      </div>
+      {t.songs.map((s, i) => {
+        const playing = preview && preview.previewId === s.id && preview.playing;
+        return <PlEditorSong key={s.id + ":" + i} n={i + 1} title={s.title} dur={s.dur || "—"}
+          playing={playing} onPlay={() => preview && preview.toggle(s)} preview={preview} />;
+      })}
+    </div>
+  );
+}
+
+function PlEditorCortina({ it, slot, onRemove, preview }) {
+  const c = it.data;
+  const playing = preview && preview.previewId === c.id && preview.playing;
+  return (
+    <div className={"tp-cortina tp-qrow tp-qdrag" + (slot.dragging ? " is-dragging" : "") + (slot.over ? " is-over" : "") + (playing ? " is-now" : "")}
+      {...slot.handlers}
+      onClick={() => preview && preview.toggle(c)} title={previewTitle(preview, playing, "Audition this cortina")}>
+      <div className="curtain"></div>
+      <span className="tp-grip dark" title="Drag to reorder"><I.grip s={15} /></span>
+      <span className="tp-cort-glyph">{playing ? <EQ /> : (preview && preview.viaMonitor ? <I.headphones s={17} /> : <I.curtain s={17} />)}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="tp-cortina-label">{playing ? "Cortina · playing" : "Cortina"}</div>
+        <div className="tp-cortina-sub">“{c.title}” · {c.orq || "Cortina"}</div>
+      </div>
+      <div className="tp-fade"><I.clock s={13} /> {c.dur}</div>
+      <button className="tp-qx dark" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove from playlist"><I.x s={14} /></button>
+    </div>
+  );
+}
+
+// Two tandas back-to-back with no cortina between them — same gentle nudge the
+// live queue gives, so a DJ notices the floor won't clear.
+function PlMissingCortinaHint() {
+  return (
+    <div className="tp-nocort" title="No cortina between these tandas">
+      <span className="tp-nocort-line" />
+      <span className="tp-nocort-tag"><I.curtain s={13} /> No cortina</span>
+      <span className="tp-nocort-line" />
+    </div>
+  );
+}
+
+function PlEditorDock({ open, status, api, preview, onBack, onPlayAll, onDelete }) {
+  const items = open.items;
   const slot = usePLReorder(api.reorder);
   const meta = playlistMeta(items);
 
+  let tIx = 0;
   return (
-    <div className="tv-dock">
-      <div className="tv-dock-head">
-        <div className="tp-eyebrow">{api.editing ? "Editing playlist" : "New playlist"}</div>
-        <div className="tv-dock-title-row">
-          <input className="tv-dock-name" value={builder.name} onChange={(e) => api.setName(e.target.value)}
-            placeholder="Name this playlist…" />
-          {api.editing && <span className="tv-edit-tag">Editing</span>}
+    <div className="tp-queue pl-dock">
+      <div className="pl-dhead">
+        <div className="pl-dhead-top">
+          <button className="pl-back" onClick={onBack} title="Back to playlists">
+            <I.chev s={15} /> <span>Playlists</span>
+          </button>
+          <span className={"pl-saved is-" + status}>
+            {status === "saving" ? "Saving…" : status === "saved" ? <><I.check s={13} /> Saved</> : "Not saved yet"}
+          </span>
         </div>
+        <input className="pl-name-input" value={open.name} placeholder="Name this playlist…"
+          onChange={(e) => api.setName(e.target.value)} onBlur={api.flushName} />
         <div className="tv-dock-meta">
           <b>{meta.tandas}</b> {meta.tandas === 1 ? "tanda" : "tandas"}
           {meta.cortinas > 0 && <><span>·</span> <b>{meta.cortinas}</b> {meta.cortinas === 1 ? "cortina" : "cortinas"}</>}
-          {items.length > 0 && <><span>·</span> <b>{meta.total}</b></>}
+          {items.length > 0 && <><span>·</span> <b className="tp-mono">{meta.total}</b></>}
+        </div>
+        <div className="pl-actions">
+          <button className="pl-playall" onClick={onPlayAll} disabled={!items.length} title="Load this set into the live player">
+            <I.play s={15} /> Play all
+          </button>
+          <button className="pl-del" onClick={onDelete} title="Delete playlist"><I.trash s={15} /></button>
         </div>
       </div>
 
-      <div className="tv-dock-scroll">
+      <div className="tp-q-scroll">
         {items.length === 0 && (
-          <div className="tv-slot-empty"><span>Add tandas &amp; cortinas from the left to build your set</span></div>
+          <div className="pl-dock-empty">
+            <div className="ic"><I.note s={24} /></div>
+            <h3>Empty playlist</h3>
+            <p>Add tandas &amp; cortinas from the left to build your set. Drag rows to reorder, click any song to audition.</p>
+          </div>
         )}
         {items.map((it, i) => {
+          if (it.type === "tanda") tIx += 1;
           const sp = slot(i);
-          const isCort = it.type === "cortina";
-          const sub = isCort
-            ? (it.data.orq || "Cortina") + " · " + it.data.dur
-            : it.data.songs.length + " songs · " + tandaTotal(it.data.songs);
-          return (
-            <div key={it.key}
-              className={"tv-slot filled" + (sp.dragging ? " dragging" : "") + (sp.over ? " over" : "") + (isCort ? " pl-cortina-slot" : "")}
-              {...sp.handlers}>
-              <span className="num">{i + 1}</span>
-              <span className="gr">{isCort ? <I.curtain s={14} /> : <I.drag s={14} />}</span>
-              <div className="tt">
-                <div className="t">{itemTitle(it)}</div>
-                <div className="s">{sub}</div>
-              </div>
-              <button className="rm" onClick={() => api.removeAt(i)} title="Remove"><I.x s={14} /></button>
-            </div>
-          );
+          const prev = items[i - 1];
+          const gap = it.type === "tanda" && prev && prev.type === "tanda";
+          const row = it.type === "tanda"
+            ? <PlEditorTanda key={it.key} it={it} ix={tIx} slot={sp} onRemove={() => api.removeAt(i)} preview={preview} />
+            : <PlEditorCortina key={it.key} it={it} slot={sp} onRemove={() => api.removeAt(i)} preview={preview} />;
+          return gap
+            ? <React.Fragment key={it.key}><PlMissingCortinaHint />{row}</React.Fragment>
+            : row;
         })}
-      </div>
-
-      <div className="tv-dock-foot">
-        <button className="tv-save" disabled={!items.length} onClick={api.save}>
-          <I.check s={17} /> {api.editing ? "Update playlist" : "Save playlist"}
-        </button>
-        <button className="tv-clear" disabled={!items.length && !api.editing} onClick={api.clear}>
-          {api.editing ? "Cancel edit" : "Clear"}
-        </button>
+        {items.length > 0 && (
+          <div className="tp-q-end">End of playlist — add more from the left</div>
+        )}
       </div>
     </div>
   );
 }
 
-/* ============================ MANAGE GRID ============================ */
-function PlaylistCard({ pl, onEdit, onDelete, onPlay }) {
+/* ============================ MANAGE GRID (landing) ============================ */
+function PlaylistCard({ pl, onOpen, onDelete, onPlay }) {
   const meta = playlistMeta(pl.items);
   const preview = pl.items.slice(0, 6);
   return (
-    <div className="tv-tcard">
+    <div className="tv-tcard pl-card" onClick={() => onOpen(pl)} title="Open playlist">
       <div className="tv-tcard-top">
         <div className="tv-tcard-orq">
           <div className="o">{pl.name || "Untitled playlist"}</div>
@@ -200,6 +253,7 @@ function PlaylistCard({ pl, onEdit, onDelete, onPlay }) {
             {meta.cortinas > 0 ? ` · ${meta.cortinas} ${meta.cortinas === 1 ? "cortina" : "cortinas"}` : ""}
           </div>
         </div>
+        <span className="pl-card-open"><I.chev s={16} /></span>
       </div>
       <div className="tv-tcard-songs">
         {preview.map((it, i) => (
@@ -218,15 +272,15 @@ function PlaylistCard({ pl, onEdit, onDelete, onPlay }) {
       </div>
       <div className="tv-tcard-foot">
         <div className="tv-tcard-total"><b>{meta.total}</b></div>
-        <button className="tv-tcbtn pl-play" onClick={() => onPlay(pl)} disabled={!pl.items.length}><I.play s={13} /> Play</button>
-        <button className="tv-tcbtn" onClick={() => onEdit(pl)}><I.pencil s={14} /> Edit</button>
-        <button className="tv-tcbtn del" onClick={() => onDelete(pl)} title="Delete playlist"><I.trash s={15} /></button>
+        <button className="tv-tcbtn pl-play" onClick={(e) => { e.stopPropagation(); onPlay(pl); }} disabled={!pl.items.length}><I.play s={13} /> Play</button>
+        <button className="tv-tcbtn" onClick={(e) => { e.stopPropagation(); onOpen(pl); }}><I.pencil s={14} /> Open</button>
+        <button className="tv-tcbtn del" onClick={(e) => { e.stopPropagation(); onDelete(pl); }} title="Delete playlist"><I.trash s={15} /></button>
       </div>
     </div>
   );
 }
 
-function PlManageGrid({ playlists, onEdit, onDelete, onPlay, onNew }) {
+function PlManageGrid({ playlists, onOpen, onDelete, onPlay, onNew }) {
   if (!playlists.length) {
     return (
       <div className="tv-manage">
@@ -245,7 +299,7 @@ function PlManageGrid({ playlists, onEdit, onDelete, onPlay, onNew }) {
     <div className="tv-manage">
       <div className="tv-grid">
         {playlists.map((pl) => (
-          <PlaylistCard key={pl.id} pl={pl} onEdit={onEdit} onDelete={onDelete} onPlay={onPlay} />
+          <PlaylistCard key={pl.id} pl={pl} onOpen={onOpen} onDelete={onDelete} onPlay={onPlay} />
         ))}
         <button className="tv-newcard" onClick={onNew}>
           <span className="ic"><I.plus s={22} /></span>
@@ -259,79 +313,93 @@ function PlManageGrid({ playlists, onEdit, onDelete, onPlay, onNew }) {
 /* ============================ PLAYLISTS VIEW (orchestrator) ============================ */
 function PlaylistsView({ onPlay }) {
   const { tandas, songs, playlists, imported } = useStore();
-  const cortinas = useMemoPL(() => songs.filter((s) => s.genre === "cortina"), [songs]);
-  const [mode, setMode] = usePL("manage");
-  const [builder, setBuilder] = usePL({ items: [], name: "", editingId: null });
-  const [toast, setToast] = usePL(null);
-  const toastTimer = React.useRef(null);
+  const cortinas = useMemo(() => songs.filter((s) => s.genre === "cortina"), [songs]);
+  const preview = usePlayer().preview;
+  const { toast, flash, dismiss } = useToast();
 
-  const flash = (msg, action) => {
-    setToast({ msg, action });
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), action ? 5000 : 2400);
-  };
+  // `open` is the working copy of the playlist being edited (null = landing
+  // grid). Edits mutate it locally and persist to the DB in the background.
+  const [open, setOpen] = useState(null);
+  const [status, setStatus] = useState("idle");   // idle · saving · saved
+  const idRef = useRef(null);                       // db id of the open playlist
+  const saveChain = useRef(Promise.resolve());      // serialises writes so a new
+  const nameTimer = useRef(null);                   // playlist is created once
 
-  /* ---- builder api ---- */
-  const addItem = (type, data) => setBuilder((b) => ({ ...b, items: [...b.items, { key: plKid(), type, data }] }));
-  const removeAt = (i) => setBuilder((b) => ({ ...b, items: b.items.filter((_, j) => j !== i) }));
-  const reorder = (from, to) => setBuilder((b) => {
-    if (from === to || from < 0 || to < 0) return b;
-    const a = b.items.slice(); const [mv] = a.splice(from, 1); a.splice(to, 0, mv); return { ...b, items: a };
-  });
-  const clear = () => setBuilder({ items: [], name: "", editingId: null });
-  const save = () => {
-    if (!builder.items.length) return;
-    const editing = !!builder.editingId;
-    Store.savePlaylist({
-      id: builder.editingId,
-      name: builder.name.trim() || null,
-      items: builder.items.map((it) => ({ type: it.type, refId: it.data.id })),
-    });
-    flash(editing ? "Playlist updated" : "Playlist saved");
-    clear();
-    setMode("manage");
-  };
+  useEffect(() => () => clearTimeout(nameTimer.current), []);
+
+  // Persist the current name + items. Serialised through saveChain so rapid
+  // edits to a brand-new playlist can't race into duplicate rows. Skips writing
+  // an empty, never-saved set so the grid never fills with ghost playlists.
+  const persist = useCallback((name, items) => {
+    if (idRef.current == null && items.length === 0) return;
+    setStatus("saving");
+    saveChain.current = saveChain.current
+      .then(() => Store.savePlaylist({
+        id: idRef.current,
+        name: (name || "").trim() || null,
+        items: items.map((it) => ({ type: it.type, refId: it.data.id })),
+      }))
+      .then((saved) => { if (saved) idRef.current = saved.id; setStatus("saved"); })
+      .catch(() => setStatus("idle"));
+  }, []);
+
+  const update = (items) => { setOpen((o) => ({ ...o, items })); persist(open.name, items); };
+
   const api = {
-    items: builder.items, editing: !!builder.editingId,
-    setName: (v) => setBuilder((b) => ({ ...b, name: v })),
-    addItem, removeAt, reorder, clear, save,
+    setName: (v) => {
+      setOpen((o) => ({ ...o, name: v }));
+      clearTimeout(nameTimer.current);
+      const items = open.items;
+      nameTimer.current = setTimeout(() => persist(v, items), 600);
+    },
+    flushName: () => { clearTimeout(nameTimer.current); persist(open.name, open.items); },
+    addItem: (type, data) => update([...open.items, { key: plKid(), type, data }]),
+    removeAt: (i) => update(open.items.filter((_, j) => j !== i)),
+    reorder: (from, to) => {
+      if (from === to || from < 0 || to < 0) return;
+      const a = open.items.slice(); const [mv] = a.splice(from, 1); a.splice(to, 0, mv);
+      update(a);
+    },
   };
 
-  const editPlaylist = (pl) => {
-    setBuilder({
-      items: pl.items.map((it) => ({ key: plKid(), type: it.type, data: it.data })),
-      name: pl.name || "", editingId: pl.id,
-    });
-    setMode("build");
+  const openPlaylist = (pl) => {
+    clearTimeout(nameTimer.current);
+    saveChain.current = Promise.resolve();
+    idRef.current = pl.id;
+    setStatus("saved");
+    setOpen({ id: pl.id, name: pl.name || "", items: pl.items.map((it) => ({ key: plKid(), type: it.type, data: it.data })) });
   };
-  const newPlaylist = () => { clear(); setMode("build"); };
+  const newPlaylist = () => {
+    clearTimeout(nameTimer.current);
+    saveChain.current = Promise.resolve();
+    idRef.current = null;
+    setStatus("idle");
+    setOpen({ id: null, name: "", items: [] });
+  };
+  const back = () => { clearTimeout(nameTimer.current); setOpen(null); };
+
+  const deleteOpen = () => {
+    const id = idRef.current;
+    setOpen(null);
+    if (id != null) {
+      const snapshot = playlists.slice();
+      Store.deletePlaylist(id);
+      flash("Playlist deleted", () => Store.setPlaylistsLocal(snapshot));
+    }
+  };
   const deletePlaylist = (pl) => {
     const snapshot = playlists.slice();
     Store.deletePlaylist(pl.id);
     flash("Playlist deleted", () => Store.setPlaylistsLocal(snapshot));
   };
 
-  return (
-    <div className="tv">
-      <div className="tv-head">
-        <div>
-          <div className="tv-title">Playlists</div>
-          <div className="tv-sub">Save sets of tandas &amp; cortinas, then replay them live</div>
-        </div>
-        <div className="tv-head-r">
-          <div className="tv-seg">
-            <button className={mode === "build" ? "on" : ""} onClick={() => setMode("build")}>
-              <I.plus s={15} /> Build
-            </button>
-            <button className={mode === "manage" ? "on" : ""} onClick={() => setMode("manage")}>
-              My playlists <span className="pill">{playlists.length}</span>
-            </button>
-          </div>
-        </div>
-      </div>
+  const playAll = () => { if (open && open.items.length) onPlay({ items: open.items }); };
 
-      {mode === "build" ? (
-        !imported ? (
+  /* ---------- detail editor ---------- */
+  if (open) {
+    if (!imported) {
+      return (
+        <div className="tv">
           <div className="tv-manage">
             <div className="tv-empty-manage">
               <div className="ic"><I.folderOpen s={26} /></div>
@@ -339,24 +407,38 @@ function PlaylistsView({ onPlay }) {
               <p>Head to the Tandas view to import music and build some tandas.</p>
             </div>
           </div>
-        ) : (
-          <div className="tv-body">
-            <PlLibrary tandas={tandas} cortinas={cortinas} onAdd={addItem} />
-            <PlBuilder builder={builder} api={api} />
-          </div>
-        )
-      ) : (
-        <PlManageGrid playlists={playlists} onEdit={editPlaylist} onDelete={deletePlaylist}
-          onPlay={onPlay} onNew={newPlaylist} />
-      )}
-
-      {toast && (
-        <div className="tv-toast">
-          <span className="ic"><I.check s={16} /></span>
-          {toast.msg}
-          {toast.action && <button onClick={() => { toast.action(); setToast(null); }}>Undo</button>}
         </div>
-      )}
+      );
+    }
+    return (
+      <div className="tv">
+        <div className="tv-body">
+          <PlLibrary tandas={tandas} cortinas={cortinas} onAdd={api.addItem} preview={preview} />
+          <PlEditorDock open={open} status={status} api={api} preview={preview}
+            onBack={back} onPlayAll={playAll} onDelete={deleteOpen} />
+        </div>
+        <Toast toast={toast} onDismiss={dismiss} />
+      </div>
+    );
+  }
+
+  /* ---------- landing grid ---------- */
+  return (
+    <div className="tv">
+      <div className="tv-head">
+        <div>
+          <div className="tv-title">Playlists</div>
+          <div className="tv-sub">Open a set to reorder, trim &amp; audition it — or send it straight to the floor</div>
+        </div>
+        <div className="tv-head-r">
+          <button className="tv-reimport" onClick={newPlaylist}><I.plus s={15} /> New playlist</button>
+        </div>
+      </div>
+
+      <PlManageGrid playlists={playlists} onOpen={openPlaylist} onDelete={deletePlaylist}
+        onPlay={onPlay} onNew={newPlaylist} />
+
+      <Toast toast={toast} onDismiss={dismiss} />
     </div>
   );
 }
