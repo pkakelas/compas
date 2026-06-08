@@ -36,8 +36,6 @@ function collectSongIds(node) {
 
 /* ---------- reactive store ---------- */
 let _state = {
-  loaded: false,
-  importing: false,
   tree: [],
   songs: [],
   byId: {},
@@ -49,7 +47,7 @@ let _state = {
   imported: false,
   // Background loudness/silence analysis progress (drives the "still processing"
   // banner). running=false hides it.
-  analysis: { running: false, paused: false, total: 0, completed: 0, failed: 0 },
+  analysis: { running: false, total: 0, completed: 0, failed: 0 },
 };
 const _subs = new Set();
 function _set(patch) {
@@ -59,7 +57,6 @@ function _set(patch) {
 function _applyLibrary(lib) {
   const songs = (lib && lib.songs) || [];
   _set({
-    loaded: true,
     tree: (lib && lib.tree) || [],
     songs,
     byId: Object.fromEntries(songs.map((s) => [s.id, s])),
@@ -146,22 +143,63 @@ const Store = {
     }
     return res ? res.song : null;
   },
-  // Opens the folder picker + scans. Returns the library, or null if cancelled.
-  async importLibrary() {
-    _set({ importing: true });
-    try {
-      const lib = await window.compas.importLibrary();
-      if (lib) {
-        _applyLibrary(lib);
-        const [tandas, playlists] = await Promise.all([
-          window.compas.listTandas(),
-          window.compas.listPlaylists(),
-        ]);
-        _set({ tandas: tandas || [], playlists: playlists || [] });
-      }
-      return lib;
-    } finally {
-      _set({ importing: false });
+  // Smart Organize: ask the main process for proposed metadata changes across
+  // the whole library (pure preview — nothing is written yet). Returns
+  // { proposals, summary }.
+  async previewSmartOrganize() {
+    if (!window.compas.previewSmartOrganize) {
+      return { proposals: [], summary: { total: 0, confirmed: 0, suggested: 0, review: 0 } };
+    }
+    return await window.compas.previewSmartOrganize();
+  },
+  // Apply the DJ-approved subset of Smart Organize changes (Compás-only). The
+  // main process returns the fresh library; re-apply it and refresh tandas/
+  // playlists since they embed copies of the songs.
+  async applySmartOrganize(changes) {
+    if (!window.compas.applySmartOrganize || !changes || !changes.length) return;
+    const library = await window.compas.applySmartOrganize(changes);
+    if (library) _applyLibrary(library);
+    const [tandas, playlists] = await Promise.all([
+      window.compas.listTandas(),
+      window.compas.listPlaylists(),
+    ]);
+    _set({ tandas: tandas || [], playlists: playlists || [] });
+  },
+  // Detailed import — step 1: pick a folder and scan it for preview (nothing is
+  // saved). Returns the folder tree, or null if cancelled.
+  async previewImport() {
+    if (!window.compas.importScanPreview) return null;
+    return await window.compas.importScanPreview();
+  },
+  // Detailed import — step 2: commit with a per-folder style map. Refreshes the
+  // library + tandas/playlists.
+  async commitImport(types) {
+    if (!window.compas.importCommit) return null;
+    const library = await window.compas.importCommit(types || {});
+    if (library) {
+      _applyLibrary(library);
+      const [tandas, playlists] = await Promise.all([
+        window.compas.listTandas(),
+        window.compas.listPlaylists(),
+      ]);
+      _set({ tandas: tandas || [], playlists: playlists || [] });
+    }
+    return library;
+  },
+  async cancelImport() {
+    if (window.compas.importCancel) { try { await window.compas.importCancel(); } catch (_e) { /* ignore */ } }
+  },
+  // Re-type existing songs: set styles for many songs at once (Compás-only).
+  async setSongGenres(updates) {
+    if (!window.compas.setSongGenres || !updates || !updates.length) return;
+    const library = await window.compas.setSongGenres(updates);
+    if (library) {
+      _applyLibrary(library);
+      const [tandas, playlists] = await Promise.all([
+        window.compas.listTandas(),
+        window.compas.listPlaylists(),
+      ]);
+      _set({ tandas: tandas || [], playlists: playlists || [] });
     }
   },
   async clearLibrary() {
@@ -263,6 +301,7 @@ Object.assign(window, {
   Store,
   useStore,
   countSongs,
+  collectSongIds,
   tandaTotal,
   fmtDur,
   secOf,

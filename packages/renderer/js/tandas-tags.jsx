@@ -1,7 +1,7 @@
 // tandas-tags.jsx — tagging for tandas: preset groups (type / age / orquesta),
 // free-form custom tags, an elegant combobox editor, display pills, and the
 // little helpers the manage view uses to search/filter by tag.
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useMemo } = React;
 
 /* ---------- preset vocabulary ----------
  * Each group has a category (used for colour + grouping) and a list of common
@@ -26,6 +26,119 @@ function catLabel(cat) { return CAT_LABELS[cat] || "Custom"; }
 
 /* Stable identity for a tag, used for de-dupe + filter selection. */
 function tagKey(t) { return (t.cat || "custom") + "|" + (t.label || "").toLowerCase(); }
+
+function tagsEqual(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  const keys = new Set(a.map(tagKey));
+  return b.every((t) => keys.has(tagKey(t)));
+}
+
+function normOrq(raw) {
+  return (raw || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\u2018\u2019`]/g, "'").toLowerCase()
+    .replace(/^orquesta\s+(?!tipica)/, "")
+    .replace(/\s*-?\s*topic\s*$/, "")
+    .trim();
+}
+
+function orqMatchesPreset(core, preset) {
+  const p = normOrq(preset);
+  if (!core || !p) return false;
+  if (core === p) return true;
+  if (core.endsWith(" " + p)) return true;
+  if (p.includes(" ") && core.includes(p)) return true;
+  const toks = core.split(/\s+/);
+  return toks[toks.length - 1] === p;
+}
+
+function matchOrquestaTag(raw) {
+  const core = normOrq(raw);
+  if (!core) return null;
+  const group = TAG_PRESETS.find((g) => g.cat === "orquesta");
+  if (!group) return null;
+  for (const label of group.options) {
+    if (orqMatchesPreset(core, label)) return { cat: "orquesta", label };
+  }
+  return null;
+}
+
+function yearToAgeTag(year) {
+  if (!year || year < 1920) return null;
+  const decade = Math.floor(year / 10) * 10;
+  if (decade > 1960) return null;
+  const label = String(decade).slice(-2) + "s";
+  const age = TAG_PRESETS.find((g) => g.cat === "age");
+  return age && age.options.includes(label) ? { cat: "age", label } : null;
+}
+
+/** Infer type / age / orquesta tags from a tanda's songs. */
+function suggestTandaTags(songs) {
+  const list = songs || [];
+  if (!list.length) return [];
+
+  const tags = [];
+  const add = (t) => {
+    if (!t || tags.some((x) => x.cat === t.cat && x.label === t.label)) return;
+    tags.push(t);
+  };
+
+  // Only the four core styles map to a "type" tag (Tango / Vals / Milonga / Cortina).
+  const genres = [...new Set(list.map((s) => s.genre).filter(Boolean))];
+  if (genres.length === 1 && isCoreStyle(genres[0])) {
+    add({ cat: "type", label: genreLabel(genres[0]) });
+  }
+
+  const orqs = [...new Set(list.map((s) => s.orq).filter(Boolean))];
+  if (orqs.length === 1) add(matchOrquestaTag(orqs[0]));
+
+  const years = list.map((s) => s.year).filter(Boolean);
+  if (years.length) {
+    const decades = [...new Set(years.map((y) => Math.floor(y / 10) * 10))];
+    if (decades.length === 1) add(yearToAgeTag(years[0]));
+    else add(yearToAgeTag(Math.min(...years)));
+  }
+
+  return tags;
+}
+
+/* Auto-fills tags when empty (or when still matching the last auto-set), and
+ * offers a one-click apply when the DJ has edited them away from the suggestion. */
+function TandaTagSuggest({ songs, tags, onApply, autoFill = true }) {
+  const suggestion = useMemo(() => suggestTandaTags(songs), [songs]);
+  const applyRef = useRef(onApply);
+  applyRef.current = onApply;
+  const lastAutoRef = useRef(null);
+
+  useEffect(() => {
+    if (!autoFill || !suggestion.length) return;
+    if (tagsEqual(tags, suggestion)) { lastAutoRef.current = suggestion; return; }
+    const empty = !tags.length;
+    const unchanged = lastAutoRef.current && tagsEqual(tags, lastAutoRef.current);
+    if (empty || unchanged) {
+      applyRef.current(suggestion);
+      lastAutoRef.current = suggestion;
+    }
+  }, [autoFill, suggestion, tags]);
+
+  useEffect(() => {
+    if (!tags.length) { lastAutoRef.current = null; return; }
+    if (lastAutoRef.current && !tagsEqual(tags, lastAutoRef.current)) lastAutoRef.current = null;
+  }, [tags]);
+
+  if (!suggestion.length || tagsEqual(tags, suggestion)) return null;
+
+  return (
+    <div className="tv-name-suggest">
+      <span className="tv-name-suggest-lbl">Suggested tags</span>
+      <button type="button" className="tv-name-suggest-btn tv-tag-suggest-btn"
+        onClick={() => { onApply(suggestion); lastAutoRef.current = suggestion; }}
+        title="Use suggested tags">
+        <TagPills tags={suggestion} />
+      </button>
+    </div>
+  );
+}
 
 /* ============================ TAG FIELD (editor) ============================
  * A chips-in-a-box combobox: existing tags render as removable pills, the input
@@ -189,4 +302,4 @@ function TagPills({ tags, onClick, activeKeys, max }) {
   );
 }
 
-Object.assign(window, { TAG_PRESETS, tagKey, catLabel, TagField, TagPills });
+Object.assign(window, { TAG_PRESETS, tagKey, catLabel, TagField, TagPills, suggestTandaTags, TandaTagSuggest, tagsEqual });

@@ -5,7 +5,7 @@ const { useState, useRef, useMemo, useEffect, useCallback } = React;
 
 let _kid = 100;
 const kid = () => "q" + (_kid++);
-const mk = (type, data, extra = {}) => ({ key: kid(), type, data, ...extra });
+const mk = (type, data) => ({ key: kid(), type, data });
 
 const FADE_TO_TANDA_MS = 2500;
 
@@ -162,10 +162,7 @@ function LibraryPanel({ tandas, playlists, onAddTanda, onAddSong, onAddPlaylist,
   return (
     <div className="tp-lib">
       <div className="tp-lib-head">
-        <div>
-          <div className="tp-eyebrow">Add to tonight</div>
-          <div className="tp-lib-title">Choose what plays next</div>
-        </div>
+        <div className="tv-title">Add to queue</div>
         <div className="tp-tabs">
           <button className={"tp-tab" + (tab === "tandas" ? " is-on" : "")} onClick={() => setTab("tandas")}>Tandas</button>
           <button className={"tp-tab" + (tab === "library" ? " is-on" : "")} onClick={() => setTab("library")}>Songs</button>
@@ -244,7 +241,7 @@ function QueueTanda({ item, ix, now, nowIx, onPlay, onPlaySong, onRemove, drag }
         <span className="ix">{now ? "NOW" : String(ix).padStart(2, "0")}</span>
         <span className="tp-now-orq" style={{ flex: 1 }}>{t.name || m.orq}</span>
         <GenreTag genre={m.genre} small />
-        {m.decade && <span className="tp-tag is-plain sm">{m.decade}</span>}
+        {m.year && <span className="tp-tag is-plain sm" title={m.era}>{m.year}</span>}
         {!now && <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove"><I.x s={14} /></button>}
       </div>
       {t.songs.map((s, i) => (
@@ -293,13 +290,14 @@ function defaultPlaylistName() {
   return `Set · ${d.toLocaleString("en-US", { month: "short" })} ${d.getDate()}`;
 }
 
-function QueuePanel({ queue, nowKey, nowIx, now, pos, onPlay, onPlaySongAt, onRemove, onReorder, onInsertSong, onFadeToTanda, onSavePlaylist, cortinaSnippetEnabled, cortinaSnippetSec }) {
+function QueuePanel({ queue, nowKey, nowIx, now, pos, onPlay, onPlaySongAt, onRemove, onReorder, onInsertSong, onFadeToTanda, onSavePlaylist, onClearQueue, cortinaSnippetEnabled, cortinaSnippetSec }) {
   const dragKey = useRef(null);              // set while reordering an existing queue item
   const [overKey, setOverKey] = useState(null);
   const [overEnd, setOverEnd] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [savingNow, setSavingNow] = useState(false);
+  const [clearArmed, setClearArmed] = useState(false);
   const saveInputRef = useRef(null);
   const { toast, flash, dismiss } = useToast();
   const tandaCount = queue.filter(i => i.type === "tanda").length;
@@ -312,6 +310,16 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, onPlay, onPlaySongAt, onRe
   }, [saveOpen]);
   // Close the namer if the queue empties out from under it.
   useEffect(() => { if (!queue.length && saveOpen) closeSave(); }, [queue.length]); // eslint-disable-line
+  // Disarm the clear confirm whenever the queue empties (e.g. after clearing).
+  useEffect(() => { if (!queue.length && clearArmed) setClearArmed(false); }, [queue.length]); // eslint-disable-line
+
+  const handleClear = () => {
+    if (!queue.length) return;
+    if (!clearArmed) { setClearArmed(true); return; }
+    setClearArmed(false);
+    onClearQueue();
+    flash("Queue cleared");
+  };
 
   const commitSave = () => {
     if (savingNow || !queue.length) return;
@@ -380,8 +388,7 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, onPlay, onPlaySongAt, onRe
       )}
       <div className="tp-qhead">
         <div className="tp-qhead-l">
-          <div className="tp-eyebrow">Tonight</div>
-          <div className="tp-q-title">Up next</div>
+          <div className="tv-title">Queue</div>
         </div>
         <div className="tp-qhead-r">
           <div className="tp-q-stat">
@@ -389,10 +396,17 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, onPlay, onPlaySongAt, onRe
             <span className="tp-dotsep">·</span>
             <span className="tp-mono">set {setTotal}</span>
           </div>
-          <button className="tp-savepl" onClick={openSave} disabled={!queue.length || saveOpen}
-            title={queue.length ? "Save this set as a playlist" : "Add tandas to save a playlist"}>
-            <I.plus s={14} /> Save as playlist
-          </button>
+          <div className="tp-qhead-btns">
+            <button className="tp-savepl" onClick={openSave} disabled={!queue.length || saveOpen}
+              title={queue.length ? "Save this set as a playlist" : "Add tandas to save a playlist"}>
+              <I.plus s={14} /> Save as playlist
+            </button>
+            <button className={"tp-clearq" + (clearArmed ? " is-armed" : "")} onClick={handleClear}
+              onBlur={() => setClearArmed(false)} disabled={!queue.length}
+              title={queue.length ? "Clear the whole queue" : "Queue is already empty"}>
+              <I.trash s={14} /> {clearArmed ? "Confirm clear" : "Clear queue"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -678,12 +692,7 @@ function usePlayerEngine(mainDeviceId, playback) {
     const t = nextTandaAfter(s.queue, s.nowKey);
     if (!t) return;   // nothing to fade into — let it play out
     snippetFiredRef.current = true;
-    advancingRef.current = true;
-    h.fade(h.volume(), 0, FADE_TO_TANDA_MS);
-    setTimeout(() => {
-      advancingRef.current = false;
-      setPreview(null); setNowKey(t.key); setNowIx(0); setPlaying(true);
-    }, FADE_TO_TANDA_MS);
+    startFadeTo(t.key);
   }
 
   // Advance after a configurable beat of silence between songs. The gap is a
@@ -734,6 +743,23 @@ function usePlayerEngine(mainDeviceId, playback) {
     const next = idx >= 0 ? queue[idx + 1] : null;
     if (next) { setNowKey(next.key); setNowIx(0); }
     else { setPlaying(false); }
+  }
+
+  // Crossfade the current sound out, then jump to `targetKey` and start it. When
+  // nothing is audible (paused) it just hands over immediately. Shared by the
+  // manual "Fade to next tanda" button and the automatic cortina-snippet fade.
+  function startFadeTo(targetKey) {
+    const h = howlRef.current;
+    if (h && h.playing()) {
+      advancingRef.current = true;
+      h.fade(h.volume(), 0, FADE_TO_TANDA_MS);
+      setTimeout(() => {
+        advancingRef.current = false;
+        setPreview(null); setNowKey(targetKey); setNowIx(0); setPlaying(true);
+      }, FADE_TO_TANDA_MS);
+    } else {
+      setPreview(null); setNowKey(targetKey); setNowIx(0); setPlaying(true);
+    }
   }
 
   const flashError = (msg) => {
@@ -877,14 +903,25 @@ function usePlayerEngine(mainDeviceId, playback) {
     if (key === nowKey) { setNowKey(null); setNowIx(0); setPlaying(false); }
     return filtered;
   });
+  // Reorder so the dragged item lands *in front of* the drop target (see
+  // QueuePanel.handleDrop). Removing `from` first shifts later indices down by
+  // one, so a downward move targets `to - 1` to avoid landing past the target.
   const reorder = (fromKey, toKey) => setQueue((q) => {
     const from = q.findIndex((i) => i.key === fromKey), to = q.findIndex((i) => i.key === toKey);
     if (from < 0 || to < 0 || from === to) return q;
     const copy = q.slice();
     const [m] = copy.splice(from, 1);
-    copy.splice(to, 0, m);
+    copy.splice(from < to ? to - 1 : to, 0, m);
     return copy;
   });
+  // Wipe the whole live set and stop playback — the "start the night over" reset.
+  const clearQueue = () => {
+    setPreview(null);
+    setQueue([]);
+    setNowKey(null);
+    setNowIx(0);
+    setPlaying(false);
+  };
 
   const playItem = (key) => {
     if (preview) setPreview(null);
@@ -924,27 +961,17 @@ function usePlayerEngine(mainDeviceId, playback) {
 
   const fadeToTanda = () => {
     const t = nextTandaAfter(queue, nowKey);
-    if (!t) return;
-    const h = howlRef.current;
-    if (h && h.playing()) {
-      advancingRef.current = true;
-      h.fade(h.volume(), 0, FADE_TO_TANDA_MS);
-      setTimeout(() => { advancingRef.current = false; setPreview(null); setNowKey(t.key); setNowIx(0); setPlaying(true); }, FADE_TO_TANDA_MS);
-    } else {
-      setPreview(null); setNowKey(t.key); setNowIx(0); setPlaying(true);
-    }
+    if (t) startFadeTo(t.key);
   };
 
   // Re-arm the cortina snippet whenever the now-playing item changes, so the
   // auto-fade (driven from the playback tick above) fires once per cortina.
   useEffect(() => { snippetFiredRef.current = false; }, [nowKey]);
 
-  // Let the main process pause the background analysis pool while the floor is
-  // live, so ffmpeg never competes with playback for CPU.
-  useEffect(() => {
-    try { if (window.compas.setAnalysisPlaying) window.compas.setAnalysisPlaying(playing); }
-    catch (_e) { /* older main without the channel */ }
-  }, [playing]);
+  // The background analysis pass now runs continuously — we no longer pause it
+  // during playback (it was halting the whole pass for one-song library
+  // previews, which made the progress banner look stuck). ffmpeg is left to run
+  // alongside playback.
 
   // Play a single song outside the queue (the Tandas-view song preview).
   const previewSong = (song) => {
@@ -976,14 +1003,17 @@ function usePlayerEngine(mainDeviceId, playback) {
     setPlaying(true);
   };
 
+  const livePlaying = playing && !preview && !!queueNow;
+
   return {
-    queue, now, nowKey: displayKey, nowIx: displayIx, playing, pos, dur, flash,
+    queue, now, nowKey: displayKey, nowIx: displayIx, playing, livePlaying, pos, dur, flash,
     cortinaSnippetEnabled, cortinaSnippetSec,
     error, dismissError: () => { clearTimeout(errTimer.current); setError(null); },
     volume, muted, setVolume: (v) => { setVolume(Math.min(1, Math.max(0, v))); if (v > 0) setMuted(false); },
     toggleMute: () => setMuted((m) => !m),
     previewId: preview ? preview.id : null,
-    addTanda, addCortina, addPlaylist, insertSong, remove, reorder,
+    clearPreview: () => { setPreview(null); setPlaying(false); },
+    addTanda, addCortina, addPlaylist, insertSong, remove, reorder, clearQueue,
     playItem, playItemAt, playPause, prev, next, seek, fadeToTanda,
     previewSong, loadPlaylist, saveQueueAsPlaylist,
   };
@@ -1139,6 +1169,10 @@ function useCueEngine(monitorDeviceId) {
   });
   const audioRef = useRef(null);
   const tickRef = useRef(null);
+  const songsRef = useRef([]);
+  const ixRef = useRef(0);
+  const monIdRef = useRef(monitorDeviceId);
+  useEffect(() => { monIdRef.current = monitorDeviceId; }, [monitorDeviceId]);
 
   const stopTick = () => { if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; } };
   const startTick = () => {
@@ -1157,7 +1191,25 @@ function useCueEngine(monitorDeviceId) {
     const onMeta = () => setDur(a.duration || 0);
     const onPlay = () => { setPlaying(true); startTick(); };
     const onPause = () => { setPlaying(false); stopTick(); };
-    const onEnd = () => { setPlaying(false); setPos(0); stopTick(); };
+    const onEnd = () => {
+      const songs = songsRef.current;
+      const ix = ixRef.current;
+      if (songs.length && ix < songs.length - 1) {
+        ixRef.current = ix + 1;
+        const next = songs[ix + 1];
+        setSong(next); setPos(0); setDur(0);
+        a.src = window.compas.audioUrl(next.id);
+        const start = () => a.play().catch(() => {});
+        if (typeof a.setSinkId === "function" && monIdRef.current) {
+          a.setSinkId(monIdRef.current).then(start, start);
+        } else start();
+        return;
+      }
+      songsRef.current = [];
+      ixRef.current = 0;
+      setSong(null);
+      setPlaying(false); setPos(0); stopTick();
+    };
     a.addEventListener("loadedmetadata", onMeta);
     a.addEventListener("play", onPlay);
     a.addEventListener("pause", onPause);
@@ -1177,10 +1229,9 @@ function useCueEngine(monitorDeviceId) {
   useEffect(() => { applySinkId(audioRef.current, monitorDeviceId); }, [monitorDeviceId]);
   useEffect(() => { if (audioRef.current) audioRef.current.volume = volume; }, [volume]);
 
-  const cue = useCallback((s) => {
+  const playSong = useCallback((s) => {
     const a = audioRef.current;
     if (!s || !a) return;
-    if (song && song.id === s.id) { if (a.paused) a.play().catch(() => {}); else a.pause(); return; }
     setSong(s); setPos(0); setDur(0);
     a.src = window.compas.audioUrl(s.id);
     const start = () => a.play().catch(() => {});
@@ -1188,7 +1239,23 @@ function useCueEngine(monitorDeviceId) {
     if (typeof a.setSinkId === "function" && monitorDeviceId) {
       a.setSinkId(monitorDeviceId).then(start, start);
     } else start();
-  }, [song, monitorDeviceId]);
+  }, [monitorDeviceId]);
+
+  const cue = useCallback((s) => {
+    const a = audioRef.current;
+    if (!s || !a) return;
+    if (song && song.id === s.id) { if (a.paused) a.play().catch(() => {}); else a.pause(); return; }
+    songsRef.current = [];
+    ixRef.current = 0;
+    playSong(s);
+  }, [song, playSong]);
+
+  const cueSongs = useCallback((songs) => {
+    if (!songs || !songs.length) return;
+    songsRef.current = songs;
+    ixRef.current = 0;
+    playSong(songs[0]);
+  }, [playSong]);
 
   const toggle = useCallback(() => {
     const a = audioRef.current;
@@ -1199,6 +1266,8 @@ function useCueEngine(monitorDeviceId) {
   const stop = useCallback(() => {
     const a = audioRef.current;
     if (a) { a.pause(); a.removeAttribute("src"); a.load(); }
+    songsRef.current = [];
+    ixRef.current = 0;
     setSong(null); setPlaying(false); setPos(0); setDur(0);
   }, []);
 
@@ -1212,7 +1281,7 @@ function useCueEngine(monitorDeviceId) {
     setVol(nv); localStorage.setItem("compas.cueVolume", String(nv));
   }, []);
 
-  return { song, playing, pos, dur, volume, cue, toggle, stop, seek, setVolume };
+  return { song, playing, pos, dur, volume, cue, cueSongs, toggle, stop, seek, setVolume };
 }
 
 function PlayerProvider({ children }) {
@@ -1221,13 +1290,6 @@ function PlayerProvider({ children }) {
   const engine = usePlayerEngine(devices.mainDeviceId, playback);
   const cueEngine = useCueEngine(devices.monitorDeviceId);
 
-  // When the floor needs a cued track, hand it to the live queue and clear cue.
-  const sendCueToFloor = () => {
-    if (!cueEngine.song) return;
-    engine.insertSong(cueEngine.song, null);
-    cueEngine.stop();
-  };
-
   // Unified "listen" affordance for the library/tandas play buttons. With a
   // monitor ready, auditioning a song routes to the headphone card so the floor
   // is never interrupted; otherwise it falls back to the single shared engine.
@@ -1235,7 +1297,22 @@ function PlayerProvider({ children }) {
     ? { previewId: cueEngine.song ? cueEngine.song.id : null, playing: cueEngine.playing, toggle: cueEngine.cue, viaMonitor: true }
     : { previewId: engine.previewId, playing: engine.playing, toggle: engine.previewSong, viaMonitor: false };
 
-  const value = { ...engine, devices, playback, cue: cueEngine, sendCueToFloor, preview };
+  // Play a whole tanda: audition on the monitor when the floor isn't live,
+  // otherwise load it into the live queue (same handoff as Playlists → Play all).
+  const playTanda = useCallback((t) => {
+    if (!t || !t.songs || !t.songs.length) return;
+    engine.clearPreview();
+    // Audition the whole tanda on the monitor when the floor isn't live;
+    // otherwise hand it to the live queue (same as Playlists → Play all).
+    if (devices.monitorReady && !engine.livePlaying) {
+      cueEngine.cueSongs(t.songs);
+    } else {
+      cueEngine.stop();
+      engine.loadPlaylist([{ type: "tanda", data: t }]);
+    }
+  }, [devices.monitorReady, engine, cueEngine]);
+
+  const value = { ...engine, devices, playback, cue: cueEngine, preview, playTanda };
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }
 
@@ -1262,7 +1339,7 @@ function LivePlayer() {
       <LibraryPanel tandas={tandas} playlists={playlists}
         onAddTanda={p.addTanda} onAddSong={p.addCortina} onAddPlaylist={p.addPlaylist}
         makeDrag={makeDrag} draggingId={draggingId} preview={preview} flash={p.flash} />
-      <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} pos={p.pos} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onSavePlaylist={p.saveQueueAsPlaylist} onFadeToTanda={p.fadeToTanda} cortinaSnippetEnabled={p.cortinaSnippetEnabled} cortinaSnippetSec={p.cortinaSnippetSec} />
+      <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} pos={p.pos} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onSavePlaylist={p.saveQueueAsPlaylist} onClearQueue={p.clearQueue} onFadeToTanda={p.fadeToTanda} cortinaSnippetEnabled={p.cortinaSnippetEnabled} cortinaSnippetSec={p.cortinaSnippetSec} />
     </div>
   );
 }
@@ -1286,7 +1363,7 @@ function VolumeControl({ volume, muted, onVolume, onToggleMute }) {
 // Headphone monitor strip — a second, visually distinct transport that sits
 // above the floor's NowBar. Only mounts while a track is cued, so it stays out
 // of the way until the DJ auditions something.
-function CueBar({ cue, monitorLabel, onSendToFloor }) {
+function CueBar({ cue, monitorLabel }) {
   const song = cue.song;
   if (!song) return null;
   const remain = Math.max(0, (cue.dur || 0) - (cue.pos || 0));
@@ -1313,9 +1390,6 @@ function CueBar({ cue, monitorLabel, onSendToFloor }) {
         <button className="tp-tbtn sm" onClick={cue.toggle} title={cue.playing ? "Pause preview" : "Play preview"}>
           {cue.playing ? <I.pause s={18} /> : <I.play s={18} />}
         </button>
-        <button className="tp-chip cue" onClick={onSendToFloor} title="Add this track to the live queue">
-          <I.arrowDn s={15} /> Send to floor
-        </button>
         <button className="tp-tbtn sm ghost" onClick={cue.stop} title="Close monitor"><I.x s={16} /></button>
         <div className="tp-nb-vol" title="Monitor volume">
           <span className="tp-vol-btn cue" aria-hidden="true">{off ? <I.volX s={15} /> : <I.headphones s={15} />}</span>
@@ -1340,7 +1414,7 @@ function PlayerBar() {
           <button className="x" onClick={p.dismissError} title="Dismiss"><I.x s={14} /></button>
         </div>
       )}
-      <CueBar cue={p.cue} monitorLabel={p.devices.labelFor(p.devices.monitorDeviceId)} onSendToFloor={p.sendCueToFloor} />
+      <CueBar cue={p.cue} monitorLabel={p.devices.labelFor(p.devices.monitorDeviceId)} />
       <NowBar now={p.now} nowIx={p.nowIx} queue={p.queue} playing={p.playing} pos={p.pos} dur={p.dur}
         volume={p.volume} muted={p.muted}
         cortinaSnippetEnabled={p.cortinaSnippetEnabled} cortinaSnippetSec={p.cortinaSnippetSec}
@@ -1365,9 +1439,7 @@ function AnalysisBanner() {
     <div className="tp-analyze-banner" role="status">
       <span className="tp-analyze-spinner" aria-hidden="true" />
       <div className="tp-analyze-text">
-        <div className="tp-analyze-title">
-          Preparing your music{a.paused ? " · paused while playing" : ""}
-        </div>
+        <div className="tp-analyze-title">Preparing your music</div>
         <div className="tp-analyze-sub">
           Leveling each song’s volume and trimming silence at the start and end so every
           tanda plays evenly — you can keep using everything while this finishes.
@@ -1382,4 +1454,4 @@ function AnalysisBanner() {
   );
 }
 
-Object.assign(window, { LivePlayer, PlayerProvider, PlayerBar, usePlayer, AnalysisBanner });
+Object.assign(window, { LivePlayer, PlayerProvider, PlayerBar, usePlayer, AnalysisBanner, MissingCortinaHint, itemSongs, queueDurationSec });

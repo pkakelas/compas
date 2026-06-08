@@ -1,11 +1,15 @@
 import type {AppModule} from '../AppModule.js';
 import type {ModuleContext} from '../ModuleContext.js';
 import {BrowserWindow, dialog, ipcMain} from 'electron';
-import {scanFolder} from '../services/scan.js';
+import {basename} from 'node:path';
+import {scanFolder, guessStyle} from '../services/scan.js';
 import {AnalysisManager, type AnalysisState} from '../services/loudness.js';
 import {LibraryWatcher} from '../services/watcher.js';
 import {writeSongTags} from '../services/tags.js';
+import {proposeLibrary, type EnrichInput} from '../services/enrich.js';
 import {
+  applySmartOrganize,
+  type SmartOrganizeChange,
   clearLibrary,
   deletePlaylist,
   deleteSongsByIds,
@@ -23,21 +27,69 @@ import {
   saveAnalysisResult,
   savePlaylist,
   saveTanda,
+  setSongGenres,
   updateSong,
   type Library,
   type SavePlaylistInput,
   type SaveTandaInput,
+  type ScannedSong,
   type UpdateSongInput,
 } from './Database.js';
+
+/** A node in the import folder tree shown to the DJ (counts + a style guess). */
+type ImportTreeNode = {
+  key: string; // stable, unique per node (the relative path; '#root' for the root)
+  name: string;
+  path: string; // relative folder path under the root ('' for the root itself)
+  count: number;
+  guess: string | null;
+  children: ImportTreeNode[];
+};
+
+/** Build the nested folder tree (with per-folder song counts + a style guess)
+ *  from a flat list of scanned songs, for the import review UI. */
+function buildImportTree(root: string, songs: ScannedSong[]): ImportTreeNode {
+  const rootNode: ImportTreeNode = {
+    key: '#root',
+    name: basename(root) || root,
+    path: '',
+    count: songs.length,
+    guess: guessStyle(basename(root)),
+    children: [],
+  };
+  const byPath = new Map<string, ImportTreeNode>([['', rootNode]]);
+  for (const s of songs) {
+    const segs = s.folderPath ? s.folderPath.split(' / ') : [];
+    let acc = '';
+    let parent = rootNode;
+    for (const seg of segs) {
+      acc = acc ? `${acc} / ${seg}` : seg;
+      let node = byPath.get(acc);
+      if (!node) {
+        node = {key: acc, name: seg, path: acc, count: 0, guess: guessStyle(seg), children: []};
+        byPath.set(acc, node);
+        parent.children.push(node);
+      }
+      node.count += 1;
+      parent = node;
+    }
+  }
+  const sort = (n: ImportTreeNode): void => {
+    n.children.sort((a, b) => a.name.localeCompare(b.name));
+    n.children.forEach(sort);
+  };
+  sort(rootNode);
+  return rootNode;
+}
 
 export class IpcModule implements AppModule {
   async enable({app}: ModuleContext): Promise<void> {
     await app.whenReady();
 
     // Background loudness/silence analysis. Results stream to every open window
-    // so the "still processing" banner can show progress. The pass is paused
-    // while the floor plays live (see 'analysis:setPlaying') so ffmpeg never
-    // competes with playback, and resumes on import / startup.
+    // so the "still processing" banner can show progress. The pass runs
+    // continuously (it is not paused during playback) and resumes leftover work
+    // on import / startup.
     const broadcast = (state: AnalysisState): void => {
       for (const win of BrowserWindow.getAllWindows()) {
         if (!win.isDestroyed()) win.webContents.send('analysis:progress', state);
@@ -54,11 +106,6 @@ export class IpcModule implements AppModule {
       ...analysis.getState(),
       stats: getAnalysisStats(),
     }));
-    ipcMain.handle('analysis:setPlaying', (_event, playing: boolean) => {
-      if (playing) analysis.pause();
-      else analysis.resume();
-      return analysis.getState();
-    });
 
     // Resume any leftover work from a previous session (interruptible by design).
     analysis.enqueuePending();
@@ -77,29 +124,58 @@ export class IpcModule implements AppModule {
     });
     watcher.start();
 
-    ipcMain.handle('library:import', async (event): Promise<Library | null> => {
-      const win = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    // --- Detailed import: scan a folder for preview (persist nothing yet), let
+    // the renderer assign a style per folder, then commit with those styles. ---
+    let importPreview: {root: string; songs: ScannedSong[]} | null = null;
+
+    ipcMain.handle('import:scanPreview', async (event): Promise<ImportTreeNode | null> => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      const opts: Electron.OpenDialogOptions = {
+        title: 'Choose a folder to import',
+        properties: ['openDirectory'],
+      };
       const result = win
-        ? await dialog.showOpenDialog(win, {
-            title: 'Choose your music folder',
-            properties: ['openDirectory'],
-          })
-        : await dialog.showOpenDialog({
-            title: 'Choose your music folder',
-            properties: ['openDirectory'],
-          });
-
+        ? await dialog.showOpenDialog(win, opts)
+        : await dialog.showOpenDialog(opts);
       if (result.canceled || result.filePaths.length === 0) return null;
-
       const root = result.filePaths[0];
       const {songs} = await scanFolder(root);
-      importSongs(root, songs);
-      // Songs are usable immediately; kick off (or extend) the background pass
-      // for the newly-imported tracks.
-      analysis.enqueuePending();
-      // Start watching the newly-imported root for live changes.
-      watcher.sync();
-      return getLibrary();
+      importPreview = {root, songs};
+      return buildImportTree(root, songs);
+    });
+
+    // Commit the previewed import. `types` maps a relative folder path to the
+    // chosen style; a song with no entry for its folder is imported as 'mixed'.
+    ipcMain.handle(
+      'import:commit',
+      (_event, payload: {types?: Record<string, string>}): Library | null => {
+        if (!importPreview) return null;
+        const types = (payload && payload.types) || {};
+        const songs = importPreview.songs.map(s => ({
+          ...s,
+          genre: types[s.folderPath] || 'mixed',
+        }));
+        importSongs(importPreview.root, songs);
+        importPreview = null;
+        analysis.enqueuePending();
+        watcher.sync();
+        const library = getLibrary();
+        broadcastLibrary(library);
+        return library;
+      },
+    );
+
+    ipcMain.handle('import:cancel', () => {
+      importPreview = null;
+      return true;
+    });
+
+    // Re-type existing songs (the tree tool run on the current library): set
+    // each song's style directly. Compás-only; files untouched.
+    ipcMain.handle('songs:setGenres', (_event, updates: {id: string; genre: string}[]): Library => {
+      const library = setSongGenres(Array.isArray(updates) ? updates : []);
+      broadcastLibrary(library);
+      return library;
     });
 
     ipcMain.handle('library:get', (): Library => getLibrary());
@@ -156,6 +232,34 @@ export class IpcModule implements AppModule {
         // one place updates everywhere immediately.
         broadcastLibrary(library);
         return {song, library};
+      },
+    );
+
+    // Smart Organize — derive cleaner metadata from each song's title/folder/
+    // tags and confirm it against the bundled canonical catalog. The preview is
+    // pure, in-memory string work over the cached library rows (no disk I/O), so
+    // it stays fast even on thousands of songs.
+    ipcMain.handle('smartOrganize:preview', () => {
+      const songs: EnrichInput[] = getLibrary().songs.map(s => ({
+        id: s.id,
+        title: s.title,
+        orq: s.orq,
+        singer: s.singer,
+        year: s.year,
+        genre: s.genre,
+        folderPath: s.folderPath,
+      }));
+      return proposeLibrary(songs);
+    });
+
+    // Apply the DJ-approved subset (Compás-only: database update, files
+    // untouched), then push the fresh library to every window.
+    ipcMain.handle(
+      'smartOrganize:apply',
+      (_event, changes: SmartOrganizeChange[]): Library => {
+        const library = applySmartOrganize(Array.isArray(changes) ? changes : []);
+        broadcastLibrary(library);
+        return library;
       },
     );
 

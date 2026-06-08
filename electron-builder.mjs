@@ -6,7 +6,14 @@ import {pathToFileURL} from 'node:url';
 export default /** @type import('electron-builder').Configuration */
 ({
   appId: 'com.compas.player',
-  productName: 'Compás',
+  // ASCII slug for bundles, installers, and release URLs. Branded “Compás” is
+  // restored in the UI (window title) and per-platform display names below.
+  productName: 'Compas',
+  executableName: 'Compas',
+  publish: {
+    provider: 'github',
+    releaseType: 'release',
+  },
   directories: {
     output: 'dist',
     buildResources: 'buildResources',
@@ -19,21 +26,28 @@ export default /** @type import('electron-builder').Configuration */
     // The ffmpeg binary must live on the real filesystem so it can be spawned.
     '**/node_modules/ffmpeg-static/**',
   ],
+  dmg: {
+    title: 'Compás ${version}',
+  },
   mac: {
     category: 'public.app-category.music',
     target: ['dmg', 'zip'],
+    // Ship both Apple Silicon and Intel installers from the macOS CI runner.
+    arch: ['arm64', 'x64'],
+    extendInfo: {
+      CFBundleDisplayName: 'Compás',
+    },
   },
   win: {
     target: ['nsis'],
   },
+  nsis: {
+    shortcutName: 'Compás',
+  },
   linux: {
     target: ['deb'],
   },
-  /**
-   * It is recommended to avoid using non-standard characters such as spaces in artifact names,
-   * as they can unpredictably change during deployment, making them impossible to locate and download for update.
-   */
-  artifactName: '${productName}-${version}-${os}-${arch}.${ext}',
+  artifactName: 'Compas-${version}-${os}-${arch}.${ext}',
   files: [
     'LICENSE*',
     pkg.main,

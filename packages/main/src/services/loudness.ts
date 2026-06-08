@@ -181,7 +181,6 @@ export function analyzeFile(
 
 export type AnalysisState = {
   running: boolean;
-  paused: boolean;
   total: number; // enqueued this session
   completed: number; // done + failed
   failed: number;
@@ -196,16 +195,14 @@ type ManagerDeps = {
 
 /**
  * Background worker pool. Pulls pending songs from the DB, analyses up to
- * `concurrency` at a time, and writes results back. Pauses entirely while the
- * floor is playing live so ffmpeg never competes with playback for CPU; resumes
- * the moment playback stops. Durable across restarts via the DB status column.
+ * `concurrency` at a time, and writes results back. Runs continuously
+ * (alongside playback) and is durable across restarts via the DB status column.
  */
 export class AnalysisManager {
   private deps: ManagerDeps;
   private concurrency: number;
   private queue: {id: number; path: string}[] = [];
   private active = 0;
-  private paused = false;
   private total = 0;
   private completed = 0;
   private failed = 0;
@@ -232,24 +229,9 @@ export class AnalysisManager {
     this.pump();
   }
 
-  /** Suspend starting new jobs (in-flight jobs are allowed to finish). */
-  pause(): void {
-    if (this.paused) return;
-    this.paused = true;
-    this.emit();
-  }
-
-  resume(): void {
-    if (!this.paused) return;
-    this.paused = false;
-    this.emit();
-    this.pump();
-  }
-
   getState(): AnalysisState {
     return {
       running: this.active > 0 || this.queue.length > 0,
-      paused: this.paused,
       total: this.total,
       completed: this.completed,
       failed: this.failed,
@@ -265,7 +247,6 @@ export class AnalysisManager {
   }
 
   private pump(): void {
-    if (this.paused) return;
     while (this.active < this.concurrency && this.queue.length > 0) {
       const song = this.queue.shift()!;
       this.active += 1;

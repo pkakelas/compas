@@ -1,15 +1,6 @@
 // tandas-view.jsx — the Tandas workspace: import → folder library → builder → manage
 const { useState, useEffect, useRef } = React;
 
-/* ---------- single-song preview, routed through the shared player ----------
- * Previewing a song here plays it through the one app-wide engine, so it shows
- * up in the transport bar and never overlaps with the live queue. */
-function useSongPreview() {
-  // Unified listen affordance — routes to the monitor card when cueing is on,
-  // otherwise through the shared engine (see PlayerProvider).
-  return usePlayer().preview;
-}
-
 /* ---------- shared drag-and-drop for the builder ---------- */
 function useBuilderDnD(api) {
   const [hot, setHot] = useState(false);
@@ -105,14 +96,15 @@ function BuilderBench({ builder, api, width, preview }) {
   return (
     <div className={"tv-dock" + (dropTarget.hot ? " drop-hot" : "")} style={dockStyle}>
       <div className="tv-dock-head">
-        <div className="tp-eyebrow">{api.editing ? "Editing tanda" : "New tanda"}</div>
         <div className="tv-dock-title-row">
           <input className="tv-dock-name" value={builder.name} onChange={(e) => api.setName(e.target.value)}
             placeholder={m.orq !== "Empty tanda" ? m.orq : "Name this tanda…"} />
           {api.editing && <span className="tv-edit-tag">Editing</span>}
         </div>
+        <TandaNameSuggest songs={songs} name={builder.name} onApply={api.setName} />
         {builderSummary(songs)}
         <TagField tags={api.tags} onChange={api.setTags} />
+        <TandaTagSuggest songs={songs} tags={api.tags} onApply={api.setTags} />
       </div>
 
       <div className="tv-dock-scroll" {...{ onDragOver: dropTarget.onDragOver, onDragLeave: dropTarget.onDragLeave, onDrop: dropTarget.onDrop }}>
@@ -171,7 +163,10 @@ function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthCh
   const [builder, setBuilder] = useState({ songs: [], name: "", tags: [], editingId: null });
   const [draggingId, setDraggingId] = useState(null);
   const { toast, flash, dismiss } = useToast();
-  const preview = useSongPreview();
+  const { ask, modal } = useConfirm();
+  const imp = useFolderImport(flash);   // shared import flow
+  const player = usePlayer();
+  const preview = player.preview;
 
   // Live dock width while dragging the divider; seeded from the persisted tweak.
   const [dockW, setDockW] = useState(builderWidth || 380);
@@ -211,32 +206,24 @@ function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthCh
 
   const editTanda = (t) => { setBuilder({ songs: t.songs.slice(), name: t.name || "", tags: (t.tags || []).slice(), editingId: t.id }); goBuild(); };
   const newTanda = () => { clear(); goBuild(); };
+  const playTanda = (t) => player.playTanda(t);
   const deleteTanda = (t) => {
-    const snapshot = tandas.slice();
-    Store.deleteTanda(t.id);
-    flash("Tanda deleted", () => Store.setTandasLocal(snapshot));
+    ask({
+      title: "Delete this tanda?",
+      message: `“${t.name || "Untitled tanda"}” will be removed from your collection.`,
+      confirmLabel: "Delete tanda",
+      onConfirm: () => {
+        const snapshot = tandas.slice();
+        Store.deleteTanda(t.id);
+        flash("Tanda deleted", () => Store.setTandasLocal(snapshot));
+      },
+    });
   };
 
   const makeDrag = (s) => ({
     onDragStart: (e) => { e.dataTransfer.setData("text/plain", "song:" + s.id); e.dataTransfer.effectAllowed = "copy"; setDraggingId(s.id); },
     onDragEnd: () => setDraggingId(null),
   });
-
-  const addFolder = async () => {
-    const before = totalSongs;
-    let lib;
-    try {
-      lib = await Store.importLibrary();   // opens picker + scans, appends to library
-    } catch (e) {
-      flash("Import failed. Please try again.");
-      return;
-    }
-    if (!lib) return;                       // cancelled
-    const added = (lib.totalSongs || 0) - before;
-    flash(added > 0
-      ? `Added ${added} song${added === 1 ? "" : "s"} from a new folder`
-      : "That folder is already in your library");
-  };
 
   if (!imported) return <div className="tv"><ImportScreen /></div>;
 
@@ -247,24 +234,21 @@ function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthCh
   // seam instead of starting partway down beneath a full-width header).
   const header = (
     <div className="tv-head">
-      <div className="tv-head-l">
-        <div className="tv-head-badge">{mode === "build" ? <I.scissor s={20} /> : <I.note s={19} />}</div>
-        <div className="tv-head-text">
-          <div className="tv-title">{mode === "build" ? "Tanda builder" : "My tandas"}</div>
-          <div className="tv-sub">
-            {mode === "build" ? (
-              <><b>{totalSongs}</b> songs across <b>{totalFolders}</b> folders
-                {roots && roots.length > 1 && <> in <b>{roots.length}</b> libraries</>}</>
-            ) : (
-              <><b>{tandas.length}</b> {tandas.length === 1 ? "tanda" : "tandas"} in your collection</>
-            )}
-          </div>
+      <div>
+        <div className="tv-title">{mode === "build" ? "Tanda builder" : "My tandas"}</div>
+        <div className="tv-sub">
+          {mode === "build" ? (
+            <><b>{totalSongs}</b> songs across <b>{totalFolders}</b> folders
+              {roots && roots.length > 1 && <> in <b>{roots.length}</b> libraries</>}</>
+          ) : (
+            <><b>{tandas.length}</b> {tandas.length === 1 ? "tanda" : "tandas"} in your collection</>
+          )}
         </div>
       </div>
       <div className="tv-head-r">
         {mode === "build" && (
-          <button className="tv-reimport" onClick={addFolder} title="Import another folder into your library">
-            <I.upload s={16} /> Add folder
+          <button className="tv-reimport" onClick={imp.begin} disabled={imp.scanning} title="Import another folder into your library">
+            <I.upload s={16} /> {imp.scanning ? "Scanning…" : "Add folder"}
           </button>
         )}
       </div>
@@ -286,11 +270,14 @@ function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthCh
       ) : (
         <>
           {header}
-          <ManageGrid tandas={tandas} onEdit={editTanda} onDelete={deleteTanda} onNew={newTanda} preview={preview} />
+          <ManageGrid tandas={tandas} onEdit={editTanda} onDelete={deleteTanda} onNew={newTanda} onPlay={playTanda} preview={preview} />
         </>
       )}
 
+      {imp.modal}
+
       <Toast toast={toast} onDismiss={dismiss} />
+      {modal}
     </div>
   );
 }

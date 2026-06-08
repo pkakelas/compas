@@ -1,10 +1,5 @@
 import {ipcRenderer} from 'electron';
 
-/** Open a folder picker, scan it, and persist the songs. Returns the full library, or null if cancelled. */
-function importLibrary() {
-  return ipcRenderer.invoke('library:import');
-}
-
 /** Read the current library (folder tree + flat songs) from the database. */
 function getLibrary() {
   return ipcRenderer.invoke('library:get');
@@ -41,6 +36,38 @@ function updateSong(input: {
   genre: string;
 }) {
   return ipcRenderer.invoke('songs:update', input);
+}
+
+/** Preview Smart Organize proposals for the whole library. Returns {proposals, summary}. */
+function previewSmartOrganize() {
+  return ipcRenderer.invoke('smartOrganize:preview');
+}
+
+/** Apply the approved Smart Organize changes (Compás-only). Returns the fresh library. */
+function applySmartOrganize(
+  changes: {id: string; orq?: string; singer?: string; year?: number | null; genre?: string}[],
+) {
+  return ipcRenderer.invoke('smartOrganize:apply', changes);
+}
+
+/** Pick a folder and scan it for preview (nothing is saved). Returns the folder tree, or null if cancelled. */
+function importScanPreview() {
+  return ipcRenderer.invoke('import:scanPreview');
+}
+
+/** Commit the previewed import with a per-folder style map. Returns the fresh library. */
+function importCommit(types: Record<string, string>) {
+  return ipcRenderer.invoke('import:commit', {types});
+}
+
+/** Discard a pending import preview. */
+function importCancel() {
+  return ipcRenderer.invoke('import:cancel');
+}
+
+/** Set the style (genre) of many existing songs at once. Returns the fresh library. */
+function setSongGenres(updates: {id: string; genre: string}[]) {
+  return ipcRenderer.invoke('songs:setGenres', updates);
 }
 
 function listTandas() {
@@ -81,12 +108,6 @@ function analysisState() {
   return ipcRenderer.invoke('analysis:state');
 }
 
-/** Tell the main process the floor is/!isn't playing, so it can pause/resume the
- *  analysis pool (ffmpeg must never compete with live playback). */
-function setAnalysisPlaying(playing: boolean) {
-  return ipcRenderer.invoke('analysis:setPlaying', playing);
-}
-
 /** Subscribe to analysis progress. Returns an unsubscribe function. */
 function onAnalysisProgress(cb: (state: unknown) => void) {
   const listener = (_event: unknown, state: unknown) => cb(state);
@@ -103,13 +124,18 @@ function onLibraryChanged(cb: (library: unknown) => void) {
 }
 
 export {
-  importLibrary,
   getLibrary,
   clearLibrary,
   pruneMissingLibrary,
   removeSongIfMissing,
   deleteSongs,
   updateSong,
+  previewSmartOrganize,
+  applySmartOrganize,
+  importScanPreview,
+  importCommit,
+  importCancel,
+  setSongGenres,
   listTandas,
   saveTanda,
   deleteTanda,
@@ -117,7 +143,6 @@ export {
   savePlaylist,
   deletePlaylist,
   analysisState,
-  setAnalysisPlaying,
   onAnalysisProgress,
   onLibraryChanged,
 };

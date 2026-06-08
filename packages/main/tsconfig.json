@@ -7,7 +7,9 @@
     "moduleResolution": "NodeNext",
     "skipLibCheck": true,
     "strict": true,
+    "resolveJsonModule": true,
     "isolatedModules": true,
+    "ignoreDeprecations": "6.0",
     "types": ["node"],
     "baseUrl": ".",
     "paths": {

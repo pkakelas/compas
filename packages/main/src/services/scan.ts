@@ -21,6 +21,41 @@ export function isAudioFile(file: string): boolean {
   return AUDIO_EXTENSIONS.has(extname(file).toLowerCase());
 }
 
+/** The earliest plausible recording year we'll accept, and the latest. */
+const MIN_YEAR = 1910;
+const MAX_YEAR = 2026;
+
+/**
+ * Coerce a raw year into a plausible tango recording year, or `null` ("unknown").
+ *  • A two-digit value is read as 19xx (e.g. 28 → 1928, 29 → 1929).
+ *  • Anything outside MIN_YEAR..MAX_YEAR is rejected as garbage (tags sometimes
+ *    carry a remaster/release date or a bogus value far from the recording).
+ */
+export function normalizeYear(y: number | null | undefined): number | null {
+  if (y == null || !Number.isFinite(y)) return null;
+  let v = Math.trunc(y);
+  if (v >= 0 && v < 100) v += 1900;
+  return v >= MIN_YEAR && v <= MAX_YEAR ? v : null;
+}
+
+/**
+ * A recording year embedded in a filename, e.g. "Anibal Troilo - 1962 - Grela -
+ * Madame Ivone". For tango libraries this is the recording date and far more
+ * reliable than a tag (which often holds a remaster/release year). Only
+ * four-digit tokens are considered, so track numbers don't get mistaken for a
+ * year. Returns the first in-range year, or `null`.
+ */
+export function yearFromFilename(path: string): number | null {
+  const name = basename(path, extname(path));
+  const tokens = name.match(/\d{4}/g);
+  if (!tokens) return null;
+  for (const tok of tokens) {
+    const y = normalizeYear(parseInt(tok, 10));
+    if (y != null) return y;
+  }
+  return null;
+}
+
 async function collectAudioFiles(dir: string, acc: string[] = []): Promise<string[]> {
   let entries;
   try {
@@ -40,14 +75,39 @@ async function collectAudioFiles(dir: string, acc: string[] = []): Promise<strin
   return acc;
 }
 
+// Guess a style from a folder (or tag) name. Covers the four core tango styles
+// plus common non-tango ones a DJ might file separately. Returns null if the
+// name carries no style hint. Used to pre-fill the import tool's per-folder type
+// and as the live-watcher fallback.
+const STYLE_GUESS: [RegExp, string][] = [
+  [/\bmixed\b/, 'mixed'],
+  [/\bcortinas?\b/, 'cortina'],
+  [/\bvals(es)?\b|\bwaltz\b/, 'vals'],
+  [/\bmilongas?\b/, 'milonga'],
+  [/\btangos?\b/, 'tango'],
+  [/\bkizomba\b/, 'kizomba'],
+  [/\bchacareras?\b/, 'chacarera'],
+  [/\bzambas?\b/, 'zamba'],
+  [/\bsalsa\b/, 'salsa'],
+  [/\bswing\b/, 'swing'],
+  [/\bfol(k|c)lore\b/, 'folklore'],
+];
+export function guessStyle(name: string | null | undefined): string | null {
+  const n = (name || '').toLowerCase();
+  for (const [re, t] of STYLE_GUESS) if (re.test(n)) return t;
+  return null;
+}
+
 function mapGenre(segments: string[], tag: string | undefined): string {
-  if (segments.some(s => s.toLowerCase() === 'cortinas' || s.toLowerCase() === 'cortina')) {
-    return 'cortina';
+  // The deepest folder name that names a style wins.
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const g = guessStyle(segments[i]);
+    if (g) return g;
   }
-  const g = (tag || '').toLowerCase();
-  if (g.includes('vals')) return 'vals';
-  if (g.includes('milonga')) return 'milonga';
-  if (g.includes('cortina')) return 'cortina';
+  const t = (tag || '').toLowerCase();
+  if (t.includes('vals')) return 'vals';
+  if (t.includes('milonga')) return 'milonga';
+  if (t.includes('cortina')) return 'cortina';
   return 'tango';
 }
 
@@ -84,6 +144,10 @@ export async function scanFile(root: string, file: string): Promise<ScannedSong>
     // Unreadable/corrupt tags — keep the file with filename-derived defaults.
   }
 
+  // Prefer a recording year spelled out in the filename; fall back to the
+  // (normalized) tag year. Anything implausible becomes "unknown".
+  year = yearFromFilename(file) ?? normalizeYear(year);
+
   return {
     path: file,
     title,
@@ -102,18 +166,11 @@ export async function scanFile(root: string, file: string): Promise<ScannedSong>
  * Walk `root` recursively, extract tags from every audio file, and return rows
  * ready for the DB. Files are never moved or modified.
  */
-export async function scanFolder(
-  root: string,
-  onProgress?: (done: number, total: number, folder: string) => void,
-): Promise<ScanResult> {
+export async function scanFolder(root: string): Promise<ScanResult> {
   const files = await collectAudioFiles(root);
   const songs: ScannedSong[] = [];
-
-  for (let i = 0; i < files.length; i++) {
-    const song = await scanFile(root, files[i]);
-    songs.push(song);
-    onProgress?.(i + 1, files.length, song.folderPath || song.folder);
+  for (const file of files) {
+    songs.push(await scanFile(root, file));
   }
-
   return {root, songs};
 }

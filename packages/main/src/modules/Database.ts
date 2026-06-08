@@ -4,6 +4,7 @@ import {app} from 'electron';
 import {basename, dirname, join} from 'node:path';
 import {existsSync} from 'node:fs';
 import Database from 'better-sqlite3';
+import {normalizeYear, yearFromFilename} from '../services/scan.js';
 
 export type SongRow = {
   id: number;
@@ -13,6 +14,7 @@ export type SongRow = {
   singer: string;
   album: string | null;
   year: number | null;
+  year_locked: number;
   duration_sec: number | null;
   genre: string;
   folder: string;
@@ -198,6 +200,12 @@ function migrate(d: Database.Database): void {
     ['analysis_status', "TEXT NOT NULL DEFAULT 'pending'"], // 'pending' | 'done' | 'failed'
     ['analysis_version', 'INTEGER NOT NULL DEFAULT 0'],
     ['analyzed_at', 'INTEGER'],
+    // Provenance flags: set when Smart Organize (or a manual edit) authors the
+    // orchestra/year, so a later re-scan of the file does NOT overwrite the
+    // app-set value from the file's own tags. This is what makes "Compás-only"
+    // organization durable (singer/genre are already preserved on re-scan).
+    ['orq_locked', 'INTEGER NOT NULL DEFAULT 0'],
+    ['year_locked', 'INTEGER NOT NULL DEFAULT 0'],
   ]);
   // The background worker repeatedly asks "what's left?" — keep that cheap.
   d.exec(
@@ -213,6 +221,17 @@ function fmtDur(sec: number | null | undefined): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+/**
+ * The year to show for a song. A DJ-locked value (set in Smart Organize) is
+ * authoritative; otherwise a year spelled out in the filename wins over the tag
+ * (tags often carry a remaster/release date), and anything implausible — or out
+ * of the 1910–2026 window — is reported as "unknown" (null).
+ */
+function resolveYear(r: SongRow): number | null {
+  if (r.year_locked) return normalizeYear(r.year);
+  return yearFromFilename(r.path) ?? normalizeYear(r.year);
+}
+
 function rowToSong(r: SongRow): Song {
   return {
     id: String(r.id),
@@ -220,7 +239,7 @@ function rowToSong(r: SongRow): Song {
     orq: r.artist,
     singer: r.singer,
     album: r.album,
-    year: r.year,
+    year: resolveYear(r),
     dur: fmtDur(r.duration_sec),
     durationSec: r.duration_sec,
     genre: r.genre,
@@ -249,7 +268,7 @@ export type ScannedSong = {
   folderPath: string;
 };
 
-/** Record an import root if it isn't already known. */
+/** Record an import root, leaving an existing one untouched. */
 function upsertRoot(d: Database.Database, root: string): void {
   d.prepare(
     'INSERT INTO library_roots (path, added_at) VALUES (?, ?) ON CONFLICT(path) DO NOTHING',
@@ -266,9 +285,9 @@ export function importSongs(root: string, songs: ScannedSong[]): void {
     VALUES (@path, @title, @artist, @singer, @album, @year, @durationSec, @genre, @folder, @folderPath, @root, @added_at)
     ON CONFLICT(path) DO UPDATE SET
       title = excluded.title,
-      artist = excluded.artist,
+      artist = CASE WHEN songs.orq_locked = 1 THEN songs.artist ELSE excluded.artist END,
       album = excluded.album,
-      year = excluded.year,
+      year = CASE WHEN songs.year_locked = 1 THEN songs.year ELSE excluded.year END,
       duration_sec = excluded.duration_sec,
       folder = excluded.folder,
       folder_path = excluded.folder_path,
@@ -279,6 +298,8 @@ export function importSongs(root: string, songs: ScannedSong[]): void {
   // editable by the DJ — so a re-scan of an existing song (e.g. the watcher
   // reacting to an in-place tag edit) must preserve those user-set values
   // instead of resetting singer to '' and genre to its folder-derived default.
+  // Likewise `artist`/`year` are preserved when locked (set by Smart Organize),
+  // so a Compás-only edit survives the file being re-scanned.
 
   const tx = d.transaction(() => {
     upsertRoot(d, root);
@@ -600,6 +621,74 @@ export function updateSong(input: UpdateSongInput): Song | null {
   return rowToSong(row);
 }
 
+/** One song's approved Smart Organize changes. Any omitted field is left as-is.
+ *  Setting `orq`/`year` also locks them so a re-scan won't revert the value. */
+export type SmartOrganizeChange = {
+  id: string;
+  orq?: string;
+  singer?: string;
+  year?: number | null;
+  genre?: string;
+};
+
+/**
+ * Apply a batch of Smart Organize changes in a single transaction (Compás-only:
+ * the database is updated, the files on disk are never touched). Editing
+ * `orq`/`year` sets the corresponding lock so the value survives a later
+ * re-scan. Returns the fresh library.
+ */
+export function applySmartOrganize(changes: SmartOrganizeChange[]): Library {
+  const d = getDb();
+  const tx = d.transaction(() => {
+    for (const c of changes) {
+      const id = Number(c.id);
+      if (!Number.isFinite(id)) continue;
+      const sets: string[] = [];
+      const params: Record<string, unknown> = {id};
+      if (c.orq !== undefined) {
+        sets.push('artist = @orq', 'orq_locked = 1');
+        params.orq = c.orq ?? '';
+      }
+      if (c.singer !== undefined) {
+        sets.push('singer = @singer');
+        params.singer = c.singer ?? '';
+      }
+      if (c.year !== undefined) {
+        sets.push('year = @year', 'year_locked = 1');
+        params.year = c.year ?? null;
+      }
+      if (c.genre !== undefined) {
+        sets.push('genre = @genre');
+        params.genre = c.genre || 'tango';
+      }
+      if (sets.length === 0) continue;
+      d.prepare(`UPDATE songs SET ${sets.join(', ')} WHERE id = @id`).run(params);
+    }
+  });
+  tx();
+  return getLibrary();
+}
+
+/**
+ * Set the genre (style) of many songs in one transaction (Compás-only: the DB
+ * is updated, files are untouched). Used by the import/re-type tree tool. genre
+ * is preserved across re-scans (see importSongs), so this is durable. Returns
+ * the fresh library.
+ */
+export function setSongGenres(updates: {id: string; genre: string}[]): Library {
+  const d = getDb();
+  const stmt = d.prepare('UPDATE songs SET genre = @genre WHERE id = @id');
+  const tx = d.transaction(() => {
+    for (const u of updates) {
+      const id = Number(u.id);
+      if (!Number.isFinite(id)) continue;
+      stmt.run({id, genre: u.genre || 'unknown'});
+    }
+  });
+  tx();
+  return getLibrary();
+}
+
 /** Resolve a song's editable, file-backed tags (used before writing the file). */
 export function getSongTags(
   id: string,
@@ -691,13 +780,31 @@ export function renameSong(oldPath: string, root: string, song: ScannedSong): bo
       | undefined;
     if (clash && clash.id !== row.id) deleteSongs(d, [clash.id]);
     upsertRoot(d, root);
+    // A move re-derives the file-backed fields, but preserves the DJ's app-only
+    // `singer`/`genre` (omitted from SET) and any locked `artist`/`year` set by
+    // Smart Organize — mirroring importSongs so an edit isn't lost on a move.
     d.prepare(
       `UPDATE songs SET
-         path = @path, title = @title, artist = @artist, singer = @singer,
-         album = @album, year = @year, duration_sec = @durationSec, genre = @genre,
+         path = @path,
+         title = @title,
+         artist = CASE WHEN orq_locked = 1 THEN artist ELSE @artist END,
+         album = @album,
+         year = CASE WHEN year_locked = 1 THEN year ELSE @year END,
+         duration_sec = @durationSec,
          folder = @folder, folder_path = @folderPath, root = @root
        WHERE id = @id`,
-    ).run({...song, root, id: row.id});
+    ).run({
+      path: song.path,
+      title: song.title,
+      artist: song.artist,
+      album: song.album,
+      year: song.year,
+      durationSec: song.durationSec,
+      folder: song.folder,
+      folderPath: song.folderPath,
+      root,
+      id: row.id,
+    });
     // The previous root may now be empty (a move across libraries).
     d.prepare(
       'DELETE FROM library_roots WHERE path NOT IN (SELECT DISTINCT root FROM songs)',

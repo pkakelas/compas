@@ -98,10 +98,41 @@ function previewTitle(preview, playing, verb = "Listen") {
 
 const GENRE_LABEL = { tango: "Tango", vals: "Vals", milonga: "Milonga", cortina: "Cortina" };
 
+/* The four core danceable styles the player + tanda logic understand. Anything
+   else (kizomba, chacarera, salsa, … or "unknown") is a free-form label: fully
+   browsable and editable, but treated as non-tango. */
+const CORE_STYLES = ["tango", "vals", "milonga", "cortina"];
+/* The type menu offered by the import tool: core styles first, then common
+   non-tango ones; the UI also lets you type a custom value. */
+const IMPORT_DEFAULT_STYLE = "mixed";
+const STYLE_TYPES = [
+  "mixed",
+  "tango", "vals", "milonga", "cortina",
+  "kizomba", "chacarera", "zamba", "folklore", "salsa", "swing", "other",
+];
+const STYLE_LABELS = {
+  mixed: "Mixed", tango: "Tango", vals: "Vals", milonga: "Milonga", cortina: "Cortina",
+  kizomba: "Kizomba", chacarera: "Chacarera", zamba: "Zamba", folklore: "Folklore",
+  salsa: "Salsa", swing: "Swing", other: "Other", unknown: "Unknown",
+};
+function isCoreStyle(g) { return CORE_STYLES.indexOf(g) !== -1; }
+/* Human label for any style value (known or custom). */
+function genreLabel(g) {
+  if (!g) return "Unknown";
+  return STYLE_LABELS[g] || (g[0].toUpperCase() + g.slice(1));
+}
+/* The pill CSS class for a style: the four cores keep their colours; everything
+   else shares a neutral "other"/"unknown" treatment. */
+function genreClass(g) {
+  if (isCoreStyle(g)) return "is-" + g;
+  if (g === "mixed") return "is-mixed";
+  return g === "unknown" ? "is-unknown" : "is-other";
+}
+
 /* one genre/era pill, used wherever a tanda's genre is shown. `small` is the
    compact variant for dense rows (.sm utility). */
 function GenreTag({ genre, small }) {
-  return <span className={"tp-tag is-" + genre + (small ? " sm" : "")}>{GENRE_LABEL[genre] || "Tango"}</span>;
+  return <span className={"tp-tag " + genreClass(genre) + (small ? " sm" : "")}>{genreLabel(genre)}</span>;
 }
 
 /* transient confirmation toast (e.g. "Tanda saved"), with an optional Undo
@@ -131,4 +162,52 @@ function Toast({ toast, onDismiss }) {
   );
 }
 
-Object.assign(window, { I, Waveform, EQ, PreviewGlyph, previewTitle, GENRE_LABEL, GenreTag, useToast, Toast });
+/* A centered confirmation dialog for destructive actions (delete a tanda,
+   remove a folder, delete a playlist). Reach for it via useConfirm() rather
+   than rendering it directly. Enter confirms, Escape / backdrop click cancels. */
+function ConfirmModal({ title, message, confirmLabel = "Delete", cancelLabel = "Cancel", danger = true, onConfirm, onCancel }) {
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+      else if (e.key === "Enter") { e.preventDefault(); onConfirm(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onConfirm, onCancel]);
+  return (
+    <div className="tp-modal-scrim" onMouseDown={onCancel}>
+      <div className="tp-modal" role="alertdialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
+        <div className={"tp-modal-icon" + (danger ? " danger" : "")}>
+          {danger ? <I.trash s={20} /> : <I.check s={20} />}
+        </div>
+        <div className="tp-modal-title">{title}</div>
+        {message && <div className="tp-modal-msg">{message}</div>}
+        <div className="tp-modal-actions">
+          <button className="tp-modal-cancel" onClick={onCancel}>{cancelLabel}</button>
+          <button className={"tp-modal-confirm" + (danger ? " danger" : "")} onClick={onConfirm} autoFocus>
+            {danger && <I.trash s={14} />} {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* useConfirm owns the dialog state. `ask(opts)` opens the modal; `opts.onConfirm`
+   fires when the user accepts. Render the returned `modal` somewhere in the view.
+   Lives here so every view shares one confirmation flow. */
+function useConfirm() {
+  const [state, setState] = useState(null);
+  const close = useCallback(() => setState(null), []);
+  const ask = useCallback((opts) => setState(opts || {}), []);
+  const modal = state ? (
+    <ConfirmModal
+      {...state}
+      onCancel={close}
+      onConfirm={() => { if (state.onConfirm) state.onConfirm(); close(); }}
+    />
+  ) : null;
+  return { ask, modal };
+}
+
+Object.assign(window, { I, Waveform, EQ, PreviewGlyph, previewTitle, GENRE_LABEL, GenreTag, useToast, Toast, ConfirmModal, useConfirm, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, STYLE_LABELS, isCoreStyle, genreLabel, genreClass });

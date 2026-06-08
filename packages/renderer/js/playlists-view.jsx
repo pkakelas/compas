@@ -8,19 +8,14 @@ let _plKid = 1;
 const plKid = () => "pl" + (_plKid++);
 
 /* ---------- playlist meta helpers ---------- */
-function itemSongsPL(item) {
-  return item.type === "cortina" ? [item.data] : ((item.data && item.data.songs) || []);
-}
-function itemDurSecPL(item) {
-  return itemSongsPL(item).reduce((a, s) => a + (s.durationSec || secOf(s.dur)), 0);
-}
+// itemSongs + queueDurationSec are shared with the live player (window globals).
 function playlistMeta(items) {
   const list = items || [];
   return {
     tandas: list.filter((i) => i.type === "tanda").length,
     cortinas: list.filter((i) => i.type === "cortina").length,
-    songs: list.reduce((a, it) => a + itemSongsPL(it).length, 0),
-    total: fmtDur(list.reduce((a, it) => a + itemDurSecPL(it), 0)),
+    songs: list.reduce((a, it) => a + itemSongs(it).length, 0),
+    total: fmtDur(queueDurationSec(list)),
   };
 }
 function itemTitle(it) {
@@ -75,10 +70,7 @@ function PlLibrary({ tandas, cortinas, onAdd, preview }) {
   return (
     <div className="tp-lib">
       <div className="tp-lib-head">
-        <div>
-          <div className="tp-eyebrow">Add to playlist</div>
-          <div className="tp-lib-title">Choose tandas &amp; cortinas</div>
-        </div>
+        <div className="tv-title">Add items</div>
         <div className="tp-tabs">
           <button className={"tp-tab" + (tab === "tandas" ? " is-on" : "")} onClick={() => setTab("tandas")}>Tandas</button>
           <button className={"tp-tab" + (tab === "cortinas" ? " is-on" : "")} onClick={() => setTab("cortinas")}>Cortinas</button>
@@ -135,7 +127,7 @@ function PlEditorTanda({ it, ix, slot, onRemove, preview }) {
         <span className="ix">{String(ix).padStart(2, "0")}</span>
         <span className="tp-now-orq" style={{ flex: 1 }}>{t.name || m.orq}</span>
         <GenreTag genre={m.genre} small />
-        {m.decade && <span className="tp-tag is-plain sm">{m.decade}</span>}
+        {m.year && <span className="tp-tag is-plain sm" title={m.era}>{m.year}</span>}
         <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove from playlist"><I.x s={14} /></button>
       </div>
       {t.songs.map((s, i) => {
@@ -163,18 +155,6 @@ function PlEditorCortina({ it, slot, onRemove, preview }) {
       </div>
       <div className="tp-fade"><I.clock s={13} /> {c.dur}</div>
       <button className="tp-qx dark" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove from playlist"><I.x s={14} /></button>
-    </div>
-  );
-}
-
-// Two tandas back-to-back with no cortina between them — same gentle nudge the
-// live queue gives, so a DJ notices the floor won't clear.
-function PlMissingCortinaHint() {
-  return (
-    <div className="tp-nocort" title="No cortina between these tandas">
-      <span className="tp-nocort-line" />
-      <span className="tp-nocort-tag"><I.curtain s={13} /> No cortina</span>
-      <span className="tp-nocort-line" />
     </div>
   );
 }
@@ -228,7 +208,7 @@ function PlEditorDock({ open, status, api, preview, onBack, onPlayAll, onDelete 
             ? <PlEditorTanda key={it.key} it={it} ix={tIx} slot={sp} onRemove={() => api.removeAt(i)} preview={preview} />
             : <PlEditorCortina key={it.key} it={it} slot={sp} onRemove={() => api.removeAt(i)} preview={preview} />;
           return gap
-            ? <React.Fragment key={it.key}><PlMissingCortinaHint />{row}</React.Fragment>
+            ? <React.Fragment key={it.key}><MissingCortinaHint />{row}</React.Fragment>
             : row;
         })}
         {items.length > 0 && (
@@ -316,6 +296,7 @@ function PlaylistsView({ onPlay }) {
   const cortinas = useMemo(() => songs.filter((s) => s.genre === "cortina"), [songs]);
   const preview = usePlayer().preview;
   const { toast, flash, dismiss } = useToast();
+  const { ask, modal } = useConfirm();
 
   // `open` is the working copy of the playlist being edited (null = landing
   // grid). Edits mutate it locally and persist to the DB in the background.
@@ -378,20 +359,22 @@ function PlaylistsView({ onPlay }) {
   };
   const back = () => { clearTimeout(nameTimer.current); setOpen(null); };
 
-  const deleteOpen = () => {
-    const id = idRef.current;
-    setOpen(null);
-    if (id != null) {
+  const removePlaylist = (id, name, after) => ask({
+    title: "Delete this playlist?",
+    message: `“${name || "Untitled playlist"}” will be removed. The tandas & cortinas in it stay in your collection.`,
+    confirmLabel: "Delete playlist",
+    onConfirm: () => {
       const snapshot = playlists.slice();
       Store.deletePlaylist(id);
       flash("Playlist deleted", () => Store.setPlaylistsLocal(snapshot));
-    }
+      if (after) after();
+    },
+  });
+  const deleteOpen = () => {
+    const id = idRef.current;
+    if (id != null) removePlaylist(id, open && open.name, () => setOpen(null));
   };
-  const deletePlaylist = (pl) => {
-    const snapshot = playlists.slice();
-    Store.deletePlaylist(pl.id);
-    flash("Playlist deleted", () => Store.setPlaylistsLocal(snapshot));
-  };
+  const deletePlaylist = (pl) => removePlaylist(pl.id, pl.name);
 
   const playAll = () => { if (open && open.items.length) onPlay({ items: open.items }); };
 
@@ -418,6 +401,7 @@ function PlaylistsView({ onPlay }) {
             onBack={back} onPlayAll={playAll} onDelete={deleteOpen} />
         </div>
         <Toast toast={toast} onDismiss={dismiss} />
+        {modal}
       </div>
     );
   }
@@ -428,7 +412,7 @@ function PlaylistsView({ onPlay }) {
       <div className="tv-head">
         <div>
           <div className="tv-title">Playlists</div>
-          <div className="tv-sub">Open a set to reorder, trim &amp; audition it — or send it straight to the floor</div>
+          <div className="tv-sub">Open a set to reorder, trim &amp; audition it</div>
         </div>
         <div className="tv-head-r">
           <button className="tv-reimport" onClick={newPlaylist}><I.plus s={15} /> New playlist</button>
@@ -439,6 +423,7 @@ function PlaylistsView({ onPlay }) {
         onPlay={onPlay} onNew={newPlaylist} />
 
       <Toast toast={toast} onDismiss={dismiss} />
+      {modal}
     </div>
   );
 }

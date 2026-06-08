@@ -12,23 +12,27 @@ window.Howler = Howler;
 const AUDIO_SCHEME = "compas-audio";
 
 window.compas = {
-  importLibrary: preload.importLibrary,
   getLibrary: preload.getLibrary,
   clearLibrary: preload.clearLibrary,
   pruneMissing: preload.pruneMissingLibrary,
   removeSongIfMissing: preload.removeSongIfMissing,
   deleteSongs: preload.deleteSongs,
   updateSong: preload.updateSong,
+  previewSmartOrganize: preload.previewSmartOrganize,
+  applySmartOrganize: preload.applySmartOrganize,
+  importScanPreview: preload.importScanPreview,
+  importCommit: preload.importCommit,
+  importCancel: preload.importCancel,
+  setSongGenres: preload.setSongGenres,
   listTandas: preload.listTandas,
   saveTanda: preload.saveTanda,
   deleteTanda: preload.deleteTanda,
   listPlaylists: preload.listPlaylists,
   savePlaylist: preload.savePlaylist,
   deletePlaylist: preload.deletePlaylist,
-  // Background loudness/silence analysis: read state, report playback state
-  // (so it pauses while live), and subscribe to progress for the banner.
+  // Background loudness/silence analysis: read state and subscribe to progress
+  // for the banner.
   analysisState: preload.analysisState,
-  setAnalysisPlaying: preload.setAnalysisPlaying,
   onAnalysisProgress: preload.onAnalysisProgress,
   // Live library sync: fires when songs are added/removed/renamed on disk.
   onLibraryChanged: preload.onLibraryChanged,

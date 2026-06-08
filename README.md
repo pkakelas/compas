@@ -36,6 +36,55 @@ pnpm run compile -- --dir           # package unpacked (faster, for debugging)
 
 Config lives in `electron-builder.mjs`. App icons are in `buildResources/`.
 
+### Releases (GitHub Actions → website downloads)
+
+Binaries are built in CI and published to **GitHub Releases**. The Vercel
+marketing site should link there — Vercel is great for the site, but large
+`.dmg` / `.exe` files belong on GitHub’s release CDN.
+
+**Ship a version**
+
+1. Bump `version` in `package.json` (e.g. `0.1.0` → `0.2.0`).
+2. Commit, tag, and push:
+   ```bash
+   git tag v0.2.0
+   git push origin main --tags
+   ```
+3. The [Release workflow](.github/workflows/release.yml) runs on macOS and
+   Windows, uploads installers, and writes update metadata for the in-app
+   auto-updater.
+
+**Artifacts** (ASCII names for stable URLs):
+
+| Platform | File |
+|----------|------|
+| macOS (Apple Silicon) | `Compas-{version}-mac-arm64.dmg` |
+| macOS (Intel) | `Compas-{version}-mac-x64.dmg` |
+| Windows | `Compas-{version}-win-x64.exe` |
+
+**Download links on Vercel** — point buttons at GitHub (replace `OWNER/REPO`):
+
+```html
+<a href="https://github.com/OWNER/REPO/releases/latest/download/Compas-0.2.0-mac-arm64.dmg">
+  Download for Mac (Apple Silicon)
+</a>
+<a href="https://github.com/OWNER/REPO/releases/latest/download/Compas-0.2.0-mac-x64.dmg">
+  Download for Mac (Intel)
+</a>
+<a href="https://github.com/OWNER/REPO/releases/latest/download/Compas-0.2.0-win-x64.exe">
+  Download for Windows
+</a>
+```
+
+`releases/latest/download/…` always serves the newest tag, but the filename
+still includes the version. For a version-agnostic redirect, add a small
+Vercel API route that calls the
+[GitHub Releases API](https://docs.github.com/en/rest/releases/releases) and
+`302` redirects to the matching asset.
+
+Installed apps check GitHub Releases on launch (`electron-updater`) and prompt
+to update when a newer tag exists.
+
 > macOS signing note: the app is packaged **unsigned / ad-hoc** (no Apple
 > Developer ID). Recent macOS may refuse to launch an ad-hoc-signed bundle. For
 > real distribution, add a Developer ID certificate and enable notarization.

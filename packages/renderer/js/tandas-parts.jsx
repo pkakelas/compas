@@ -1,10 +1,27 @@
 // tandas-parts.jsx — unified library tree (folders + songs), manage grid + meta helpers
 const { useState, useMemo, useEffect, useRef } = React;
 
+/* The conventional periodization of recorded tango. Shown as context next to a
+ * year (never as a filter facet) so a DJ can place a recording at a glance.
+ * Boundaries follow the usual DJ convention; the upper bound of each band is
+ * inclusive. */
+const TANGO_ERAS = [
+  { max: 1925, label: "Guardia Vieja" },
+  { max: 1934, label: "Guardia Nueva" },
+  { max: 1955, label: "Época de Oro" },
+  { max: 1979, label: "Vanguardia" },
+  { max: Infinity, label: "Contemporáneo" },
+];
+function eraForYear(year) {
+  if (!year) return "";
+  for (const e of TANGO_ERAS) if (year <= e.max) return e.label;
+  return "";
+}
+
 /* ---------- tanda meta ---------- */
 function tandaMeta(t) {
   const songs = t.songs || [];
-  if (!songs.length) return { orq: "Empty tanda", genre: "tango", singer: "", decade: "", total: "0:00" };
+  if (!songs.length) return { orq: "Empty tanda", genre: "tango", singer: "", year: "", era: "", total: "0:00" };
   const orqs = [...new Set(songs.map((s) => s.orq))];
   const orq = orqs.length === 1 ? orqs[0] : "Mixed orchestras";
   const genres = [...new Set(songs.map((s) => s.genre))];
@@ -12,8 +29,15 @@ function tandaMeta(t) {
   const singers = [...new Set(songs.map((s) => s.singer).filter(Boolean))];
   const singer = singers.length === 1 ? singers[0] : singers.length > 1 ? "Various singers" : "";
   const years = songs.map((s) => s.year).filter(Boolean);
-  const decade = years.length ? Math.floor(Math.min(...years) / 10) * 10 + "s" : "";
-  return { orq, genre, singer, decade, total: tandaTotal(songs) };
+  // Show the exact year, or a span when a tanda mixes recordings; the era is
+  // keyed off the earliest recording in the set.
+  let year = "", era = "";
+  if (years.length) {
+    const lo = Math.min(...years), hi = Math.max(...years);
+    year = lo === hi ? String(lo) : `${lo}–${hi}`;
+    era = eraForYear(lo);
+  }
+  return { orq, genre, singer, year, era, total: tandaTotal(songs) };
 }
 
 /* The lowercased labels of a tanda's "type" tags (Tango / Vals / Milonga /
@@ -21,6 +45,42 @@ function tandaMeta(t) {
  * which is merely inferred from the songs' file metadata. */
 function tandaTypes(t) {
   return (t.tags || []).filter((tg) => tg.cat === "type").map((tg) => (tg.label || "").toLowerCase());
+}
+
+/* A short human label for a tanda: its name, or the orchestra summary when it's
+ * still unnamed (matches how cards/queue render it elsewhere). */
+function tandaLabel(t) {
+  return t.name || tandaMeta(t).orq;
+}
+
+/* Comma-joined, quoted tanda names with a "+N more" tail past `max`. */
+function tandaNames(list, max = 2) {
+  const names = list.map((t) => `“${tandaLabel(t)}”`);
+  if (names.length <= max) return names.join(", ");
+  return names.slice(0, max).join(", ") + ` +${names.length - max} more`;
+}
+
+/* Spells out how deleting a folder ripples into the DJ's tandas: which sets get
+ * emptied (and thus removed) versus merely shortened. Rendered inside the
+ * remove-folder confirmation so the consequence is clear before they commit. */
+function TandaImpact({ emptied, shrunk }) {
+  const e = emptied.length;
+  return (
+    <>
+      {e > 0 && (
+        <div>
+          <strong>{e} tanda{e === 1 ? "" : "s"}</strong> ({tandaNames(emptied)}) will be left
+          empty and removed from your collection.
+        </div>
+      )}
+      {shrunk > 0 && (
+        <div>
+          {e > 0 ? "Another " : ""}<strong>{shrunk} tanda{shrunk === 1 ? "" : "s"}</strong> will
+          lose {shrunk === 1 ? "a song" : "songs"} but stay.
+        </div>
+      )}
+    </>
+  );
 }
 
 /* ============================ TANDA LIB CARD ============================
@@ -45,7 +105,7 @@ function TandaLibCard({ t, preview, onAdd, added, addTitle }) {
           <div className="tp-libcard-top">
             <span className="tp-libcard-orq">{t.name || m.orq}</span>
             {hasTags ? <TagPills tags={t.tags} max={3} /> : <GenreTag genre={m.genre} small />}
-            {m.decade && <span className="tp-tag is-plain sm">{m.decade}</span>}
+            {m.year && <span className="tp-tag is-plain sm" title={m.era}>{m.year}</span>}
           </div>
           <div className="tp-libcard-meta">
             {m.singer ? <>{m.singer}<span className="tp-dotsep">·</span></> : null}
@@ -145,10 +205,14 @@ function SongEditRow({ s, onClose }) {
           <input value={draft.year} onChange={set("year")} inputMode="numeric" placeholder="—" maxLength={4} /></label>
         <label className="f"><span>Genre</span>
           <select value={draft.genre} onChange={set("genre")}>
-            <option value="tango">Tango</option>
-            <option value="vals">Vals</option>
-            <option value="milonga">Milonga</option>
-            <option value="cortina">Cortina</option>
+            {(() => {
+              const base = window.STYLE_TYPES || ["tango", "vals", "milonga", "cortina"];
+              // Keep the song's current value selectable even if it's a custom/
+              // non-preset style, so editing never silently changes it.
+              const opts = base.indexOf(draft.genre) === -1 && draft.genre ? base.concat([draft.genre]) : base;
+              const label = window.genreLabel || ((g) => g);
+              return opts.map((g) => <option key={g} value={g}>{label(g)}</option>);
+            })()}
           </select></label>
         <label className="f wide"><span>Album</span>
           <input value={draft.album} onChange={set("album")} placeholder="Album" /></label>
@@ -171,10 +235,33 @@ function SongEditRow({ s, onClose }) {
 function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPlaying, onPreview, previewViaMonitor, library }) {
   const isCort = s.genre === "cortina";
   const [editing, setEditing] = useState(false);
+  const clickTimer = useRef(null);
+  const handleClick = () => {
+    if (clickTimer.current) clearTimeout(clickTimer.current);
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null;
+      onPreview();
+    }, 250);
+  };
+  const handleDoubleClick = (e) => {
+    e.preventDefault();
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+    if (!library && onAdd) onAdd();
+  };
+  useEffect(() => () => { if (clickTimer.current) clearTimeout(clickTimer.current); }, []);
   if (editing) return <SongEditRow s={s} onClose={() => setEditing(false)} />;
+  const rowTitle = library
+    ? (isPreview && isPlaying ? "Pause" : "Play preview")
+    : (inBuilder ? "Already in the tanda" : "Double-click to add to tanda · click to play preview");
   return (
-    <div className={"tv-song" + (isCort ? " cortina" : "") + (inBuilder ? " in-builder" : "") + (dragging ? " dragging" : "") + (isPreview ? " playing" : "")}
-      draggable={!library} {...(library ? {} : dragHandlers)}>
+    <div className={"tv-song clickable" + (isCort ? " cortina" : "") + (inBuilder ? " in-builder" : "") + (dragging ? " dragging" : "") + (isPreview ? " playing" : "")}
+      draggable={!library} {...(library ? {} : dragHandlers)}
+      onClick={handleClick}
+      onDoubleClick={library ? undefined : handleDoubleClick}
+      title={isPreview && isPlaying ? "Pause" : rowTitle}>
       <button className={"play" + (isPreview && isPlaying ? " on" : "") + (previewViaMonitor ? " monitor" : "")} onClick={(e) => { e.stopPropagation(); onPreview(); }}
         title={isPreview && isPlaying ? "Pause" : previewViaMonitor ? "Listen in headphones (monitor)" : "Play preview"}>
         {isPreview && isPlaying ? <I.pause s={14} /> : (previewViaMonitor ? <I.headphones s={14} /> : <I.play s={14} />)}
@@ -203,88 +290,98 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
 }
 
 /* ============================ SONG SEARCH ============================
- * One shared search engine for browsing songs — used by the Library view and
- * the Tanda builder (both render through <LibraryTree>). It blends two modes:
+ * Shared search for the Library view and Tanda builder (<LibraryTree>):
  *
- *   • Fuzzy free text — every bare word must match (as an ordered subsequence)
- *     somewhere in a song's combined metadata, so "disar" finds "Di Sarli" and
- *     "poemarufino" finds Poema sung by Rufino. Contiguous and word-start hits
- *     score higher, so the best matches float to the top.
+ *   • Free text — fuzzy match across title, orchestra, singer, album, folder,
+ *     genre and year ("disar" → Di Sarli, "poema rufino" → Poema by Rufino).
+ *   • Dropdown filters — orchestra, singer, style and year picked from the
+ *     library; each dropdown narrows to values that still match the others.
+ *     Combined with free text (all must match).
  *
- *   • Scoped metadata filters — `field:value` tokens narrow to one attribute,
- *     e.g. orq:di sarli · singer:rufino · genre:vals · year:1940s · album:rca ·
- *     folder:cortinas. Years accept an exact year, a decade (1940s), a range
- *     (1935-1945) or a comparator (>1940, <=1945).
- *
- * The pieces are pure functions exported on window so any view can reuse them. */
+ * Pure functions are exported on window so any view can reuse them. */
 
 function _norm(v) { return v == null ? "" : String(v).toLowerCase(); }
 
-// Aliases let DJs type the field name that comes naturally to them.
-const SEARCH_FIELDS = {
-  title: "title", t: "title", song: "title", name: "title",
-  orq: "orq", orch: "orq", orchestra: "orq", artist: "orq", by: "orq",
-  singer: "singer", voz: "singer", voice: "singer", vocal: "singer", vocalist: "singer",
-  genre: "genre", type: "genre", g: "genre",
-  year: "year", y: "year", decade: "year",
-  album: "album", alb: "album", record: "album",
-  folder: "folder", dir: "folder", path: "folder",
-};
+const EMPTY_SEARCH = { text: "", orq: "", singer: "", genre: "", year: "" };
 
-// The user-facing menu of filters (label + example), shown in the help popover.
-const SEARCH_FIELD_HELP = [
-  { key: "orq", label: "Orchestra", example: "orq:di sarli" },
-  { key: "singer", label: "Singer", example: "singer:rufino" },
-  { key: "genre", label: "Genre", example: "genre:vals" },
-  { key: "year", label: "Year / decade", example: "year:1940s" },
-  { key: "album", label: "Album", example: "album:rca" },
-  { key: "folder", label: "Folder", example: "folder:cortinas" },
-];
-
-// Split a raw query into scoped {field,value} filters + bare fuzzy words. A
-// field token with an empty value (the DJ is mid-type, e.g. "orq:") is ignored
-// so the list doesn't blank out before they've typed anything to match.
-function parseSearch(raw) {
-  const tokens = _norm(raw).trim().split(/\s+/).filter(Boolean);
-  const filters = [];
-  const words = [];
-  for (const tok of tokens) {
-    const m = tok.match(/^([a-z]+):(.*)$/);
-    if (m && SEARCH_FIELDS[m[1]]) {
-      if (m[2]) filters.push({ field: SEARCH_FIELDS[m[1]], value: m[2] });
-    } else {
-      words.push(tok);
-    }
-  }
-  return { filters, words, active: filters.length > 0 || words.length > 0 };
+function buildSearchQuery(filters) {
+  const words = _norm(filters.text || "").trim().split(/\s+/).filter(Boolean);
+  const structured = [];
+  if (filters.orq) structured.push({ field: "orq", value: _norm(filters.orq), exact: true });
+  if (filters.singer) structured.push({ field: "singer", value: _norm(filters.singer), exact: true });
+  if (filters.genre) structured.push({ field: "genre", value: _norm(filters.genre), exact: true });
+  if (filters.year) structured.push({ field: "year", value: String(filters.year), exact: true });
+  return { words, filters: structured, active: words.length > 0 || structured.length > 0 };
 }
 
-// Ordered-subsequence fuzzy score over already-lowercased strings. Returns -1
-// when `q` isn't a subsequence of `text`; otherwise a score that rewards hits at
-// word boundaries and runs of consecutive characters (tighter matches win).
+function _isBoundary(ch) {
+  return ch === " " || ch === "/" || ch === "·" || ch === "-";
+}
+
+function _words(text) {
+  return text.split(/[\s/·-]+/).filter(Boolean);
+}
+
+// Score for matching `len` leading characters of a single word: a word-start
+// bonus plus a growing run bonus, so longer (tighter) prefix hits win.
+function _prefixScore(len) {
+  let s = 5; // 1 base + 4 word-boundary bonus for the first character
+  for (let r = 1; r < len; r++) s += 1 + 3 * r;
+  return s;
+}
+
+// Word-prefix subsequence score over already-lowercased strings. The query must
+// be coverable by an ordered set of word-prefixes (each matched chunk starts a
+// word in `text`); letters lifted from the middle of a word never count. This
+// keeps useful fuzzy matches like "disar"→"di sarli" and "poemarufino"→"Poema …
+// Rufino" while rejecting the scattered mid-word noise that previously made a
+// short query (e.g. "demare") match almost every song in a large library.
+// Returns -1 when no such cover exists, otherwise the best (highest) score.
 function fuzzyScore(q, text) {
   if (!q) return 0;
-  let qi = 0, score = 0, run = 0, prev = -2;
-  for (let ti = 0; ti < text.length && qi < q.length; ti++) {
-    if (text[ti] === q[qi]) {
-      let bonus = 1;
-      const before = ti === 0 ? " " : text[ti - 1];
-      if (before === " " || before === "/" || before === "·" || before === "-") bonus += 4;
-      if (ti === prev + 1) { run += 1; bonus += run * 3; } else run = 0;
-      score += bonus;
-      prev = ti;
-      qi++;
+  const words = _words(text);
+  const memo = new Map();
+  const best = (qi, wi) => {
+    if (qi >= q.length) return 0;
+    if (wi >= words.length) return -1;
+    const key = qi * 4096 + wi;
+    const cached = memo.get(key);
+    if (cached !== undefined) return cached;
+    // Option 1: don't use this word at all.
+    let res = best(qi, wi + 1);
+    // Option 2: consume a leading prefix of this word from the query.
+    const w = words[wi];
+    let lcp = 0;
+    while (lcp < w.length && qi + lcp < q.length && w[lcp] === q[qi + lcp]) lcp++;
+    for (let len = 1; len <= lcp; len++) {
+      // A single-character chunk taken from the middle of a multi-letter word is
+      // the signature of a scattered, low-quality match — only allow it when it
+      // finishes the query (the DJ is still typing the last word).
+      if (len === 1 && w.length > 1 && qi + 1 !== q.length) continue;
+      const rest = best(qi + len, wi + 1);
+      if (rest < 0) continue;
+      const sc = _prefixScore(len) + rest;
+      if (sc > res) res = sc;
     }
-  }
-  return qi === q.length ? score : -1;
+    memo.set(key, res);
+    return res;
+  };
+  return best(0, 0);
 }
 
-// Score a single field value against a sought string: prefer a literal
-// substring (with a prefix kicker) and fall back to a fuzzy subsequence.
+// Score a single field value against a sought string. A literal substring
+// always outranks a fuzzy subsequence; a hit at a word start (and especially at
+// the very beginning) ranks highest, and earlier positions edge out later ones.
 function scoreText(value, hay) {
   if (!hay) return -1;
   const idx = hay.indexOf(value);
-  if (idx >= 0) return 14 - Math.min(idx, 8) + (idx === 0 ? 6 : 0);
+  if (idx >= 0) {
+    const atWord = idx === 0 || _isBoundary(hay[idx - 1]);
+    let score = 40 - Math.min(idx, 8);
+    if (atWord) score += 20;
+    if (idx === 0) score += 10;
+    return score;
+  }
   return fuzzyScore(value, hay);
 }
 
@@ -319,19 +416,33 @@ function songHaystack(song) {
     song.year ? String(song.year) : ""].map(_norm).join("  ");
 }
 
-// Score a song against a parsed query. Returns null when any filter or word
-// fails to match (AND semantics); otherwise the summed relevance score.
-function scoreSong(song, parsed) {
+// Score a song against a query. Returns null when any filter or word fails (AND
+// semantics); otherwise the summed relevance score.
+function scoreSong(song, query) {
   let score = 0;
-  for (const f of parsed.filters) {
-    if (f.field === "year") { if (!matchYear(song.year, f.value)) return null; score += 6; continue; }
+  for (const f of query.filters) {
+    if (f.field === "year") {
+      if (f.exact ? song.year !== +f.value : !matchYear(song.year, f.value)) return null;
+      score += 6;
+      continue;
+    }
+    if (f.field === "genre") {
+      if (_norm(song.genre) !== f.value) return null;
+      score += 6;
+      continue;
+    }
+    if (f.exact) {
+      if (songFieldText(song, f.field) !== f.value) return null;
+      score += 20;
+      continue;
+    }
     const s = scoreText(f.value, songFieldText(song, f.field));
     if (s < 0) return null;
     score += s;
   }
-  if (parsed.words.length) {
+  if (query.words.length) {
     const hay = songHaystack(song);
-    for (const w of parsed.words) {
+    for (const w of query.words) {
       const s = scoreText(w, hay);
       if (s < 0) return null;
       score += s;
@@ -341,117 +452,43 @@ function scoreSong(song, parsed) {
 }
 
 // Flat search over a song array → best matches first. Empty query = unchanged.
-function searchSongs(songs, raw) {
-  const parsed = parseSearch(raw);
-  if (!parsed.active) return (songs || []).slice();
+function searchSongs(songs, queryOrFilters) {
+  const query = queryOrFilters.active !== undefined ? queryOrFilters : buildSearchQuery(queryOrFilters);
+  if (!query.active) return (songs || []).slice();
   const hits = [];
   for (const s of songs || []) {
-    const sc = scoreSong(s, parsed);
+    const sc = scoreSong(s, query);
     if (sc != null) hits.push({ s, sc });
   }
   hits.sort((a, b) => b.sc - a.sc);
   return hits.map((h) => h.s);
 }
 
-// A folder row can satisfy a query on its own — but only for bare words and
-// `folder:` filters (no song-attribute filter can be met by a folder name).
-// Returns true when the folder name/path matches all such terms.
-function folderMatches(node, parsed) {
-  if (parsed.filters.some((f) => f.field !== "folder")) return false;
+// A folder row can satisfy a text-only query when every word matches its name/path.
+function folderMatches(node, query) {
+  if (query.filters.length) return false;
   const hay = _norm(node.name) + "  " + _norm(node.path);
-  for (const f of parsed.filters) if (scoreText(f.value, hay) < 0) return false;
-  for (const w of parsed.words) if (scoreText(w, hay) < 0) return false;
-  return true;
+  for (const w of query.words) if (scoreText(w, hay) < 0) return false;
+  return query.words.length > 0;
 }
 
 // Prune the library tree to matching folders/songs. A folder that matches by
 // name keeps all its own songs; otherwise only its matching songs survive, best
 // match first. Branches with any surviving content are kept (and force-opened
 // by the caller). Empty query returns the tree untouched.
-function searchTree(tree, raw) {
-  const parsed = parseSearch(raw);
-  if (!parsed.active) return tree || [];
+function searchTree(tree, queryOrFilters) {
+  const query = queryOrFilters.active !== undefined ? queryOrFilters : buildSearchQuery(queryOrFilters);
+  if (!query.active) return tree || [];
   const prune = (node) => {
-    const nameHit = folderMatches(node, parsed);
+    const nameHit = folderMatches(node, query);
     const songs = nameHit
       ? (node.songs || [])
-      : searchSongs(node.songs || [], raw);
+      : searchSongs(node.songs || [], query);
     const children = (node.children || []).map(prune).filter(Boolean);
     if (nameHit || songs.length || children.length) return { ...node, songs, children };
     return null;
   };
   return (tree || []).map(prune).filter(Boolean);
-}
-
-/* ============================ ADVANCED SEARCH INPUT ============================
- * The shared search pill. Beyond plain text it advertises the scoped metadata
- * filters via a "Filters" popover whose chips drop a `field:` prefix straight
- * into the box, and offers a clear (×) button once there's a query. Reused by
- * the Library view and the Tanda builder so both speak the same search language. */
-function AdvancedSearch({ value, onChange, placeholder }) {
-  const [open, setOpen] = useState(false);
-  const inputRef = useRef(null);
-  const wrapRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
-    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  // Drop a `field:` prefix at the end of the query, then focus the box so the
-  // DJ can keep typing the value straight away.
-  const insertField = (key) => {
-    const base = value && !/\s$/.test(value) ? value + " " : (value || "");
-    onChange(base + key + ":");
-    setOpen(false);
-    requestAnimationFrame(() => inputRef.current && inputRef.current.focus());
-  };
-
-  const clear = () => { onChange(""); inputRef.current && inputRef.current.focus(); };
-
-  return (
-    <div className="tp-asearch" ref={wrapRef}>
-      <label className="tp-search">
-        <I.search s={15} />
-        <input ref={inputRef} value={value} onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder || "Search songs… (try orq:di sarli, year:1940s)"}
-          onFocus={() => setOpen(true)} />
-        {value ? (
-          <button type="button" className="tp-asearch-clear" onClick={clear} title="Clear search">
-            <I.x s={13} />
-          </button>
-        ) : null}
-        <button type="button" className={"tp-asearch-toggle" + (open ? " is-open" : "")}
-          onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen((o) => !o)}
-          title="Search filters">
-          <I.tag s={13} /> Filters
-        </button>
-      </label>
-      {open && (
-        <div className="tp-asearch-pop" onMouseDown={(e) => e.stopPropagation()}>
-          <div className="tp-asearch-pop-head">Narrow by field</div>
-          <div className="tp-asearch-chips">
-            {SEARCH_FIELD_HELP.map((f) => (
-              <button key={f.key} type="button" className="tp-asearch-chip" onClick={() => insertField(f.key)}>
-                <span className="k">{f.label}</span>
-                <span className="ex">{f.example}</span>
-              </button>
-            ))}
-          </div>
-          <div className="tp-asearch-pop-foot">
-            Combine freely — bare words fuzzy-match every field. e.g. <b>poema orq:canaro</b>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 /* ============================ LIBRARY TREE ============================
@@ -495,14 +532,488 @@ function TreeNode({ node, depth, openSet, toggle, forceOpen, songProps }) {
   );
 }
 
-function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, library }) {
-  const { tree } = useStore();
-  const [openSet, setOpenSet] = useState(() => new Set(tree.map((n) => n.path)));
-  const [q, setQ] = useState("");
-  const [menu, setMenu] = useState(null);   // right-click folder menu: { node, x, y, confirm }
-  const toggle = (path) => setOpenSet((s) => {
-    const n = new Set(s); n.has(path) ? n.delete(path) : n.add(path); return n;
+/* Debounce a fast-changing value (the search box) so the heavy prune/sort only
+ * runs once typing settles — keeps a 2k+ song library responsive per keystroke. */
+function useDebounced(value, delay) {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return v;
+}
+
+/* ---------- sort ---------- */
+const SORTS = [
+  { key: "relevance", label: "Best match" },
+  { key: "title", label: "Title A–Z" },
+  { key: "orq", label: "Orchestra A–Z" },
+  { key: "year_desc", label: "Year (new→old)" },
+  { key: "year_asc", label: "Year (old→new)" },
+  { key: "dur_desc", label: "Longest first" },
+];
+
+// Sort order for the style dropdown, keyed by the shared genreLabel() output.
+const GENRE_ORDER = { Tango: 0, Vals: 1, Milonga: 2, Cortina: 3 };
+
+function cmpStr(a, b) { return _norm(a).localeCompare(_norm(b)); }
+function songSecs(s) { return s.durationSec != null ? s.durationSec : secOf(s.dur); }
+
+// The comparator for a chosen sort. "relevance" keeps the search engine's
+// best-first order while a query is active, and falls back to Title A–Z when
+// there's nothing to rank against (so the default browse reads alphabetically).
+function songComparator(sort, hasQuery) {
+  switch (sort) {
+    case "title": return (a, b) => cmpStr(a.title, b.title);
+    case "orq": return (a, b) => cmpStr(a.orq, b.orq) || cmpStr(a.title, b.title);
+    case "year_desc": return (a, b) => (b.year || 0) - (a.year || 0) || cmpStr(a.title, b.title);
+    case "year_asc": return (a, b) => (a.year || 0) - (b.year || 0) || cmpStr(a.title, b.title);
+    case "dur_desc": return (a, b) => songSecs(b) - songSecs(a);
+    default: return hasQuery ? null : (a, b) => cmpStr(a.title, b.title);
+  }
+}
+
+// Does a song match the active dropdown filters?
+// out (used when building that field's option list from the other selections).
+function songMatchesDropdownFilters(song, filters, omit) {
+  if (omit !== "orq" && filters.orq && (song.orq || "").trim() !== filters.orq) return false;
+  if (omit !== "singer" && filters.singer && (song.singer || "").trim() !== filters.singer) return false;
+  if (omit !== "genre" && filters.genre && song.genre !== filters.genre) return false;
+  if (omit !== "year" && filters.year && String(song.year || "") !== String(filters.year)) return false;
+  return true;
+}
+
+// Unique orchestra / singer / style / year values for dropdowns. Each list is
+// scoped to songs that match the other active dropdown filters.
+function buildFilterOptions(songs, filters = EMPTY_SEARCH) {
+  const cmp = (a, b) => a.localeCompare(b, undefined, { sensitivity: "base" });
+  const orqs = new Set(), singers = new Set(), genres = new Set(), years = new Set();
+  for (const s of songs || []) {
+    if (songMatchesDropdownFilters(s, filters, "orq") && s.orq && s.orq.trim()) orqs.add(s.orq.trim());
+    if (songMatchesDropdownFilters(s, filters, "singer") && s.singer && s.singer.trim()) singers.add(s.singer.trim());
+    if (songMatchesDropdownFilters(s, filters, "genre") && s.genre) genres.add(s.genre);
+    if (songMatchesDropdownFilters(s, filters, "year") && s.year) years.add(String(s.year));
+  }
+  return {
+    orchestras: [...orqs].sort(cmp),
+    singers: [...singers].sort(cmp),
+    genres: [...genres].sort((a, b) =>
+      ((GENRE_ORDER[genreLabel(a)] ?? 99) - (GENRE_ORDER[genreLabel(b)] ?? 99)) || cmp(genreLabel(a), genreLabel(b)))
+      .map((g) => ({ value: g, label: genreLabel(g) })),
+    years: [...years].sort((a, b) => parseInt(b, 10) - parseInt(a, 10)),
+  };
+}
+
+// Drop dropdown values that no longer exist after another filter changed.
+function sanitizeFilters(filters, songs) {
+  let next = null;
+  let again = true;
+  while (again) {
+    again = false;
+    const cur = next || filters;
+    for (const [key, listKey, valOf] of [
+      ["orq", "orchestras", (o) => o],
+      ["singer", "singers", (o) => o],
+      ["genre", "genres", (o) => o.value],
+      ["year", "years", (o) => o],
+    ]) {
+      if (!cur[key]) continue;
+      const allowed = buildFilterOptions(songs, { ...cur, [key]: "" })[listKey].map(valOf);
+      if (!allowed.includes(cur[key])) {
+        if (!next) next = { ...filters };
+        next[key] = "";
+        again = true;
+      }
+    }
+  }
+  return next || filters;
+}
+
+const PICK_LIST_CAP = 80;
+const PICK_SEARCH_MIN = 8; // hide in-panel search for short lists (style, etc.)
+
+function normalizePickOptions(options) {
+  return (options || []).map((o) => {
+    const val = typeof o === "string" ? o : o.value;
+    const lab = typeof o === "string" ? o : o.label;
+    return { value: val, label: lab || val };
   });
+}
+
+/* Searchable filter dropdown — shared by orchestra, singer, style and year. */
+function SearchableSelect({ placeholder, value, onChange, options, disabled, allLabel }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const rootRef = useRef(null);
+  const searchRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const normalized = useMemo(() => normalizePickOptions(options), [options]);
+  const showSearch = normalized.length > PICK_SEARCH_MIN;
+  const resetLabel = allLabel || ("All " + placeholder.toLowerCase() + "s");
+  const selectedLabel = value
+    ? (normalized.find((o) => o.value === value)?.label || value)
+    : placeholder;
+
+  const filtered = useMemo(() => {
+    const q = _norm(query).trim();
+    let list = normalized;
+    if (q) list = list.filter((o) => _norm(o.label).includes(q) || _norm(o.value).includes(q));
+    return list.slice(0, PICK_LIST_CAP);
+  }, [normalized, query]);
+
+  const items = useMemo(() => {
+    const rows = filtered.map((o) => ({ ...o, clear: false }));
+    if (value) rows.unshift({ value: "", label: resetLabel, clear: true });
+    return rows;
+  }, [filtered, value, resetLabel]);
+
+  const q = query.trim();
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) { setQuery(""); setActive(0); return; }
+    requestAnimationFrame(() => {
+      if (showSearch) searchRef.current && searchRef.current.focus();
+      else menuRef.current && menuRef.current.focus();
+    });
+  }, [open, showSearch]);
+
+  useEffect(() => { setActive(0); }, [query]);
+
+  const close = () => setOpen(false);
+  const pick = (val) => { onChange(val); close(); };
+
+  const onListKey = (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActive((a) => (items.length ? (a + 1) % items.length : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((a) => (items.length ? (a - 1 + items.length) % items.length : 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const row = items[active];
+      if (row) pick(row.value);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      close();
+    }
+  };
+
+  const toggle = () => {
+    if (disabled) return;
+    setOpen((o) => !o);
+  };
+
+  const clear = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onChange("");
+    close();
+  };
+
+  return (
+    <div className={"tv-pick" + (value ? " is-active" : "") + (open ? " is-open" : "") + (disabled ? " is-disabled" : "")}
+      ref={rootRef}>
+      <div className="tv-pick-trigger">
+        <button type="button" className="tv-pick-main" onClick={toggle} disabled={disabled}
+          aria-expanded={open} aria-haspopup="listbox" aria-label={placeholder}>
+          <span className={"tv-pick-label" + (value ? "" : " is-ph")}>{selectedLabel}</span>
+          <span className="tv-pick-chev"><I.arrowDn s={13} /></span>
+        </button>
+        {value ? (
+          <button type="button" className="tv-pick-clear" onClick={clear} title={`Clear ${placeholder.toLowerCase()}`}>
+            <I.x s={11} />
+          </button>
+        ) : null}
+      </div>
+      {open && !disabled ? (
+        <div className={"tv-pick-menu" + (showSearch ? "" : " is-compact")} ref={menuRef}
+          tabIndex={-1} onKeyDown={onListKey} onMouseDown={(e) => e.preventDefault()}>
+          {showSearch ? (
+            <label className="tv-pick-search">
+              <I.search s={14} />
+              <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={onListKey} placeholder={`Search ${placeholder.toLowerCase()}…`} />
+            </label>
+          ) : null}
+          <div className="tv-pick-list" role="listbox">
+            {items.map((o, i) => (
+              <button key={o.clear ? "__all" : o.value} type="button"
+                className={"tv-pick-opt" + (i === active ? " active" : "") + (o.value === value ? " picked" : "") + (o.clear ? " clear" : "")}
+                onMouseEnter={() => setActive(i)} onClick={() => pick(o.value)}>
+                <span className="tv-pick-opt-t">{o.label}</span>
+                {o.value === value && !o.clear ? <span className="tv-pick-opt-ok"><I.check s={14} /></span> : null}
+              </button>
+            ))}
+            {!items.length ? (
+              <div className="tv-pick-empty">{q ? "No matches" : `No ${placeholder.toLowerCase()}s yet`}</div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* Search + filter toolbar for the library tree. */
+function SongSearchBar({ filters, onChange, options, sort, setSort, searching, countLabel,
+  showCollapse, collapseOpen, onCollapse }) {
+  const inputRef = useRef(null);
+  const set = (key, val) => onChange({ ...filters, [key]: val });
+  const clearText = () => { set("text", ""); inputRef.current && inputRef.current.focus(); };
+  const clearFilters = () => onChange({ ...filters, orq: "", singer: "", genre: "", year: "" });
+  const hasFilters = !!(filters.orq || filters.singer || filters.genre || filters.year);
+  const anyDropdown = hasFilters;
+  const sorts = searching ? SORTS : SORTS.filter((s) => s.key !== "relevance");
+
+  return (
+    <div className="tv-searchbar">
+      <label className="tp-search tv-search-input">
+        <I.search s={15} />
+        <input ref={inputRef} value={filters.text}
+          onChange={(e) => set("text", e.target.value)}
+          placeholder="Search title, orchestra, singer…" />
+        {filters.text ? (
+          <button type="button" className="tv-search-clear" onClick={clearText} title="Clear search">
+            <I.x s={13} />
+          </button>
+        ) : null}
+      </label>
+      <div className="tv-search-toolbar">
+        <div className="tv-search-filters">
+          <SearchableSelect placeholder="Orchestra" allLabel="All orchestras" value={filters.orq}
+            onChange={(v) => set("orq", v)} options={options.orchestras}
+            disabled={anyDropdown && options.orchestras.length === 0} />
+          <SearchableSelect placeholder="Singer" allLabel="All singers" value={filters.singer}
+            onChange={(v) => set("singer", v)} options={options.singers}
+            disabled={anyDropdown && options.singers.length === 0} />
+          <SearchableSelect placeholder="Style" allLabel="All styles" value={filters.genre}
+            onChange={(v) => set("genre", v)} options={options.genres}
+            disabled={anyDropdown && options.genres.length === 0} />
+          <SearchableSelect placeholder="Year" allLabel="All years" value={filters.year}
+            onChange={(v) => set("year", v)} options={options.years}
+            disabled={anyDropdown && options.years.length === 0} />
+          {hasFilters ? (
+            <button type="button" className="tv-search-reset" onClick={clearFilters}>Clear filters</button>
+          ) : null}
+        </div>
+        <div className="tv-search-actions">
+          {showCollapse ? (
+            <button type="button" className="tv-collapse" onClick={onCollapse}>
+              <I.chev s={12} /> {collapseOpen ? "Collapse" : "Expand"}
+            </button>
+          ) : null}
+          <label className="tv-sort">
+            <select value={sort} onChange={(e) => setSort(e.target.value)} title="Sort songs" aria-label="Sort">
+              {sorts.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+          </label>
+          {countLabel ? <span className="tv-count">{countLabel}</span> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Fixed row heights (px), enforced in CSS on .tv-vwin children so the windowing
+// arithmetic is exact. Rows are single-line, so heights never vary at runtime.
+const INDENT = 18;
+const ROW_H = { song: 60, folder: 40, root: 46, group: 46 };
+function rowHeight(r) {
+  if (r.kind === "song") return ROW_H.song;
+  if (r.kind === "group") return ROW_H.group;
+  return r.depth === 0 ? ROW_H.root : ROW_H.folder;
+}
+function FolderRowFlat({ node, depth, isOpen, onToggle, onContext }) {
+  const hasContent = (node.children && node.children.length > 0) || (node.songs && node.songs.length > 0);
+  return (
+    <div className={"tv-folder-row" + (isOpen ? " open" : "") + (depth === 0 ? " root" : "")}
+      style={{ marginLeft: depth * INDENT }}
+      onClick={() => hasContent && onToggle(node.path)}
+      onContextMenu={(e) => onContext && onContext(e, node)}>
+      <span className={"caret" + (hasContent ? (isOpen ? " open" : "") : " leaf")}><I.chev s={12} /></span>
+      <span className="fic">{isOpen && hasContent ? <I.folderOpen s={15} /> : <I.folder s={15} />}</span>
+      <span className="nm">{node.name}</span>
+      <span className="ct">{countSongs(node)}</span>
+    </div>
+  );
+}
+
+/* ============================ LIBRARY BROWSER ============================
+ * Shared folder-tree song browser for Library, Builder, and Live: search,
+ * dropdown filters, sort, and a windowed list for large libraries. */
+function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, library, builderIds, onAdd, makeDrag, draggingId, hint }) {
+  const { tree, songs } = useStore();
+  const scrollRef = useRef(null);
+  const [sort, setSort] = useState("title");
+  const [openSet, setOpenSet] = useState(() => new Set(tree.map((n) => n.path)));
+  const filterOptions = useMemo(() => buildFilterOptions(songs, filters), [songs, filters]);
+  const setFiltersSafe = (next) => setFilters(sanitizeFilters(next, songs));
+
+  useEffect(() => {
+    if (tree.length) setOpenSet((s) => (s.size ? s : new Set(tree.map((n) => n.path))));
+  }, [tree]);
+
+  const searching = query.active;
+
+  useEffect(() => {
+    setSort((s) => {
+      if (searching) return s === "title" ? "relevance" : s;
+      return s === "relevance" ? "title" : s;
+    });
+  }, [searching]);
+
+  const toggle = (key) => setOpenSet((s) => {
+    const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n;
+  });
+
+  const model = useMemo(() => {
+    const rows = [];
+    const openable = [];
+    const pruned = searchTree(tree, query);
+    const cmp = songComparator(sort, searching);
+    const walk = (nodes, depth) => {
+      for (const node of nodes) {
+        const kids = node.children || [];
+        const list = node.songs || [];
+        const hasContent = kids.length > 0 || list.length > 0;
+        if (hasContent) openable.push(node.path);
+        const isOpen = searching || openSet.has(node.path);
+        rows.push({ kind: "folder", key: "f:" + node.path, node, depth, isOpen });
+        if (isOpen && hasContent) {
+          walk(kids, depth + 1);
+          const ordered = cmp ? list.slice().sort(cmp) : list;
+          for (const s of ordered) rows.push({ kind: "song", key: "s:" + s.id, song: s, depth: depth + 1 });
+        }
+      }
+    };
+    walk(pruned, 0);
+    const songCount = pruned.reduce((a, n) => a + countSongs(n), 0);
+    const folderCount = rows.reduce((a, r) => a + (r.kind === "folder" ? 1 : 0), 0);
+    return { rows, songCount, groupCount: folderCount, openable, noun: "folders" };
+  }, [tree, query, sort, openSet, searching]);
+
+  const rows = model.rows;
+
+  /* ---- virtualization: render only the rows in view ----
+   * Rows are single-line and their heights are enforced by CSS (see ROW_H +
+   * the .tv-vwin rules), so we can place them by arithmetic with no per-row
+   * measurement — that keeps the math exact and avoids any layout feedback. */
+  const [scrollTop, setScrollTop] = useState(0);
+  const [vh, setVh] = useState(800);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => setScrollTop(el.scrollTop);
+    const ro = new ResizeObserver(() => setVh(el.clientHeight));
+    ro.observe(el);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    setScrollTop(el.scrollTop); setVh(el.clientHeight);
+    return () => { el.removeEventListener("scroll", onScroll); ro.disconnect(); };
+  }, []);
+
+  // Whenever the row set changes shape (mode / sort / query), jump back to top.
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    setScrollTop(0);
+  }, [sort, query]);
+
+  const offsets = useMemo(() => {
+    const arr = new Float64Array(rows.length + 1);
+    for (let i = 0; i < rows.length; i++) arr[i + 1] = arr[i] + rowHeight(rows[i]);
+    return arr;
+  }, [rows]);
+  const total = offsets[rows.length] || 0;
+
+  const OVERSCAN = 8;
+  let start = 0, end = rows.length;
+  { let lo = 0, hi = rows.length; while (lo < hi) { const m = (lo + hi) >> 1; if (offsets[m + 1] <= scrollTop) lo = m + 1; else hi = m; } start = lo; }
+  { let lo = start, hi = rows.length; const bottom = scrollTop + vh; while (lo < hi) { const m = (lo + hi) >> 1; if (offsets[m] < bottom) lo = m + 1; else hi = m; } end = lo; }
+  start = Math.max(0, start - OVERSCAN);
+  end = Math.min(rows.length, end + OVERSCAN);
+  const slice = rows.slice(start, end);
+  const offsetY = offsets[start] || 0;
+
+  const anyOpen = model.openable.some((k) => openSet.has(k));
+  const toggleAll = () => setOpenSet(anyOpen ? new Set() : new Set(model.openable));
+
+  const countLabel = model.songCount === 0
+    ? (searching ? "No matches" : "")
+    : searching
+      ? `${model.songCount} song${model.songCount === 1 ? "" : "s"}`
+      : `${model.songCount} song${model.songCount === 1 ? "" : "s"} · ${model.groupCount} ${model.noun}`;
+
+  const renderRow = (r) => {
+    if (r.kind === "folder") {
+      return <div className="tv-vrow" key={r.key}>
+        <FolderRowFlat node={r.node} depth={r.depth} isOpen={r.isOpen} onToggle={toggle} onContext={onFolderContext} />
+      </div>;
+    }
+    const s = r.song;
+    return <div className="tv-vrow" key={r.key} style={{ marginLeft: r.depth * INDENT }}>
+      <SongRow s={s} library={library}
+        inBuilder={!library && builderIds && builderIds.has(s.id)}
+        onAdd={() => onAdd && onAdd(s)}
+        dragHandlers={!library && makeDrag ? makeDrag(s) : undefined}
+        dragging={draggingId === s.id}
+        isPreview={preview && preview.previewId === s.id} isPlaying={preview && preview.playing}
+        onPreview={() => preview && preview.toggle(s)} previewViaMonitor={preview && preview.viaMonitor} />
+    </div>;
+  };
+
+  return (
+    <>
+      <div className="tv-tree-head">
+        <SongSearchBar filters={filters} onChange={setFiltersSafe} options={filterOptions}
+          sort={sort} setSort={setSort} searching={searching} countLabel={countLabel}
+          showCollapse={!searching && rows.length > 0} collapseOpen={anyOpen} onCollapse={toggleAll} />
+        {hint && <div className="tv-songs-hint">{hint}</div>}
+      </div>
+      <div className="tv-treewrap">
+        <div className="tv-tree-scroll" ref={scrollRef}>
+          {rows.length === 0 ? (
+            <div className="tp-empty">{searching ? "Nothing matches your search." : "No folders in your library yet."}</div>
+          ) : (
+            <div className="tv-vtotal" style={{ height: total }}>
+              <div className="tv-vwin" style={{ transform: `translateY(${offsetY}px)` }}>
+                {slice.map((r) => renderRow(r))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, library }) {
+  const { tandas } = useStore();
+  const [filters, setFilters] = useState(EMPTY_SEARCH);
+  const debouncedText = useDebounced(filters.text, 150);
+  const query = useMemo(() => buildSearchQuery({
+    text: debouncedText,
+    orq: filters.orq,
+    singer: filters.singer,
+    genre: filters.genre,
+    year: filters.year,
+  }), [debouncedText, filters.orq, filters.singer, filters.genre, filters.year]);
+  const [menu, setMenu] = useState(null);   // right-click folder menu: { node, x, y }
+  const { ask, modal } = useConfirm();
 
   // Right-click a folder row to remove it from the library (files stay on disk).
   const closeMenu = () => setMenu(null);
@@ -512,9 +1023,39 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
     // Clamp to the viewport so the menu never opens off the right/bottom edge.
     const x = Math.min(e.clientX, window.innerWidth - 244);
     const y = Math.min(e.clientY, window.innerHeight - 150);
-    setMenu({ node, x, y, confirm: false });
+    setMenu({ node, x, y });
   };
-  const confirmDelete = () => { if (menu) Store.deleteFolder(menu.node); closeMenu(); };
+  // Closing the menu first, then confirming in the shared modal, keeps the flow
+  // consistent with deleting tandas and playlists.
+  const requestDelete = (node) => {
+    const n = countSongs(node);
+    // Removing these songs cascades into tandas: a tanda built entirely from
+    // this folder is emptied and auto-deleted by the main process, while a
+    // mixed tanda just loses these tracks. Warn about both up front so the DJ
+    // isn't surprised to find a set gone or silently shortened.
+    const delIds = new Set(collectSongIds(node).map(String));
+    const affected = (tandas || []).filter((t) =>
+      t.songs.some((s) => delIds.has(String(s.id))));
+    const emptied = affected.filter((t) =>
+      t.songs.every((s) => delIds.has(String(s.id))));
+    const shrunk = affected.length - emptied.length;
+    closeMenu();
+    ask({
+      title: "Remove this folder?",
+      message: (
+        <>
+          <div>Remove {n} song{n === 1 ? "" : "s"} from your library? Your files stay on disk.</div>
+          {affected.length > 0 && (
+            <div className="tp-modal-note">
+              <TandaImpact emptied={emptied} shrunk={shrunk} />
+            </div>
+          )}
+        </>
+      ),
+      confirmLabel: "Remove folder",
+      onConfirm: () => Store.deleteFolder(node),
+    });
+  };
 
   useEffect(() => {
     if (!menu) return;
@@ -530,69 +1071,36 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
     };
   }, [menu]);
 
-  // Open the root folders once the library has loaded (tree arrives async).
-  useEffect(() => {
-    if (tree.length) setOpenSet((s) => (s.size ? s : new Set(tree.map((n) => n.path))));
-  }, [tree]);
-
-  // Fuzzy + metadata search prunes the tree to matching folders/songs (best
-  // match first) and force-opens it. See the shared engine above.
-  const filtered = useMemo(() => searchTree(tree, q), [q, tree]);
-
-  const searching = !!q.trim();
-  const songProps = { builderIds, onAdd, makeDrag, draggingId, preview, library, onFolderContext: openMenu };
   const menuCount = menu ? countSongs(menu.node) : 0;
+  const ctxMenu = menu && (
+    <div className="tv-ctx" style={{ top: menu.y, left: menu.x }}
+      onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
+      <div className="tv-ctx-head">
+        <span className="fic"><I.folder s={14} /></span>
+        <span className="nm" title={menu.node.name}>{menu.node.name}</span>
+        <span className="ct">{menuCount} song{menuCount === 1 ? "" : "s"}</span>
+      </div>
+      <button className="tv-ctx-item del" onClick={() => requestDelete(menu.node)}>
+        <I.trash s={15} /> Remove folder from library
+      </button>
+    </div>
+  );
 
   return (
     <div className="tv-tree">
-      <div className="tv-tree-head">
-        <AdvancedSearch value={q} onChange={setQ}
-          placeholder="Search songs & folders… (try orq:di sarli, year:1940s)" />
-        {library && hint && <div className="tv-songs-hint">{hint}</div>}
-      </div>
-      <div className="tv-tree-scroll">
-        {filtered.length === 0 ? (
-          <div className="tp-empty">{searching ? "Nothing matches your search." : "No folders in your library yet."}</div>
-        ) : (
-          filtered.map((n) => (
-            <TreeNode key={n.path} node={n} depth={0} openSet={openSet} toggle={toggle} forceOpen={searching} songProps={songProps} />
-          ))
-        )}
-      </div>
-
-      {menu && (
-        <div className="tv-ctx" style={{ top: menu.y, left: menu.x }}
-          onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
-          <div className="tv-ctx-head">
-            <span className="fic"><I.folder s={14} /></span>
-            <span className="nm" title={menu.node.name}>{menu.node.name}</span>
-            <span className="ct">{menuCount} song{menuCount === 1 ? "" : "s"}</span>
-          </div>
-          {!menu.confirm ? (
-            <button className="tv-ctx-item del" onClick={() => setMenu((m) => ({ ...m, confirm: true }))}>
-              <I.trash s={15} /> Remove folder from library
-            </button>
-          ) : (
-            <div className="tv-ctx-confirm">
-              <div className="tv-ctx-msg">
-                Remove {menuCount} song{menuCount === 1 ? "" : "s"} from your library?
-                Your files stay on disk.
-              </div>
-              <div className="tv-ctx-actions">
-                <button className="tv-ctx-cancel" onClick={closeMenu}>Cancel</button>
-                <button className="tv-ctx-del" onClick={confirmDelete}><I.trash s={14} /> Remove</button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      <LibraryBrowser filters={filters} setFilters={setFilters} query={query} preview={preview} onFolderContext={openMenu}
+        library={library} builderIds={builderIds} onAdd={onAdd} makeDrag={makeDrag}
+        draggingId={draggingId} hint={hint} />
+      {ctxMenu}
+      {modal}
     </div>
   );
 }
 
 /* ============================ MANAGE GRID ============================ */
-function TandaCard({ t, onEdit, onDelete, preview }) {
+function TandaCard({ t, onEdit, onDelete, onPlay, preview }) {
   const m = tandaMeta(t);
+  const viaMonitor = preview && preview.viaMonitor;
   return (
     <div className="tv-tcard">
       <div className="tv-tcard-top">
@@ -624,6 +1132,12 @@ function TandaCard({ t, onEdit, onDelete, preview }) {
       </div>
       <div className="tv-tcard-foot">
         <div className="tv-tcard-total">{t.songs.length} songs · <b>{m.total}</b></div>
+        {onPlay && (
+          <button className="tv-tcbtn pl-play" onClick={(e) => { e.stopPropagation(); onPlay(t); }} disabled={!t.songs.length}
+            title={viaMonitor ? "Listen to full tanda in headphones (monitor)" : "Load this tanda into the live player"}>
+            {viaMonitor ? <I.headphones s={13} /> : <I.play s={13} />} Play tanda
+          </button>
+        )}
         <button className="tv-tcbtn" onClick={() => onEdit(t)}><I.pencil s={14} /> Edit</button>
         <button className="tv-tcbtn del" onClick={() => onDelete(t)} title="Delete tanda"><I.trash s={15} /></button>
       </div>
@@ -631,7 +1145,7 @@ function TandaCard({ t, onEdit, onDelete, preview }) {
   );
 }
 
-function ManageGrid({ tandas, onEdit, onDelete, onNew, preview }) {
+function ManageGrid({ tandas, onEdit, onDelete, onNew, onPlay, preview }) {
   if (!tandas.length) {
     return (
       <div className="tv-manage">
@@ -649,7 +1163,7 @@ function ManageGrid({ tandas, onEdit, onDelete, onNew, preview }) {
   return (
     <div className="tv-manage">
       <div className="tv-grid">
-        {tandas.map((t) => <TandaCard key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} preview={preview} />)}
+        {tandas.map((t) => <TandaCard key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} onPlay={onPlay} preview={preview} />)}
         <button className="tv-newcard" onClick={onNew}>
           <span className="ic"><I.plus s={22} /></span>
           <span className="lb">New tanda</span>
@@ -661,6 +1175,5 @@ function ManageGrid({ tandas, onEdit, onDelete, onNew, preview }) {
 
 Object.assign(window, {
   tandaMeta, tandaTypes, TandaLibCard, LibraryTree, ManageGrid,
-  // Shared song-search engine + input, reusable by any view (library, builder…).
-  AdvancedSearch, searchSongs, searchTree, parseSearch, scoreSong, fuzzyScore,
+  SongSearchBar, searchSongs, searchTree, buildSearchQuery, scoreSong, fuzzyScore, EMPTY_SEARCH,
 });
