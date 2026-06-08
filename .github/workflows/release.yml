@@ -41,7 +41,9 @@ jobs:
 
       - name: Build and publish
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Must be a PAT with `contents: write` on the public compas-releases
+          # repo — the default GITHUB_TOKEN can only write to this private repo.
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
           pnpm run build
           pnpm exec electron-builder build --config electron-builder.mjs --${{ matrix.platform }} --publish always

@@ -33,6 +33,7 @@ pnpm run build                      # build all workspaces (no packaging)
 pnpm run compile                    # package for the current OS (all configured targets)
 pnpm run compile:mac                # macOS only: arm64 + x64 dmg/zip
 pnpm run compile:win                # Windows only: x64 + arm64 NSIS installers
+                                    # (on macOS, run `pnpm run rebuild` afterward before `pnpm start`)
 pnpm run compile:dir                # unpacked app dir (faster, for debugging)
 ```
 

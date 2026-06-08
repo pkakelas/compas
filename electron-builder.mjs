@@ -12,6 +12,10 @@ export default /** @type import('electron-builder').Configuration */
   executableName: 'Compas',
   publish: {
     provider: 'github',
+    // Source lives in the private `compas` repo; binaries are published to a
+    // separate public repo so the marketing site can link to them anonymously.
+    owner: 'pkakelas',
+    repo: 'compas-releases',
     releaseType: 'release',
   },
   directories: {

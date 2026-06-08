@@ -1,6 +1,6 @@
 import type {AppModule} from '../AppModule.js';
 import {ModuleContext} from '../ModuleContext.js';
-import {BrowserWindow} from 'electron';
+import {BrowserWindow, Menu} from 'electron';
 import type {AppInitConfig} from '../AppInitConfig.js';
 
 class WindowManager implements AppModule {
@@ -16,6 +16,14 @@ class WindowManager implements AppModule {
 
   async enable({app}: ModuleContext): Promise<void> {
     await app.whenReady();
+
+    // On Windows/Linux the default app menu (File, Edit, View, Window, Help) is
+    // drawn inside the window. Remove it there; keep the native menu on macOS
+    // where it lives in the global menu bar and provides standard shortcuts.
+    if (process.platform !== 'darwin') {
+      Menu.setApplicationMenu(null);
+    }
+
     await this.restoreOrCreateWindow(true);
     app.on('second-instance', () => this.restoreOrCreateWindow(true));
     app.on('activate', () => this.restoreOrCreateWindow(true));
@@ -30,6 +38,7 @@ class WindowManager implements AppModule {
       minHeight: 600,
       backgroundColor: '#f0eee9',
       title: 'Compás',
+      autoHideMenuBar: true,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
