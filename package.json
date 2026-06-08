@@ -16,6 +16,7 @@
   "engines": {
     "node": ">=23.0.0"
   },
+  "packageManager": "pnpm@10.29.2",
   "scripts": {
     "build": "pnpm -r --if-present run build",
     "compile": "pnpm run build && pnpm exec electron-builder build --config electron-builder.mjs",
