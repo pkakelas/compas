@@ -3,6 +3,10 @@
   "description": "Compás — a tango DJ player. Live player + tanda builder, built on the vite-electron-builder template.",
   "version": "0.1.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pkakelas/compas.git"
+  },
   "type": "module",
   "main": "packages/entry-point.mjs",
   "workspaces": [
