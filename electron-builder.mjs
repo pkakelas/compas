@@ -31,18 +31,25 @@ export default /** @type import('electron-builder').Configuration */
   },
   mac: {
     category: 'public.app-category.music',
-    target: ['dmg', 'zip'],
     // Ship both Apple Silicon and Intel installers from the macOS CI runner.
-    arch: ['arm64', 'x64'],
+    target: [
+      {target: 'dmg', arch: ['arm64', 'x64']},
+      {target: 'zip', arch: ['arm64', 'x64']},
+    ],
     extendInfo: {
       CFBundleDisplayName: 'Compás',
     },
   },
   win: {
-    target: ['nsis'],
+    // Ship both 64-bit Intel/AMD and ARM Windows installers.
+    target: [
+      {target: 'nsis', arch: ['x64', 'arm64']},
+    ],
   },
   nsis: {
     shortcutName: 'Compás',
+    oneClick: false,
+    allowToChangeInstallationDirectory: true,
   },
   linux: {
     target: ['deb'],

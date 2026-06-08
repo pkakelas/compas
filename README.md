@@ -30,9 +30,14 @@ pnpm start       # dev mode with hot reload
 
 ```bash
 pnpm run build                      # build all workspaces (no packaging)
-pnpm run compile                    # build + package with electron-builder → /dist
-pnpm run compile -- --dir           # package unpacked (faster, for debugging)
+pnpm run compile                    # package for the current OS (all configured targets)
+pnpm run compile:mac                # macOS only: arm64 + x64 dmg/zip
+pnpm run compile:win                # Windows only: x64 + arm64 NSIS installers
+pnpm run compile:dir                # unpacked app dir (faster, for debugging)
 ```
+
+Platform flags must use the scripts above — `pnpm run compile -- --mac` does not
+reach electron-builder because the `compile` script chains commands with `&&`.
 
 Config lives in `electron-builder.mjs`. App icons are in `buildResources/`.
 
@@ -60,18 +65,19 @@ marketing site should link there — Vercel is great for the site, but large
 |----------|------|
 | macOS (Apple Silicon) | `Compas-{version}-mac-arm64.dmg` |
 | macOS (Intel) | `Compas-{version}-mac-x64.dmg` |
-| Windows | `Compas-{version}-win-x64.exe` |
+| Windows (Intel/AMD) | `Compas-{version}-win-x64.exe` |
+| Windows (ARM) | `Compas-{version}-win-arm64.exe` |
 
-**Download links on Vercel** — point buttons at GitHub (replace `OWNER/REPO`):
+**Download links on Vercel** — point buttons at GitHub:
 
 ```html
-<a href="https://github.com/OWNER/REPO/releases/latest/download/Compas-0.2.0-mac-arm64.dmg">
+<a href="https://github.com/pkakelas/compas/releases/latest/download/Compas-0.2.0-mac-arm64.dmg">
   Download for Mac (Apple Silicon)
 </a>
-<a href="https://github.com/OWNER/REPO/releases/latest/download/Compas-0.2.0-mac-x64.dmg">
+<a href="https://github.com/pkakelas/compas/releases/latest/download/Compas-0.2.0-mac-x64.dmg">
   Download for Mac (Intel)
 </a>
-<a href="https://github.com/OWNER/REPO/releases/latest/download/Compas-0.2.0-win-x64.exe">
+<a href="https://github.com/pkakelas/compas/releases/latest/download/Compas-0.2.0-win-x64.exe">
   Download for Windows
 </a>
 ```
