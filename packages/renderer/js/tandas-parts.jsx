@@ -1097,16 +1097,216 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
   );
 }
 
+/* ============================ TANDA SEARCH ============================
+ * Search saved tandas (and suggestions) by the same facets a DJ thinks in:
+ *
+ *   • Free text — fuzzy match across the tanda name, its orchestras/singers
+ *     and every song title (reuses scoreText from the song search).
+ *   • Dropdown filters — orquesta, singer, type and year, each drawn from the
+ *     tandas on screen; every dropdown narrows to values that still match the
+ *     others. Combined with free text (all must match).
+ *
+ * A tanda is multi-song, so a facet matches when *any* of its songs qualifies
+ * (e.g. a Di Sarli tanda matches the "Di Sarli" orchestra filter). "Type" is
+ * the DJ-assigned classification when present, falling back to the songs'
+ * genres. */
+
+const EMPTY_TANDA_SEARCH = { text: "", orq: "", singer: "", type: "", year: "", mood: "" };
+
+// Orchestras the tanda draws on. Prefer the songs' own orq, but fall back to the
+// tanda's "orquesta" tag for libraries not yet Smart-Organized — there the songs
+// carry no artist metadata and the orchestra lives on the tanda (this is also
+// what the cards display), so without it the orchestra filter would miss them.
+function tandaOrqList(t) {
+  const fromSongs = [...new Set((t.songs || []).map((s) => (s.orq || "").trim()).filter(Boolean))];
+  if (fromSongs.length) return fromSongs;
+  return [...new Set((t.tags || []).filter((g) => g.cat === "orquesta").map((g) => (g.label || "").trim()).filter(Boolean))];
+}
+function tandaSingerList(t) { return [...new Set((t.songs || []).map((s) => (s.singer || "").trim()).filter(Boolean))]; }
+function tandaYearList(t) { return [...new Set((t.songs || []).map((s) => s.year).filter(Boolean).map(String))]; }
+// Type values are lowercased so they line up with the song-genre vocabulary and
+// render through genreLabel(); prefer the DJ's "type" tags, else infer from genre.
+function tandaTypeList(t) {
+  const tags = tandaTypes(t);
+  if (tags.length) return tags;
+  return [...new Set((t.songs || []).map((s) => (s.genre || "").toLowerCase()).filter(Boolean))];
+}
+// Mood is purely a DJ-assigned tag (Rhythmic / Lyrical / Dramatic …) — no
+// song-level fallback, and kept in its original case for display.
+function tandaMoodList(t) {
+  return [...new Set((t.tags || []).filter((g) => g.cat === "mood").map((g) => (g.label || "").trim()).filter(Boolean))];
+}
+
+// Everything a bare search word is fuzzy-matched against for a tanda.
+function tandaHaystack(t) {
+  const m = tandaMeta(t);
+  const parts = [t.name, m.orq, m.singer];
+  for (const s of t.songs || []) parts.push(s.title, s.orq, s.singer);
+  for (const tg of t.tags || []) parts.push(tg.label);
+  return parts.map(_norm).filter(Boolean).join("  ");
+}
+
+// Does a tanda satisfy the active dropdown filters? `omit` drops one facet (used
+// when building that facet's option list from the others' selections).
+function tandaMatchesDropdownFilters(t, filters, omit) {
+  if (omit !== "orq" && filters.orq && !tandaOrqList(t).includes(filters.orq)) return false;
+  if (omit !== "singer" && filters.singer && !tandaSingerList(t).includes(filters.singer)) return false;
+  if (omit !== "type" && filters.type && !tandaTypeList(t).includes(filters.type)) return false;
+  if (omit !== "year" && filters.year && !tandaYearList(t).includes(String(filters.year))) return false;
+  if (omit !== "mood" && filters.mood && !tandaMoodList(t).includes(filters.mood)) return false;
+  return true;
+}
+
+// Unique orquesta / singer / type / year values for the tanda dropdowns, each
+// scoped to tandas that match the other active filters.
+function buildTandaFilterOptions(tandas, filters = EMPTY_TANDA_SEARCH) {
+  const cmp = (a, b) => a.localeCompare(b, undefined, { sensitivity: "base" });
+  const orqs = new Set(), singers = new Set(), types = new Set(), years = new Set(), moods = new Set();
+  for (const t of tandas || []) {
+    if (tandaMatchesDropdownFilters(t, filters, "orq")) tandaOrqList(t).forEach((o) => orqs.add(o));
+    if (tandaMatchesDropdownFilters(t, filters, "singer")) tandaSingerList(t).forEach((s) => singers.add(s));
+    if (tandaMatchesDropdownFilters(t, filters, "type")) tandaTypeList(t).forEach((v) => types.add(v));
+    if (tandaMatchesDropdownFilters(t, filters, "year")) tandaYearList(t).forEach((y) => years.add(y));
+    if (tandaMatchesDropdownFilters(t, filters, "mood")) tandaMoodList(t).forEach((mo) => moods.add(mo));
+  }
+  return {
+    orchestras: [...orqs].sort(cmp),
+    singers: [...singers].sort(cmp),
+    types: [...types].sort((a, b) =>
+      ((GENRE_ORDER[genreLabel(a)] ?? 99) - (GENRE_ORDER[genreLabel(b)] ?? 99)) || cmp(genreLabel(a), genreLabel(b)))
+      .map((v) => ({ value: v, label: genreLabel(v) })),
+    years: [...years].sort((a, b) => parseInt(b, 10) - parseInt(a, 10)),
+    moods: [...moods].sort(cmp),
+  };
+}
+
+function tandaSearchActive(filters) {
+  return !!(_norm(filters.text || "").trim() || filters.orq || filters.singer || filters.type || filters.year || filters.mood);
+}
+
+// Filter + rank tandas. Empty query returns the list unchanged (original order);
+// a text query sorts best match first, dropdown-only filters keep DJ order.
+function searchTandas(tandas, filters = EMPTY_TANDA_SEARCH) {
+  const list = tandas || [];
+  if (!tandaSearchActive(filters)) return list.slice();
+  const words = _norm(filters.text || "").trim().split(/\s+/).filter(Boolean);
+  const hits = [];
+  for (const t of list) {
+    if (!tandaMatchesDropdownFilters(t, filters)) continue;
+    let score = 0, ok = true;
+    if (words.length) {
+      const hay = tandaHaystack(t);
+      for (const w of words) {
+        const s = scoreText(w, hay);
+        if (s < 0) { ok = false; break; }
+        score += s;
+      }
+    }
+    if (ok) hits.push({ t, score });
+  }
+  if (words.length) hits.sort((a, b) => b.score - a.score);
+  return hits.map((h) => h.t);
+}
+
+// Drop dropdown values that no longer exist after another filter changed.
+function sanitizeTandaFilters(filters, tandas) {
+  let next = null, again = true;
+  while (again) {
+    again = false;
+    const cur = next || filters;
+    for (const [key, listKey, valOf] of [
+      ["orq", "orchestras", (o) => o],
+      ["singer", "singers", (o) => o],
+      ["type", "types", (o) => o.value],
+      ["year", "years", (o) => o],
+      ["mood", "moods", (o) => o],
+    ]) {
+      if (!cur[key]) continue;
+      const allowed = buildTandaFilterOptions(tandas, { ...cur, [key]: "" })[listKey].map(valOf);
+      if (!allowed.includes(cur[key])) {
+        if (!next) next = { ...filters };
+        next[key] = "";
+        again = true;
+      }
+    }
+  }
+  return next || filters;
+}
+
+/* Search + filter toolbar for the manage view's tanda grid/list. Mirrors the
+ * library's SongSearchBar but over tanda facets (no sort — tandas keep DJ order). */
+function TandaSearchBar({ filters, onChange, options, countLabel }) {
+  const inputRef = useRef(null);
+  const set = (key, val) => onChange({ ...filters, [key]: val });
+  const clearText = () => { set("text", ""); inputRef.current && inputRef.current.focus(); };
+  const clearFilters = () => onChange({ ...filters, orq: "", singer: "", type: "", year: "", mood: "" });
+  const hasFilters = !!(filters.orq || filters.singer || filters.type || filters.year || filters.mood);
+  return (
+    <div className="tv-searchbar">
+      <label className="tp-search tv-search-input">
+        <I.search s={15} />
+        <input ref={inputRef} value={filters.text}
+          onChange={(e) => set("text", e.target.value)}
+          placeholder="Search tandas by name, orchestra, singer…" />
+        {filters.text ? (
+          <button type="button" className="tv-search-clear" onClick={clearText} title="Clear search">
+            <I.x s={13} />
+          </button>
+        ) : null}
+      </label>
+      <div className="tv-search-toolbar">
+        <div className="tv-search-filters">
+          <SearchableSelect placeholder="Orchestra" allLabel="All orchestras" value={filters.orq}
+            onChange={(v) => set("orq", v)} options={options.orchestras}
+            disabled={hasFilters && options.orchestras.length === 0} />
+          <SearchableSelect placeholder="Singer" allLabel="All singers" value={filters.singer}
+            onChange={(v) => set("singer", v)} options={options.singers}
+            disabled={hasFilters && options.singers.length === 0} />
+          <SearchableSelect placeholder="Type" allLabel="All types" value={filters.type}
+            onChange={(v) => set("type", v)} options={options.types}
+            disabled={hasFilters && options.types.length === 0} />
+          <SearchableSelect placeholder="Year" allLabel="All years" value={filters.year}
+            onChange={(v) => set("year", v)} options={options.years}
+            disabled={hasFilters && options.years.length === 0} />
+          <SearchableSelect placeholder="Mood" allLabel="All moods" value={filters.mood}
+            onChange={(v) => set("mood", v)} options={options.moods}
+            disabled={hasFilters && options.moods.length === 0} />
+          {hasFilters ? (
+            <button type="button" className="tv-search-reset" onClick={clearFilters}>Clear filters</button>
+          ) : null}
+        </div>
+        <div className="tv-search-actions">
+          {countLabel ? <span className="tv-count">{countLabel}</span> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ============================ MANAGE GRID ============================ */
-function TandaCard({ t, onEdit, onDelete, onPlay, preview }) {
+function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, onDismiss }) {
   const m = tandaMeta(t);
   const viaMonitor = preview && preview.viaMonitor;
+  // Suggestions have no stored name, so generate a DJ-style one from their songs
+  // (same helper the builder offers). The orquesta tag is the fallback orchestra
+  // for libraries that haven't been Smart-Organized. Saved tandas keep their name.
+  const orqTag = suggested ? (t.tags || []).find((g) => g.cat === "orquesta") : null;
+  const displayName = suggested
+    ? (suggestTandaName(t.songs, orqTag && orqTag.label) || (orqTag && orqTag.label) || m.orq)
+    : (t.name || m.orq);
+  const showSub = !suggested && (t.name || m.singer);
   return (
-    <div className="tv-tcard">
+    <div className={"tv-tcard" + (suggested ? " suggested" : "")}>
       <div className="tv-tcard-top">
         <div className="tv-tcard-orq">
-          <div className="o">{t.name || m.orq}</div>
-          {(t.name || m.singer) && (
+          {suggested && (
+            <div className={"tv-suggest-pill" + (t.saved ? " is-saved" : "")}
+              title={t.saved ? "Already in your tandas" : "Suggested from songs in your library — save it to keep, or dismiss it"}>
+              {t.saved ? "Saved" : "Suggested"}
+            </div>
+          )}
+          <div className="o">{displayName}</div>
+          {showSub && (
             <div className="sub">{[t.name ? m.orq : null, m.singer || null].filter(Boolean).join(" · ")}</div>
           )}
           {t.tags && t.tags.length > 0 && (
@@ -1138,42 +1338,212 @@ function TandaCard({ t, onEdit, onDelete, onPlay, preview }) {
             {viaMonitor ? <I.headphones s={13} /> : <I.play s={13} />} Play tanda
           </button>
         )}
-        <button className="tv-tcbtn" onClick={() => onEdit(t)}><I.pencil s={14} /> Edit</button>
-        <button className="tv-tcbtn del" onClick={() => onDelete(t)} title="Delete tanda"><I.trash s={15} /></button>
+        {suggested ? (
+          <>
+            {t.saved ? (
+              <span className="tv-tcbtn save is-saved" title="Already in your tandas"><I.check s={14} /> Saved</span>
+            ) : (
+              <button className="tv-tcbtn save" onClick={() => onSave(t)} title="Save this tanda to your collection"><I.check s={14} /> Save</button>
+            )}
+            <button className="tv-tcbtn del" onClick={() => onDismiss(t)} title="Dismiss this suggestion"><I.x s={15} /></button>
+          </>
+        ) : (
+          <>
+            <button className="tv-tcbtn" onClick={() => onEdit(t)}><I.pencil s={14} /> Edit</button>
+            <button className="tv-tcbtn del" onClick={() => onDelete(t)} title="Delete tanda"><I.trash s={15} /></button>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-function ManageGrid({ tandas, onEdit, onDelete, onNew, onPlay, preview }) {
+/* Full-width list row — an alternative to the grid card for when long song
+ * titles (often with the orquesta/year prepended) get truncated in the narrow
+ * columns. Here each song gets the full row width, so it reads in full. */
+function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, onDismiss }) {
+  const m = tandaMeta(t);
+  const viaMonitor = preview && preview.viaMonitor;
+  const orqTag = suggested ? (t.tags || []).find((g) => g.cat === "orquesta") : null;
+  const displayName = suggested
+    ? (suggestTandaName(t.songs, orqTag && orqTag.label) || (orqTag && orqTag.label) || m.orq)
+    : (t.name || m.orq);
+  const sub = suggested ? null : [t.name ? m.orq : null, m.singer || null].filter(Boolean).join(" · ");
+  return (
+    <div className={"tv-litem" + (suggested ? " suggested" : "")}>
+      <div className="tv-litem-head">
+        <div className="tv-litem-id">
+          {suggested && (
+            <span className={"tv-suggest-pill" + (t.saved ? " is-saved" : "")}
+              title={t.saved ? "Already in your tandas" : "Suggested from songs in your library — save it to keep, or dismiss it"}>
+              {t.saved ? "Saved" : "Suggested"}
+            </span>
+          )}
+          <div className="tv-litem-name">{displayName}</div>
+          {sub && <div className="tv-litem-sub">{sub}</div>}
+          {t.tags && t.tags.length > 0 && <TagPills tags={t.tags} />}
+        </div>
+        <div className="tv-litem-meta">{t.songs.length} {t.songs.length === 1 ? "song" : "songs"} · <b>{m.total}</b></div>
+        <div className="tv-litem-actions">
+          {onPlay && (
+            <button className="tv-tcbtn pl-play" onClick={(e) => { e.stopPropagation(); onPlay(t); }} disabled={!t.songs.length}
+              title={viaMonitor ? "Listen to full tanda in headphones (monitor)" : "Load this tanda into the live player"}>
+              {viaMonitor ? <I.headphones s={13} /> : <I.play s={13} />} Play
+            </button>
+          )}
+          {suggested ? (
+            <>
+              {t.saved ? (
+                <span className="tv-tcbtn save is-saved" title="Already in your tandas"><I.check s={14} /> Saved</span>
+              ) : (
+                <button className="tv-tcbtn save" onClick={() => onSave(t)} title="Save this tanda to your collection"><I.check s={14} /> Save</button>
+              )}
+              <button className="tv-tcbtn del" onClick={() => onDismiss(t)} title="Dismiss this suggestion"><I.x s={15} /></button>
+            </>
+          ) : (
+            <>
+              <button className="tv-tcbtn" onClick={() => onEdit(t)}><I.pencil s={14} /> Edit</button>
+              <button className="tv-tcbtn del" onClick={() => onDelete(t)} title="Delete tanda"><I.trash s={15} /></button>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="tv-litem-songs">
+        {t.songs.map((s, i) => {
+          const isPlaying = preview && preview.previewId === s.id && preview.playing;
+          return (
+            <div key={s.id + i} className={"tv-lsong" + (preview ? " is-clickable" : "") + (isPlaying ? " playing" : "")}
+              onClick={preview ? () => preview.toggle(s) : undefined}
+              title={previewTitle(preview, isPlaying)}>
+              <span className="n"><PreviewGlyph preview={preview} playing={isPlaying} n={i + 1} s={11} /></span>
+              <span className="t">{s.title}</span>
+              <span className="d">{s.dur}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew, onPlay, onSaveSuggestion, onDismissSuggestion, onBrowseSuggestions, preview, view = "grid" }) {
+  const suggs = suggestions || [];
+  const list = view === "list";
+  const wrapCls = list ? "tv-list" : "tv-grid";
+
+  // Search state is kept per-tab so switching tabs starts fresh. The source is
+  // whichever collection this tab shows; filtering runs over it client-side.
+  const source = tab === "suggestions" ? suggs : tandas;
+  const [filters, setFilters] = useState(EMPTY_TANDA_SEARCH);
+  useEffect(() => { setFilters(EMPTY_TANDA_SEARCH); }, [tab]);
+  const debouncedText = useDebounced(filters.text, 150);
+  const dropFilters = [filters.orq, filters.singer, filters.type, filters.year, filters.mood];
+  const options = useMemo(() => buildTandaFilterOptions(source, filters), [source, ...dropFilters]);
+  const setFiltersSafe = (next) => setFilters(sanitizeTandaFilters(next, source));
+  const activeFilters = useMemo(() => ({ ...filters, text: debouncedText }), [debouncedText, ...dropFilters]);
+  const filtered = useMemo(() => searchTandas(source, activeFilters), [source, activeFilters]);
+  const searching = tandaSearchActive(activeFilters);
+  const countLabel = searching
+    ? (filtered.length ? `${filtered.length} tanda${filtered.length === 1 ? "" : "s"}` : "No matches")
+    : "";
+
+  // Pinned, non-scrolling header (same class the library search uses) so the
+  // search/filter bar stays on top while the grid scrolls beneath it.
+  const searchBar = (
+    <div className="tv-tree-head">
+      <TandaSearchBar filters={filters} onChange={setFiltersSafe} options={options} countLabel={countLabel} />
+    </div>
+  );
+  const noMatch = (
+    <div className="tp-empty">No tandas match your search.</div>
+  );
+
+  // ---- Suggestions tab ----
+  if (tab === "suggestions") {
+    if (!suggs.length) {
+      return (
+        <div className="tv-manage">
+          <div className="tv-empty-manage">
+            <div className="ic"><I.spark s={26} /></div>
+            <h3>No suggestions yet</h3>
+            <p>We build these by matching classic tandas against your library. Import more music — or run Smart Organize so we can read your orchestras and years — and they'll show up here.</p>
+          </div>
+        </div>
+      );
+    }
+    const Item = list ? TandaListItem : TandaCard;
+    return (
+      <>
+        {searchBar}
+        <div className="tv-manage">
+          {filtered.length ? (
+            <div className={wrapCls}>
+              {filtered.map((t) => (
+                <Item key={t.id} t={t} onPlay={onPlay} preview={preview}
+                  suggested onSave={onSaveSuggestion} onDismiss={onDismissSuggestion} />
+              ))}
+            </div>
+          ) : noMatch}
+        </div>
+      </>
+    );
+  }
+
+  // ---- My tandas tab ----
   if (!tandas.length) {
     return (
       <div className="tv-manage">
         <div className="tv-empty-manage">
           <div className="ic"><I.scissor s={26} /></div>
           <h3>No tandas yet</h3>
-          <p>Build your first tanda from the songs you imported.</p>
-          <button className="tv-save" style={{ width: 200, margin: "0 auto" }} onClick={onNew}>
-            <I.plus s={17} /> Build a tanda
-          </button>
+          <p>Build your first tanda from the songs you imported{suggs.length ? ", or start from a suggestion" : ""}.</p>
+          <div className="tv-empty-actions">
+            <button className="tv-save" onClick={onNew}><I.plus s={17} /> Build a tanda</button>
+            {suggs.length > 0 && (
+              <button className="tv-reimport" onClick={onBrowseSuggestions}><I.spark s={16} /> Browse {suggs.length} suggestion{suggs.length === 1 ? "" : "s"}</button>
+            )}
+          </div>
         </div>
       </div>
     );
   }
+  if (list) {
+    return (
+      <>
+        {searchBar}
+        <div className="tv-manage">
+          {filtered.length ? (
+            <div className="tv-list">
+              {filtered.map((t) => <TandaListItem key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} onPlay={onPlay} preview={preview} />)}
+              {!searching && <button className="tv-newrow" onClick={onNew}><I.plus s={17} /> New tanda</button>}
+            </div>
+          ) : noMatch}
+        </div>
+      </>
+    );
+  }
   return (
-    <div className="tv-manage">
-      <div className="tv-grid">
-        {tandas.map((t) => <TandaCard key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} onPlay={onPlay} preview={preview} />)}
-        <button className="tv-newcard" onClick={onNew}>
-          <span className="ic"><I.plus s={22} /></span>
-          <span className="lb">New tanda</span>
-        </button>
+    <>
+      {searchBar}
+      <div className="tv-manage">
+        {filtered.length ? (
+          <div className="tv-grid">
+            {filtered.map((t) => <TandaCard key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} onPlay={onPlay} preview={preview} />)}
+            {!searching && (
+              <button className="tv-newcard" onClick={onNew}>
+                <span className="ic"><I.plus s={22} /></span>
+                <span className="lb">New tanda</span>
+              </button>
+            )}
+          </div>
+        ) : noMatch}
       </div>
-    </div>
+    </>
   );
 }
 
 Object.assign(window, {
   tandaMeta, tandaTypes, TandaLibCard, LibraryTree, ManageGrid,
   SongSearchBar, searchSongs, searchTree, buildSearchQuery, scoreSong, fuzzyScore, EMPTY_SEARCH,
+  TandaSearchBar, searchTandas, buildTandaFilterOptions, EMPTY_TANDA_SEARCH,
 });

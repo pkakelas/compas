@@ -43,6 +43,11 @@ let _state = {
   totalFolders: 0,
   roots: [],
   tandas: [],
+  // Curated tandas the DJ fully owns, matched against their library in the main
+  // process. Virtual (not in the DB): they seed the otherwise-empty Tandas page
+  // and can be saved (kept) or dismissed. Recomputed whenever the library or the
+  // saved tandas change (see _set below).
+  suggestions: [],
   playlists: [],
   imported: false,
   // Background loudness/silence analysis progress (drives the "still processing"
@@ -50,9 +55,36 @@ let _state = {
   analysis: { running: false, total: 0, completed: 0, failed: 0 },
 };
 const _subs = new Set();
+
+/* ---------- suggested tandas (virtual, library-derived) ---------- */
+const DISMISS_KEY = "compas.dismissedSuggestions";
+function _dismissedSet() {
+  try { return new Set(JSON.parse(localStorage.getItem(DISMISS_KEY) || "[]")); }
+  catch (_e) { return new Set(); }
+}
+// Coalesce the bursty library+tandas updates (e.g. _applyLibrary then a tandas
+// _set) into a single suggestion fetch on the next microtask.
+let _suggestPending = false;
+function _scheduleSuggest() {
+  if (_suggestPending) return;
+  if (!window.compas || !window.compas.suggestTandas) return;
+  _suggestPending = true;
+  Promise.resolve().then(async () => {
+    _suggestPending = false;
+    try {
+      const list = await window.compas.suggestTandas();
+      const dismissed = _dismissedSet();
+      _set({ suggestions: (list || []).filter((s) => !dismissed.has(s.refId)) });
+    } catch (_e) { /* older main without the handler — leave suggestions empty */ }
+  });
+}
+
 function _set(patch) {
   _state = { ..._state, ...patch };
   _subs.forEach((fn) => fn());
+  // Suggestions depend on the library (songs) and the saved tandas (for dedup);
+  // refresh them whenever either changes, but never recurse on our own update.
+  if (("songs" in patch || "tandas" in patch) && !("suggestions" in patch)) _scheduleSuggest();
 }
 function _applyLibrary(lib) {
   const songs = (lib && lib.songs) || [];
@@ -232,6 +264,25 @@ const Store = {
   // Optimistic local replacement used by the undo flow (no DB round-trip).
   setTandasLocal(tandas) {
     _set({ tandas });
+  },
+  // Hide a suggested tanda for good (persisted), so it won't reappear on the
+  // next match. Suggestions are virtual, so this never touches the database.
+  dismissSuggestion(refId) {
+    if (!refId) return;
+    const set = _dismissedSet();
+    set.add(refId);
+    try { localStorage.setItem(DISMISS_KEY, JSON.stringify([...set])); } catch (_e) { /* ignore */ }
+    _set({ suggestions: (_state.suggestions || []).filter((s) => s.refId !== refId) });
+  },
+  // Keep a suggestion: save it as a real tanda. The follow-up refresh dedupes it
+  // out of the suggestions list automatically.
+  async keepSuggestion(t) {
+    if (!t || !t.songs || !t.songs.length) return null;
+    return await this.saveTanda({
+      name: t.name || null,
+      songIds: t.songs.map((s) => s.id),
+      tags: (t.tags || []).slice(),
+    });
   },
   async savePlaylist(input) {
     const saved = await window.compas.savePlaylist(input);

@@ -152,12 +152,52 @@ function BuilderBench({ builder, api, width, preview }) {
   );
 }
 
+/* One-time nudge introducing suggested tandas, mirroring the Smart Organize tip
+ * on the Library view. Dismissal is remembered in localStorage so it shows once. */
+const SUGGEST_TIP_KEY = "compas.suggestTandasTipDismissed";
+
+function SuggestTandasTip({ suggestions, onDismiss, onBrowse }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); onDismiss(); } };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onDismiss]);
+  // A few distinct orchestras we matched, shown as concrete chips.
+  const orchestras = [];
+  const seen = new Set();
+  for (const t of suggestions) {
+    const o = (t.tags || []).find((g) => g.cat === "orquesta");
+    if (o && o.label && !seen.has(o.label)) { seen.add(o.label); orchestras.push(o.label); }
+    if (orchestras.length >= 4) break;
+  }
+  return (
+    <div className="tp-modal-scrim" onMouseDown={onDismiss}>
+      <div className="sotip" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
+        <button className="sotip-x" onClick={onDismiss} title="Dismiss"><I.x s={16} /></button>
+        <div className="sotip-badge"><I.spark s={24} /></div>
+        <div className="sotip-title">Tandas from your library</div>
+        <div className="sotip-sub">
+          We cross-checked your songs against classic tandas and lined up {suggestions.length} you can
+          play right now — every track is one you already own.
+        </div>
+        {orchestras.length > 0 && (
+          <div className="sotip-chips">{orchestras.map((o) => <span key={o}>{o}</span>)}</div>
+        )}
+        <div className="sotip-actions">
+          <button className="sotip-go" onClick={onBrowse}><I.spark s={15} /> Browse suggestions</button>
+          <span className="sotip-safe"><I.check s={13} /> Save the ones you like, dismiss the rest</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ============================ TANDAS VIEW (orchestrator) ============================ */
 const BUILDER_MIN_W = 300;
 const BUILDER_MAX_W = 640;
 
 function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthChange }) {
-  const { imported, tandas, totalSongs, totalFolders, roots } = useStore();
+  const { imported, tandas, suggestions, totalSongs, totalFolders, roots } = useStore();
   const goBuild = () => onNavigate && onNavigate("Builder");
   const goManage = () => onNavigate && onNavigate("Tandas");
   const [builder, setBuilder] = useState({ songs: [], name: "", tags: [], editingId: null });
@@ -171,6 +211,21 @@ function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthCh
   // Live dock width while dragging the divider; seeded from the persisted tweak.
   const [dockW, setDockW] = useState(builderWidth || 380);
   useEffect(() => { setDockW(builderWidth || 380); }, [builderWidth]);
+
+  // Manage view sub-tabs: the DJ's saved tandas vs. library-matched suggestions.
+  const [manageTab, setManageTab] = useState("mine");
+  const sugg = suggestions || [];
+
+  // One-time intro to suggested tandas (like the Smart Organize tip). Its CTA
+  // jumps straight to the Suggestions tab.
+  const [suggestTipDismissed, setSuggestTipDismissed] = useState(() => localStorage.getItem(SUGGEST_TIP_KEY) === "1");
+  const dismissSuggestTip = () => { localStorage.setItem(SUGGEST_TIP_KEY, "1"); setSuggestTipDismissed(true); };
+  const browseSuggestions = () => { setManageTab("suggestions"); dismissSuggestTip(); };
+
+  // Grid vs. list layout for the manage view. List gives each song the full row
+  // width, so long titles (often with the orquesta prepended) don't truncate.
+  const [tandaView, setTandaView] = useState(() => localStorage.getItem("compas.tandaView") === "list" ? "list" : "grid");
+  useEffect(() => { localStorage.setItem("compas.tandaView", tandaView); }, [tandaView]);
 
   /* ---- builder api ---- */
   const inBuilder = new Set(builder.songs.map((s) => s.id));
@@ -220,6 +275,16 @@ function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthCh
     });
   };
 
+  // Saving a suggestion adds it to "My tandas"; the suggestion card stays put on
+  // the Suggestions tab and flips to a "Saved" state on the next refresh.
+  const saveSuggestion = (t) => {
+    const orqTag = (t.tags || []).find((g) => g.cat === "orquesta");
+    const name = t.name || suggestTandaName(t.songs, orqTag && orqTag.label) || (orqTag && orqTag.label) || null;
+    Store.keepSuggestion({ ...t, name });
+    flash("Tanda saved to your collection");
+  };
+  const dismissSuggestion = (t) => Store.dismissSuggestion(t.refId);
+
   const makeDrag = (s) => ({
     onDragStart: (e) => { e.dataTransfer.setData("text/plain", "song:" + s.id); e.dataTransfer.effectAllowed = "copy"; setDraggingId(s.id); },
     onDragEnd: () => setDraggingId(null),
@@ -235,21 +300,47 @@ function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthCh
   const header = (
     <div className="tv-head">
       <div>
-        <div className="tv-title">{mode === "build" ? "Tanda builder" : "My tandas"}</div>
-        <div className="tv-sub">
-          {mode === "build" ? (
-            <><b>{totalSongs}</b> songs across <b>{totalFolders}</b> folders
-              {roots && roots.length > 1 && <> in <b>{roots.length}</b> libraries</>}</>
-          ) : (
-            <><b>{tandas.length}</b> {tandas.length === 1 ? "tanda" : "tandas"} in your collection</>
-          )}
-        </div>
+        {mode === "build" ? (
+          <>
+            <div className="tv-title">Tanda builder</div>
+            <div className="tv-sub">
+              <b>{totalSongs}</b> songs across <b>{totalFolders}</b> folders
+              {roots && roots.length > 1 && <> in <b>{roots.length}</b> libraries</>}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="tv-subtabs" role="tablist">
+              <button className={"tv-subtab" + (manageTab === "mine" ? " on" : "")} role="tab" aria-selected={manageTab === "mine"}
+                onClick={() => setManageTab("mine")}>
+                My tandas {tandas.length > 0 && <span className="ct">{tandas.length}</span>}
+              </button>
+              <button className={"tv-subtab" + (manageTab === "suggestions" ? " on" : "")} role="tab" aria-selected={manageTab === "suggestions"}
+                onClick={() => setManageTab("suggestions")}>
+                Suggestions {sugg.length > 0 && <span className="ct">{sugg.length}</span>}
+              </button>
+            </div>
+            <div className="tv-sub">
+              {manageTab === "mine"
+                ? "Tandas you've saved to your collection"
+                : "Built from songs already in your library — every track is one you own"}
+            </div>
+          </>
+        )}
       </div>
       <div className="tv-head-r">
         {mode === "build" && (
           <button className="tv-reimport" onClick={imp.begin} disabled={imp.scanning} title="Import another folder into your library">
             <I.upload s={16} /> {imp.scanning ? "Scanning…" : "Add folder"}
           </button>
+        )}
+        {mode !== "build" && (
+          <div className="tv-viewtoggle" role="group" aria-label="Tanda layout">
+            <button className={"tv-vt" + (tandaView === "grid" ? " on" : "")} onClick={() => setTandaView("grid")}
+              title="Grid view" aria-pressed={tandaView === "grid"}><I.grid s={15} /></button>
+            <button className={"tv-vt" + (tandaView === "list" ? " on" : "")} onClick={() => setTandaView("list")}
+              title="List view" aria-pressed={tandaView === "list"}><I.rows s={15} /></button>
+          </div>
         )}
       </div>
     </div>
@@ -270,11 +361,15 @@ function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthCh
       ) : (
         <>
           {header}
-          <ManageGrid tandas={tandas} onEdit={editTanda} onDelete={deleteTanda} onNew={newTanda} onPlay={playTanda} preview={preview} />
+          <ManageGrid tab={manageTab} tandas={tandas} suggestions={sugg} onEdit={editTanda} onDelete={deleteTanda} onNew={newTanda} onPlay={playTanda}
+            onSaveSuggestion={saveSuggestion} onDismissSuggestion={dismissSuggestion} onBrowseSuggestions={browseSuggestions} preview={preview} view={tandaView} />
         </>
       )}
 
       {imp.modal}
+      {mode !== "build" && !suggestTipDismissed && sugg.length > 0 && (
+        <SuggestTandasTip suggestions={sugg} onDismiss={dismissSuggestTip} onBrowse={browseSuggestions} />
+      )}
 
       <Toast toast={toast} onDismiss={dismiss} />
       {modal}

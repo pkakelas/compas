@@ -25,6 +25,7 @@ window.compas = {
   importCancel: preload.importCancel,
   setSongGenres: preload.setSongGenres,
   listTandas: preload.listTandas,
+  suggestTandas: preload.suggestTandas,
   saveTanda: preload.saveTanda,
   deleteTanda: preload.deleteTanda,
   listPlaylists: preload.listPlaylists,

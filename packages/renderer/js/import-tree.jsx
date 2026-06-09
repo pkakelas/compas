@@ -207,7 +207,7 @@ function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
           <div className="it-hint">
             <span className="it-hint-ic"><I.folderOpen s={15} /></span>
             <div>{isImport
-              ? <>Folders default to <b>Mixed</b>. Use <b>Set style</b> only where a folder (and everything inside it) is one type — e.g. a <b>Vals</b> or <b>Milonga</b> subfolder.</>
+              ? <>Set the genre for each folder so your library is easy to search later. Use <b>Set style</b> on any folder that holds a single genre — e.g. a <b>Vals</b> or <b>Milonga</b> folder — and it applies to everything inside it. Any folder you leave unset stays <b>Mixed</b>.</>
               : <>Pick a style for each folder using the <b>Set style</b> button on the right.
                 It applies to every folder inside it — click a subfolder to give it a different style.</>}</div>
           </div>

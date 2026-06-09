@@ -67,20 +67,27 @@ function tandaSingerForName(songs) {
   return unique.length === 1 ? unique[0] : "";
 }
 
-/** Build a tanda name: orchestra — singer, era hint. */
-function suggestTandaName(songs) {
+/** Build a tanda name: orchestra — singer, era hint. `fallbackOrq` covers songs
+ *  whose orchestra tag is empty (e.g. before Smart Organize) so we never render a
+ *  nameless ", forties". */
+function suggestTandaName(songs, fallbackOrq) {
   const list = songs || [];
   if (!list.length) return "";
   const m = tandaMeta({ songs: list });
   if (m.orq === "Empty tanda") return "";
 
-  const parts = [m.orq];
+  let orq = m.orq;
+  if (!orq && fallbackOrq) orq = fallbackOrq;
+
+  const parts = [];
+  if (orq) parts.push(orq);
   const singer = tandaSingerForName(list);
   if (singer) parts.push(singer);
 
   const era = yearIndication(list.map((s) => s.year).filter(Boolean));
-  if (era) return `${parts.join(" — ")}, ${era}`;
-  return parts.join(" — ");
+  const head = parts.join(" — ");
+  if (head && era) return `${head}, ${era}`;
+  return head || era || "";
 }
 
 /* Shown under the builder name field: auto-fills when empty, offers a one-click

@@ -1,7 +1,36 @@
 // library-view.jsx — the Library workspace: the full folder/song tree, read-only.
 // Same unified tree as the Tandas view, minus the builder (no add/drag). When the
 // library is empty it invites the DJ to import their first folder.
-const { useState } = React;
+const { useState, useEffect } = React;
+
+// One-time nudge shown once a library exists, pointing first-time DJs at Smart
+// Organize. Dismissal is remembered in localStorage so it never nags twice.
+const SMART_ORG_TIP_KEY = "compas.smartOrgTipDismissed";
+
+function SmartOrganizeTip({ onTry, onDismiss }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); onDismiss(); } };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onDismiss]);
+  return (
+    <div className="tp-modal-scrim" onMouseDown={onDismiss}>
+      <div className="sotip" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
+        <button className="sotip-x" onClick={onDismiss} title="Dismiss"><I.x s={16} /></button>
+        <div className="sotip-badge"><I.spark s={24} /></div>
+        <div className="sotip-title">Tidy up your library</div>
+        <div className="sotip-sub">Smart Organize fills in what’s missing, matched against a tango catalogue:</div>
+        <div className="sotip-chips">
+          <span>Orchestras</span><span>Singers</span><span>Years</span><span>Styles</span>
+        </div>
+        <div className="sotip-actions">
+          <button className="sotip-go" onClick={onTry}><I.spark s={15} /> Try it</button>
+          <span className="sotip-safe"><I.check s={13} /> You approve every change first</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function LibraryView() {
   const { imported, totalSongs, totalFolders, roots, songs } = useStore();
@@ -9,6 +38,8 @@ function LibraryView() {
   const { toast, flash, dismiss } = useToast();
   const [organizing, setOrganizing] = useState(false);
   const [retypeRoots, setRetypeRoots] = useState(null);  // existing-library tree
+  const [tipDismissed, setTipDismissed] = useState(() => localStorage.getItem(SMART_ORG_TIP_KEY) === "1");
+  const dismissTip = () => { localStorage.setItem(SMART_ORG_TIP_KEY, "1"); setTipDismissed(true); };
   const imp = useFolderImport(flash);                     // shared import flow
 
   const openRetype = () => { if (songs && songs.length) setRetypeRoots(buildRetypeTree(songs)); };
@@ -56,6 +87,12 @@ function LibraryView() {
       )}
 
       {imp.modal}
+      {imported && !tipDismissed && !organizing && (
+        <SmartOrganizeTip
+          onTry={() => { setOrganizing(true); dismissTip(); }}
+          onDismiss={dismissTip}
+        />
+      )}
       {retypeRoots && (
         <ImportTreeModal mode="retype" roots={retypeRoots} onCancel={() => setRetypeRoots(null)} onConfirm={doRetype} />
       )}

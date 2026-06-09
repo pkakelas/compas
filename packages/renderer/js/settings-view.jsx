@@ -97,29 +97,29 @@ function AudioOutputsCard() {
 
   return (
     <SettingsCard icon={<I.headphones s={18} />} title="Audio outputs"
-      desc="Play the live set on one card while you pre-listen to other songs in headphones on a second card.">
+      desc="Choose which card plays the live set. Optionally add a separate headphone card to pre-listen to other songs.">
+      {dev.needsAccess && (
+        <div className="tp-set-note">
+          Grant access once so your output cards show their real names.
+          <div className="tp-set-actions" style={{ marginTop: 9 }}>
+            <button className="tp-set-btn primary" onClick={dev.requestAccess}>Allow audio device access</button>
+          </div>
+        </div>
+      )}
+
+      <SetRow label="Main (floor)" desc="Heard by the dancers.">
+        <SetSelect value={dev.mainDeviceId} options={mainOpts} onChange={dev.setMainDeviceId} />
+        <button className="tp-set-btn test" title="Play a test tone" onClick={() => playTestTone(dev.mainDeviceId)}>
+          <I.vol s={15} />
+        </button>
+      </SetRow>
+
       <SetRow label="Monitor / cueing" desc="Enable a separate headphone cue output.">
         <SetSwitch checked={dev.cueingEnabled} onChange={dev.setCueingEnabled} />
       </SetRow>
 
       {dev.cueingEnabled && (
         <React.Fragment>
-          {dev.needsAccess && (
-            <div className="tp-set-note">
-              Grant access once so your output cards show their real names.
-              <div className="tp-set-actions" style={{ marginTop: 9 }}>
-                <button className="tp-set-btn primary" onClick={dev.requestAccess}>Allow audio device access</button>
-              </div>
-            </div>
-          )}
-
-          <SetRow label="Main (floor)" desc="Heard by the dancers.">
-            <SetSelect value={dev.mainDeviceId} options={mainOpts} onChange={dev.setMainDeviceId} />
-            <button className="tp-set-btn test" title="Play a test tone" onClick={() => playTestTone(dev.mainDeviceId)}>
-              <I.vol s={15} />
-            </button>
-          </SetRow>
-
           <SetRow label="Monitor (cue)" desc="Your headphones / second card.">
             <SetSelect value={dev.monitorDeviceId} options={monitorOpts} onChange={dev.setMonitorDeviceId} />
             <button className="tp-set-btn test" title="Play a test tone" disabled={!dev.monitorDeviceId}
@@ -134,12 +134,12 @@ function AudioOutputsCard() {
           {!dev.monitorDeviceId && (
             <div className="tp-set-note">Pick a monitor output to enable the headphone cue buttons.</div>
           )}
-
-          <div className="tp-set-actions">
-            <button className="tp-set-btn ghost" onClick={dev.refresh}>Refresh devices</button>
-          </div>
         </React.Fragment>
       )}
+
+      <div className="tp-set-actions">
+        <button className="tp-set-btn ghost" onClick={dev.refresh}>Refresh devices</button>
+      </div>
     </SettingsCard>
   );
 }

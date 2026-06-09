@@ -17,6 +17,13 @@ const TAG_PRESETS = [
       "Demare", "Donato", "Rodríguez"
     ],
   },
+  {
+    cat: "mood", label: "Mood",
+    options: [
+      "Rhythmic", "Lyrical", "Dramatic", "Romantic", "Energetic",
+      "Melancholic", "Playful", "Smooth", "Nostalgic"
+    ],
+  },
 ];
 
 /* Human label for a category, used by the "add as…" create chips. */
@@ -229,7 +236,7 @@ function TagField({ tags, onChange }) {
           </span>
         ))}
         <input ref={inputRef} className="tv-tagfield-input" value={text}
-          placeholder={tags.length ? "Add tag…" : "Add tags — type, age, orquesta, or your own…"}
+          placeholder={tags.length ? "Add tag…" : "Add tags — type, age, orquesta, mood, or your own…"}
           onChange={(e) => { setText(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown} />

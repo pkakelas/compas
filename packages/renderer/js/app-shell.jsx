@@ -3,23 +3,23 @@ const { useState } = React;
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "builderWidth": 380,
-  "theme": "light",
+  "theme": "dark",
   "startView": "Tandas"
 }/*EDITMODE-END*/;
 
 function AppShell() {
-  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  // Seed the theme from the saved preference (default: dark) so the very first
+  // render already matches what index.html painted — no flash, no restore race.
+  const [t, setTweak] = useTweaks((() => {
+    try {
+      const saved = localStorage.getItem("compas.theme");
+      return saved ? { ...TWEAK_DEFAULTS, theme: saved } : TWEAK_DEFAULTS;
+    } catch (e) { return TWEAK_DEFAULTS; }
+  })());
 
   // Load the library + tandas from the database once on launch, and wire the
   // background-analysis banner to the main process's progress broadcasts.
   React.useEffect(() => { Store.loadAll(); Store.initAnalysis(); Store.initLibraryWatch(); }, []);
-
-  // Restore the saved theme on launch (tweaks themselves are session-only).
-  React.useEffect(() => {
-    const saved = localStorage.getItem("compas.theme");
-    if (saved && saved !== t.theme) setTweak("theme", saved);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Apply the active theme to <html> and persist it across restarts.
   React.useEffect(() => {

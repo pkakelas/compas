@@ -7,6 +7,7 @@ import {AnalysisManager, type AnalysisState} from '../services/loudness.js';
 import {LibraryWatcher} from '../services/watcher.js';
 import {writeSongTags} from '../services/tags.js';
 import {proposeLibrary, type EnrichInput} from '../services/enrich.js';
+import {suggestTandas} from '../services/suggest-tandas.js';
 import {
   applySmartOrganize,
   type SmartOrganizeChange,
@@ -264,6 +265,12 @@ export class IpcModule implements AppModule {
     );
 
     ipcMain.handle('tandas:list', () => listTandas());
+
+    // Match the bundled curated tandas against the DJ's library and return the
+    // ones they fully own — used to seed the (otherwise empty) Tandas page with
+    // ready-to-play suggestions. Pure in-memory string matching, like the Smart
+    // Organize preview.
+    ipcMain.handle('tandas:suggest', () => suggestTandas(getLibrary(), listTandas()));
 
     ipcMain.handle('tandas:save', (_event, input: SaveTandaInput) => saveTanda(input));
 

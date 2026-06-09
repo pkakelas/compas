@@ -74,6 +74,11 @@ function listTandas() {
   return ipcRenderer.invoke('tandas:list');
 }
 
+/** Curated tandas the DJ fully owns, matched against their library. Returns an array of suggested-tanda objects. */
+function suggestTandas() {
+  return ipcRenderer.invoke('tandas:suggest');
+}
+
 function saveTanda(input: {
   id?: string | null;
   name?: string | null;
@@ -137,6 +142,7 @@ export {
   importCancel,
   setSongGenres,
   listTandas,
+  suggestTandas,
   saveTanda,
   deleteTanda,
   listPlaylists,
