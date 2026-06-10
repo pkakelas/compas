@@ -100,22 +100,26 @@ function previewTitle(preview, playing, verb = "Listen") {
 
 const GENRE_LABEL = { tango: "Tango", vals: "Vals", milonga: "Milonga", cortina: "Cortina" };
 
-/* The four core danceable styles the player + tanda logic understand. Anything
-   else (kizomba, chacarera, salsa, … or "unknown") is a free-form label: fully
-   browsable and editable, but treated as non-tango. */
-const CORE_STYLES = ["tango", "vals", "milonga", "cortina"];
+/* The core danceable tango styles the player + tanda logic understand. Anything
+   else (foxtrot, kizomba, chacarera, … or "unknown") is a free-form label: fully
+   browsable and editable, but treated as non-tango. NB: "cortina" is NOT a
+   genre — it's a usage flag on a song (song.isCortina), orthogonal to genre. */
+const CORE_STYLES = ["tango", "vals", "milonga"];
 /* The type menu offered by the import tool: core styles first, then common
-   non-tango ones; the UI also lets you type a custom value. */
+   non-tango ones; the UI also lets you type a custom value. (Cortina lives on
+   its own toggle, not in this list.) */
 const IMPORT_DEFAULT_STYLE = "mixed";
 const STYLE_TYPES = [
   "mixed",
-  "tango", "vals", "milonga", "cortina",
-  "kizomba", "chacarera", "zamba", "folklore", "salsa", "swing", "other",
+  "tango", "vals", "milonga",
+  "foxtrot", "kizomba", "chacarera", "zamba", "folklore", "salsa", "swing", "other",
 ];
 const STYLE_LABELS = {
-  mixed: "Mixed", tango: "Tango", vals: "Vals", milonga: "Milonga", cortina: "Cortina",
-  kizomba: "Kizomba", chacarera: "Chacarera", zamba: "Zamba", folklore: "Folklore",
-  salsa: "Salsa", swing: "Swing", other: "Other", unknown: "Unknown",
+  mixed: "Mixed", tango: "Tango", vals: "Vals", milonga: "Milonga",
+  foxtrot: "Foxtrot", kizomba: "Kizomba", chacarera: "Chacarera", zamba: "Zamba",
+  folklore: "Folklore", salsa: "Salsa", swing: "Swing", other: "Other", unknown: "Unknown",
+  // Legacy label kept so any lingering genre='cortina' still renders nicely.
+  cortina: "Cortina",
 };
 function isCoreStyle(g) { return CORE_STYLES.indexOf(g) !== -1; }
 /* Human label for any style value (known or custom). */

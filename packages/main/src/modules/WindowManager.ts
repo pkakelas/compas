@@ -1,7 +1,44 @@
 import type {AppModule} from '../AppModule.js';
 import {ModuleContext} from '../ModuleContext.js';
 import {BrowserWindow, Menu} from 'electron';
+import type {MenuItemConstructorOptions} from 'electron';
 import type {AppInitConfig} from '../AppInitConfig.js';
+
+// Build the application menu. Beyond the standard roles (so copy/paste/quit and
+// friends keep working), the View menu owns the text-size shortcuts: each Zoom
+// item nudges the renderer's text-size setting via an IPC message rather than
+// Electron's native page zoom, so the keyboard, the menu and the Settings slider
+// all drive one persisted value.
+function buildAppMenu(): Menu {
+  const isMac = process.platform === 'darwin';
+  const sendZoom = (dir: 'in' | 'out' | 'reset') => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    win?.webContents.send('app:zoom', dir);
+  };
+  const template: MenuItemConstructorOptions[] = [
+    ...(isMac ? [{role: 'appMenu'} as MenuItemConstructorOptions] : []),
+    {role: 'fileMenu'},
+    {role: 'editMenu'},
+    {
+      label: 'View',
+      submenu: [
+        {role: 'reload'},
+        {role: 'toggleDevTools'},
+        {type: 'separator'},
+        {label: 'Zoom In', accelerator: 'CommandOrControl+Plus', click: () => sendZoom('in')},
+        // On most layouts "+" needs Shift; "=" is its unshifted twin, so bind both.
+        // Hidden so the menu shows a single Zoom In entry; the accelerator still fires.
+        {label: 'Zoom In', accelerator: 'CommandOrControl+=', visible: false, acceleratorWorksWhenHidden: true, click: () => sendZoom('in')},
+        {label: 'Zoom Out', accelerator: 'CommandOrControl+-', click: () => sendZoom('out')},
+        {label: 'Actual Size', accelerator: 'CommandOrControl+0', click: () => sendZoom('reset')},
+        {type: 'separator'},
+        {role: 'togglefullscreen'},
+      ],
+    },
+    {role: 'windowMenu'},
+  ];
+  return Menu.buildFromTemplate(template);
+}
 
 class WindowManager implements AppModule {
   readonly #preload: {path: string};
@@ -17,12 +54,11 @@ class WindowManager implements AppModule {
   async enable({app}: ModuleContext): Promise<void> {
     await app.whenReady();
 
-    // On Windows/Linux the default app menu (File, Edit, View, Window, Help) is
-    // drawn inside the window. Remove it there; keep the native menu on macOS
-    // where it lives in the global menu bar and provides standard shortcuts.
-    if (process.platform !== 'darwin') {
-      Menu.setApplicationMenu(null);
-    }
+    // Install our application menu on every platform. On macOS it lives in the
+    // global menu bar; on Windows/Linux it's hidden by autoHideMenuBar (toggled
+    // with Alt) but its accelerators — including Ctrl +/-/0 for text size — still
+    // fire.
+    Menu.setApplicationMenu(buildAppMenu());
 
     await this.restoreOrCreateWindow(true);
     app.on('second-instance', () => this.restoreOrCreateWindow(true));

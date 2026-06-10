@@ -158,6 +158,7 @@ function SongEditRow({ s, onClose }) {
     year: s.year != null ? String(s.year) : "",
     album: s.album || "",
     genre: s.genre || "tango",
+    isCortina: !!s.isCortina,
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(false);
@@ -178,6 +179,7 @@ function SongEditRow({ s, onClose }) {
         album: draft.album.trim() || null,
         year: Number.isFinite(yearNum) ? yearNum : null,
         genre: draft.genre,
+        isCortina: draft.isCortina,
       });
       if (!updated) { setErr(true); setSaving(false); return; }
       onClose();
@@ -216,6 +218,14 @@ function SongEditRow({ s, onClose }) {
           </select></label>
         <label className="f wide"><span>Album</span>
           <input value={draft.album} onChange={set("album")} placeholder="Album" /></label>
+        <label className="tv-song-edit-cortina">
+          <input type="checkbox" checked={draft.isCortina}
+            onChange={(e) => setDraft((d) => ({ ...d, isCortina: e.target.checked }))} />
+          <span className="tv-cort-text">
+            <span className="tv-cort-title"><I.curtain s={14} /> Use as cortina</span>
+            <span className="tv-cort-hint">A floor-clearer between tandas — kept separate from its genre.</span>
+          </span>
+        </label>
       </div>
       <div className="tv-song-edit-foot">
         {err && <span className="tv-song-edit-err">Couldn’t save — please try again.</span>}
@@ -232,9 +242,15 @@ function SongEditRow({ s, onClose }) {
  * `library` renders the read-only variant used by the Library view: it keeps
  * the listen affordance but drops the builder drag handle and the +/add button,
  * and adds a pencil to edit the song's metadata in place. */
-function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPlaying, onPreview, previewViaMonitor, library }) {
-  const isCort = s.genre === "cortina";
-  const [editing, setEditing] = useState(false);
+function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPlaying, onPreview, previewViaMonitor, library, editing: editingProp, onEdit, onCloseEdit, onContext }) {
+  const isCort = !!s.isCortina;
+  // Editing is parent-controlled in the Library view (so the right-click menu's
+  // "Edit song" can open the editor) and self-managed everywhere else.
+  const controlled = onEdit !== undefined;
+  const [editingLocal, setEditingLocal] = useState(false);
+  const editing = controlled ? !!editingProp : editingLocal;
+  const startEdit = () => { if (controlled) onEdit(s); else setEditingLocal(true); };
+  const closeEdit = () => { if (controlled) { if (onCloseEdit) onCloseEdit(); } else setEditingLocal(false); };
   const clickTimer = useRef(null);
   const handleClick = () => {
     if (clickTimer.current) clearTimeout(clickTimer.current);
@@ -252,15 +268,15 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
     if (!library && onAdd) onAdd();
   };
   useEffect(() => () => { if (clickTimer.current) clearTimeout(clickTimer.current); }, []);
-  if (editing) return <SongEditRow s={s} onClose={() => setEditing(false)} />;
   const rowTitle = library
     ? (isPreview && isPlaying ? "Pause" : "Play preview")
     : (inBuilder ? "Already in the tanda" : "Double-click to add to tanda · click to play preview");
-  return (
-    <div className={"tv-song clickable" + (isCort ? " cortina" : "") + (inBuilder ? " in-builder" : "") + (dragging ? " dragging" : "") + (isPreview ? " playing" : "")}
+  const row = (
+    <div className={"tv-song clickable" + (isCort ? " cortina" : "") + (inBuilder ? " in-builder" : "") + (dragging ? " dragging" : "") + (isPreview ? " playing" : "") + (editing ? " editing" : "")}
       draggable={!library} {...(library ? {} : dragHandlers)}
       onClick={handleClick}
       onDoubleClick={library ? undefined : handleDoubleClick}
+      onContextMenu={library && onContext ? (e) => onContext(e, s) : undefined}
       title={isPreview && isPlaying ? "Pause" : rowTitle}>
       <button className={"play" + (isPreview && isPlaying ? " on" : "") + (previewViaMonitor ? " monitor" : "")} onClick={(e) => { e.stopPropagation(); onPreview(); }}
         title={isPreview && isPlaying ? "Pause" : previewViaMonitor ? "Listen in headphones (monitor)" : "Play preview"}>
@@ -268,7 +284,7 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
       </button>
       <div className="tt">
         <div className="tv-song-title">
-          {s.title}
+          {s.title}{isCort && <CortinaBadge />}
         </div>
         <div className="tv-song-sub">{s.orq}{s.singer ? " · " + s.singer : ""}</div>
       </div>
@@ -280,12 +296,21 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
           {inBuilder ? <I.check s={15} /> : <I.plus s={15} />}
         </button>
       ) : (
-        <button className="edit" onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+        <button className={"edit" + (editing ? " on" : "")} onClick={(e) => { e.stopPropagation(); editing ? closeEdit() : startEdit(); }}
           title="Edit song details">
           <I.pencil s={14} />
         </button>
       )}
     </div>
+  );
+  if (!editing) return row;
+  // The editor opens below the song rather than replacing it, so the track
+  // stays in view while its metadata is edited.
+  return (
+    <>
+      {row}
+      <SongEditRow s={s} onClose={closeEdit} />
+    </>
   );
 }
 
@@ -838,6 +863,24 @@ function rowHeight(r) {
   if (r.kind === "group") return ROW_H.group;
   return r.depth === 0 ? ROW_H.root : ROW_H.folder;
 }
+// True when a folder has songs and every one (across subfolders) is a cortina —
+// drives both the right-click toggle label and the cortina marker on the row.
+function folderAllCortina(node) {
+  let any = false, all = true;
+  const walk = (n) => {
+    (n.songs || []).forEach((s) => { any = true; if (!s.isCortina) all = false; });
+    (n.children || []).forEach(walk);
+  };
+  if (node) walk(node);
+  return any && all;
+}
+
+// Small marker shown on cortina songs/folders so a DJ can spot floor-clearers
+// at a glance — reuses the curtain icon from the Live tab.
+function CortinaBadge() {
+  return <span className="tv-cortina-badge" title="Cortina"><I.curtain s={15} /></span>;
+}
+
 function FolderRowFlat({ node, depth, isOpen, onToggle, onContext }) {
   const hasContent = (node.children && node.children.length > 0) || (node.songs && node.songs.length > 0);
   return (
@@ -847,7 +890,7 @@ function FolderRowFlat({ node, depth, isOpen, onToggle, onContext }) {
       onContextMenu={(e) => onContext && onContext(e, node)}>
       <span className={"caret" + (hasContent ? (isOpen ? " open" : "") : " leaf")}><I.chev s={12} /></span>
       <span className="fic">{isOpen && hasContent ? <I.folderOpen s={15} /> : <I.folder s={15} />}</span>
-      <span className="nm">{node.name}</span>
+      <span className="nm">{node.name}{folderAllCortina(node) && <CortinaBadge />}</span>
       <span className="ct">{countSongs(node)}</span>
     </div>
   );
@@ -856,7 +899,7 @@ function FolderRowFlat({ node, depth, isOpen, onToggle, onContext }) {
 /* ============================ LIBRARY BROWSER ============================
  * Shared folder-tree song browser for Library, Builder, and Live: search,
  * dropdown filters, sort, and a windowed list for large libraries. */
-function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, library, builderIds, onAdd, makeDrag, draggingId, hint }) {
+function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, onSongContext, editingId, onSongEdit, onCloseEdit, library, builderIds, onAdd, makeDrag, draggingId, hint }) {
   const { tree, songs } = useStore();
   const scrollRef = useRef(null);
   const [sort, setSort] = useState("title");
@@ -967,6 +1010,8 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
     const s = r.song;
     return <div className="tv-vrow" key={r.key} style={{ marginLeft: r.depth * INDENT }}>
       <SongRow s={s} library={library}
+        editing={library && editingId === s.id} onEdit={library ? onSongEdit : undefined} onCloseEdit={onCloseEdit}
+        onContext={library ? onSongContext : undefined}
         inBuilder={!library && builderIds && builderIds.has(s.id)}
         onAdd={() => onAdd && onAdd(s)}
         dragHandlers={!library && makeDrag ? makeDrag(s) : undefined}
@@ -1012,18 +1057,27 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
     genre: filters.genre,
     year: filters.year,
   }), [debouncedText, filters.orq, filters.singer, filters.genre, filters.year]);
-  const [menu, setMenu] = useState(null);   // right-click folder menu: { node, x, y }
+  const [menu, setMenu] = useState(null);   // right-click menu: { kind, node?/song?, x, y }
+  const [editingId, setEditingId] = useState(null); // song whose editor is open
   const { ask, modal } = useConfirm();
 
+  // Clamp to the viewport so the menu never opens off the right/bottom edge.
+  const menuPos = (e) => ({
+    x: Math.min(e.clientX, window.innerWidth - 244),
+    y: Math.min(e.clientY, window.innerHeight - 180),
+  });
   // Right-click a folder row to remove it from the library (files stay on disk).
   const closeMenu = () => setMenu(null);
   const openMenu = (e, node) => {
     e.preventDefault();
     e.stopPropagation();
-    // Clamp to the viewport so the menu never opens off the right/bottom edge.
-    const x = Math.min(e.clientX, window.innerWidth - 244);
-    const y = Math.min(e.clientY, window.innerHeight - 150);
-    setMenu({ node, x, y });
+    setMenu({ kind: "folder", node, ...menuPos(e) });
+  };
+  // Right-click a song row: edit, flag as cortina, or remove it from the library.
+  const openSongMenu = (e, song) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenu({ kind: "song", song, ...menuPos(e) });
   };
   // Closing the menu first, then confirming in the shared modal, keeps the flow
   // consistent with deleting tandas and playlists.
@@ -1057,6 +1111,32 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
     });
   };
 
+  // Same cascade story as folders, scoped to a single song.
+  const requestDeleteSong = (song) => {
+    const delIds = new Set([String(song.id)]);
+    const affected = (tandas || []).filter((t) =>
+      t.songs.some((s) => delIds.has(String(s.id))));
+    const emptied = affected.filter((t) =>
+      t.songs.every((s) => delIds.has(String(s.id))));
+    const shrunk = affected.length - emptied.length;
+    closeMenu();
+    ask({
+      title: "Delete this song?",
+      message: (
+        <>
+          <div>Remove “{song.title}” from your library? Your file stays on disk.</div>
+          {affected.length > 0 && (
+            <div className="tp-modal-note">
+              <TandaImpact emptied={emptied} shrunk={shrunk} />
+            </div>
+          )}
+        </>
+      ),
+      confirmLabel: "Delete song",
+      onConfirm: () => Store.deleteSongs([song.id]),
+    });
+  };
+
   useEffect(() => {
     if (!menu) return;
     const onDown = () => closeMenu();
@@ -1071,24 +1151,51 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
     };
   }, [menu]);
 
-  const menuCount = menu ? countSongs(menu.node) : 0;
+  const isFolder = menu && menu.kind === "folder";
+  const menuCount = isFolder ? countSongs(menu.node) : 0;
+  // Are the folder's songs already cortinas? Drives the toggle's label/action.
+  const folderIsCortina = isFolder ? folderAllCortina(menu.node) : false;
   const ctxMenu = menu && (
     <div className="tv-ctx" style={{ top: menu.y, left: menu.x }}
       onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
-      <div className="tv-ctx-head">
-        <span className="fic"><I.folder s={14} /></span>
-        <span className="nm" title={menu.node.name}>{menu.node.name}</span>
-        <span className="ct">{menuCount} song{menuCount === 1 ? "" : "s"}</span>
-      </div>
-      <button className="tv-ctx-item del" onClick={() => requestDelete(menu.node)}>
-        <I.trash s={15} /> Remove folder from library
-      </button>
+      {menu.kind === "folder" ? (
+        <>
+          <div className="tv-ctx-head">
+            <span className="fic"><I.folder s={14} /></span>
+            <span className="nm" title={menu.node.name}>{menu.node.name}</span>
+            <span className="ct">{menuCount} song{menuCount === 1 ? "" : "s"}</span>
+          </div>
+          <button className="tv-ctx-item" onClick={() => { const n = menu.node; closeMenu(); Store.setFolderCortina(n, !folderIsCortina); }}>
+            <I.curtain s={15} /> {folderIsCortina ? "Unmark as cortinas" : "Mark folder as cortinas"}
+          </button>
+          <button className="tv-ctx-item del" onClick={() => requestDelete(menu.node)}>
+            <I.trash s={15} /> Remove folder from library
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="tv-ctx-head">
+            <span className="fic"><I.note s={14} /></span>
+            <span className="nm" title={menu.song.title}>{menu.song.title}</span>
+          </div>
+          <button className="tv-ctx-item" onClick={() => { const id = menu.song.id; closeMenu(); setEditingId(id); }}>
+            <I.pencil s={15} /> Edit song
+          </button>
+          <button className="tv-ctx-item" onClick={() => { const sg = menu.song; closeMenu(); Store.setSongCortina([sg.id], !sg.isCortina); }}>
+            <I.curtain s={15} /> {menu.song.isCortina ? "Unmark as cortina" : "Flag as cortina"}
+          </button>
+          <button className="tv-ctx-item del" onClick={() => requestDeleteSong(menu.song)}>
+            <I.trash s={15} /> Delete song
+          </button>
+        </>
+      )}
     </div>
   );
 
   return (
     <div className="tv-tree">
       <LibraryBrowser filters={filters} setFilters={setFilters} query={query} preview={preview} onFolderContext={openMenu}
+        onSongContext={openSongMenu} editingId={editingId} onSongEdit={(s) => setEditingId(s.id)} onCloseEdit={() => setEditingId(null)}
         library={library} builderIds={builderIds} onAdd={onAdd} makeDrag={makeDrag}
         draggingId={draggingId} hint={hint} />
       {ctxMenu}

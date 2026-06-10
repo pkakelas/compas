@@ -228,8 +228,9 @@ export function dancedStyleFromFolder(folderPath: string | null | undefined): St
   return 'other';
 }
 
-/** Map a CSV/danced style code to the app's stored genre, or null if unsupported
- *  (the app's genre field only knows tango/vals/milonga/cortina). */
+/** Map a CSV/danced style code to the app's stored genre, or null if unsupported.
+ *  Cortina is a usage flag, not a musical genre, so it never maps to a genre
+ *  value — Smart Organize must not stamp genre='cortina' on a song. */
 export function styleToGenre(style: Style): string | null {
-  return style === 'other' ? null : style;
+  return style === 'other' || style === 'cortina' ? null : style;
 }

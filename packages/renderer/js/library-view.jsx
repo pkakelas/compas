@@ -43,12 +43,14 @@ function LibraryView() {
   const imp = useFolderImport(flash);                     // shared import flow
 
   const openRetype = () => { if (songs && songs.length) setRetypeRoots(buildRetypeTree(songs)); };
-  const doRetype = async (updates) => {
+  const doRetype = async (payload) => {
     setRetypeRoots(null);
-    if (updates && updates.length) {
-      await Store.setSongGenres(updates);
-      flash(`Re-typed ${updates.length} song${updates.length === 1 ? "" : "s"}`);
-    }
+    const { updates = [], cortinaOn = [], cortinaOff = [] } = payload || {};
+    if (updates.length) await Store.setSongGenres(updates);
+    if (cortinaOn.length) await Store.setSongCortina(cortinaOn, true);
+    if (cortinaOff.length) await Store.setSongCortina(cortinaOff, false);
+    const n = updates.length + cortinaOn.length + cortinaOff.length;
+    if (n) flash(`Updated ${n} song${n === 1 ? "" : "s"}`);
   };
 
   return (
@@ -65,8 +67,8 @@ function LibraryView() {
         </div>
         {imported && (
           <div className="tv-head-r">
-            <button className="tv-reimport" onClick={openRetype} title="Set tango / vals / milonga / cortina per folder">
-              <I.folder s={15} /> Re-type folders
+            <button className="tv-reimport" onClick={openRetype} title="Set the genre (and cortinas) for each folder">
+              <I.folder s={15} /> Set folder genres
             </button>
             <button className="tv-smartorg" onClick={() => setOrganizing(true)} title="Clean up orchestras, singers, years & styles — review before anything changes">
               <I.spark s={15} /> Smart Organize

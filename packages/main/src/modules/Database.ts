@@ -17,6 +17,11 @@ export type SongRow = {
   year_locked: number;
   duration_sec: number | null;
   genre: string;
+  // Cortina is a usage flag, orthogonal to genre: a song marked for use as a
+  // floor-clearing cortina still has its real musical genre. `is_cortina` is the
+  // flag; `cortina_locked` marks it as DJ-set so a re-scan won't clobber it.
+  is_cortina: number;
+  cortina_locked: number;
   folder: string;
   folder_path: string;
   root: string;
@@ -44,6 +49,8 @@ export type Song = {
   dur: string;
   durationSec: number | null;
   genre: string;
+  // True when this song is flagged for use as a cortina (independent of genre).
+  isCortina: boolean;
   folder: string;
   folderPath: string;
   root: string;
@@ -172,6 +179,16 @@ function migrate(d: Database.Database): void {
       added_at INTEGER NOT NULL
     );
 
+    -- Folder-level cortina flag, keyed by (root, folder_path). A flagged folder
+    -- means "the songs in here are cortinas": existing songs are flagged when
+    -- the DJ sets it, and newly-imported songs under the folder inherit it.
+    CREATE TABLE IF NOT EXISTS folder_flags (
+      root        TEXT NOT NULL,
+      folder_path TEXT NOT NULL,
+      is_cortina  INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (root, folder_path)
+    );
+
     CREATE TABLE IF NOT EXISTS playlists (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       name       TEXT,
@@ -206,11 +223,39 @@ function migrate(d: Database.Database): void {
     // organization durable (singer/genre are already preserved on re-scan).
     ['orq_locked', 'INTEGER NOT NULL DEFAULT 0'],
     ['year_locked', 'INTEGER NOT NULL DEFAULT 0'],
+    // Cortina is now a usage flag separate from genre (see SongRow). New DBs get
+    // it as a column; older DBs gain it here, then the migration below moves any
+    // legacy genre='cortina' rows onto the flag.
+    ['is_cortina', 'INTEGER NOT NULL DEFAULT 0'],
+    ['cortina_locked', 'INTEGER NOT NULL DEFAULT 0'],
   ]);
   // The background worker repeatedly asks "what's left?" — keep that cheap.
   d.exec(
     `CREATE INDEX IF NOT EXISTS idx_songs_analysis_status ON songs(analysis_status)`,
   );
+
+  // One-time migration: "cortina" used to be a genre value, which destroyed the
+  // song's real musical genre. Move those rows onto the is_cortina flag (and
+  // lock it, since it reflects DJ intent), and reset the lost genre to unknown.
+  // Seed folder_flags from any folder whose songs were all cortinas, so future
+  // imports into those folders inherit the flag. Guarded so it runs only while
+  // legacy rows still exist.
+  const legacy = d.prepare(`SELECT COUNT(*) AS n FROM songs WHERE genre = 'cortina'`).get() as {
+    n: number;
+  };
+  if (legacy.n > 0) {
+    const tx = d.transaction(() => {
+      d.prepare(
+        `INSERT OR IGNORE INTO folder_flags (root, folder_path, is_cortina)
+         SELECT DISTINCT root, folder_path, 1 FROM songs WHERE genre = 'cortina'`,
+      ).run();
+      d.prepare(
+        `UPDATE songs SET is_cortina = 1, cortina_locked = 1, genre = 'unknown'
+         WHERE genre = 'cortina'`,
+      ).run();
+    });
+    tx();
+  }
 }
 
 function fmtDur(sec: number | null | undefined): string {
@@ -243,6 +288,7 @@ function rowToSong(r: SongRow): Song {
     dur: fmtDur(r.duration_sec),
     durationSec: r.duration_sec,
     genre: r.genre,
+    isCortina: r.is_cortina === 1,
     folder: r.folder,
     folderPath: r.folder_path,
     root: r.root,
@@ -264,6 +310,9 @@ export type ScannedSong = {
   year: number | null;
   durationSec: number | null;
   genre: string;
+  // Set by the scanner when the song lives under a folder named like a cortina
+  // folder. Orthogonal to genre.
+  isCortina?: boolean;
   folder: string;
   folderPath: string;
 };
@@ -281,13 +330,14 @@ export function importSongs(root: string, songs: ScannedSong[]): void {
   const now = Date.now();
 
   const upsertSong = d.prepare(`
-    INSERT INTO songs (path, title, artist, singer, album, year, duration_sec, genre, folder, folder_path, root, added_at)
-    VALUES (@path, @title, @artist, @singer, @album, @year, @durationSec, @genre, @folder, @folderPath, @root, @added_at)
+    INSERT INTO songs (path, title, artist, singer, album, year, duration_sec, genre, is_cortina, folder, folder_path, root, added_at)
+    VALUES (@path, @title, @artist, @singer, @album, @year, @durationSec, @genre, @isCortina, @folder, @folderPath, @root, @added_at)
     ON CONFLICT(path) DO UPDATE SET
       title = excluded.title,
       artist = CASE WHEN songs.orq_locked = 1 THEN songs.artist ELSE excluded.artist END,
       album = excluded.album,
       year = CASE WHEN songs.year_locked = 1 THEN songs.year ELSE excluded.year END,
+      is_cortina = CASE WHEN songs.cortina_locked = 1 THEN songs.is_cortina ELSE excluded.is_cortina END,
       duration_sec = excluded.duration_sec,
       folder = excluded.folder,
       folder_path = excluded.folder_path,
@@ -298,16 +348,82 @@ export function importSongs(root: string, songs: ScannedSong[]): void {
   // editable by the DJ — so a re-scan of an existing song (e.g. the watcher
   // reacting to an in-place tag edit) must preserve those user-set values
   // instead of resetting singer to '' and genre to its folder-derived default.
-  // Likewise `artist`/`year` are preserved when locked (set by Smart Organize),
-  // so a Compás-only edit survives the file being re-scanned.
+  // Likewise `artist`/`year`/`is_cortina` are preserved when locked (set by
+  // Smart Organize / a manual cortina toggle), so a Compás-only edit survives
+  // the file being re-scanned.
+
+  // Folders the DJ flagged as cortinas under this root — newly-imported songs in
+  // them inherit the flag regardless of the folder-name heuristic.
+  const flaggedFolders = new Set(
+    (
+      d
+        .prepare('SELECT folder_path FROM folder_flags WHERE root = ? AND is_cortina = 1')
+        .all(root) as {folder_path: string}[]
+    ).map(r => r.folder_path),
+  );
 
   const tx = d.transaction(() => {
     upsertRoot(d, root);
     for (const s of songs) {
-      upsertSong.run({...s, root, added_at: now});
+      const isCortina = s.isCortina || flaggedFolders.has(s.folderPath) ? 1 : 0;
+      upsertSong.run({...s, isCortina, root, added_at: now});
     }
   });
   tx();
+}
+
+/** Persist per-folder cortina flags (folder_flags only, no song updates). Used
+ *  by the import flow, where songs aren't in the DB yet — importSongs then reads
+ *  these to flag the incoming rows. A false entry clears the folder's flag. */
+export function setFolderFlags(root: string, flags: Record<string, boolean>): void {
+  const d = getDb();
+  const up = d.prepare(
+    `INSERT INTO folder_flags (root, folder_path, is_cortina) VALUES (?, ?, ?)
+     ON CONFLICT(root, folder_path) DO UPDATE SET is_cortina = excluded.is_cortina`,
+  );
+  const tx = d.transaction(() => {
+    for (const [folderPath, on] of Object.entries(flags)) {
+      up.run(root, folderPath, on ? 1 : 0);
+    }
+  });
+  tx();
+}
+
+/** Flag (or unflag) songs as cortinas by id. DJ intent, so it locks the flag
+ *  against later re-scans. Compás-only; the audio files are untouched. */
+export function setSongCortina(ids: string[], isCortina: boolean): Library {
+  const d = getDb();
+  const stmt = d.prepare(
+    'UPDATE songs SET is_cortina = ?, cortina_locked = 1 WHERE id = ?',
+  );
+  const flag = isCortina ? 1 : 0;
+  const tx = d.transaction(() => {
+    for (const id of ids) stmt.run(flag, Number(id));
+  });
+  tx();
+  return getLibrary();
+}
+
+/** Flag (or unflag) a whole folder as cortinas: persist it in folder_flags (so
+ *  future imports inherit) and apply it to every song currently in the folder. */
+export function setFolderCortina(
+  root: string,
+  folderPath: string,
+  isCortina: boolean,
+): Library {
+  const d = getDb();
+  const flag = isCortina ? 1 : 0;
+  const tx = d.transaction(() => {
+    d.prepare(
+      `INSERT INTO folder_flags (root, folder_path, is_cortina) VALUES (?, ?, ?)
+       ON CONFLICT(root, folder_path) DO UPDATE SET is_cortina = excluded.is_cortina`,
+    ).run(root, folderPath, flag);
+    d.prepare(
+      'UPDATE songs SET is_cortina = ?, cortina_locked = 1 WHERE root = ? AND folder_path = ?',
+    ).run(flag, root, folderPath);
+  });
+  tx();
+  return getLibrary();
 }
 
 /** Absolute paths of every imported library root (oldest first). */
@@ -584,6 +700,8 @@ export type UpdateSongInput = {
   album: string | null;
   year: number | null;
   genre: string;
+  // Optional: when present, also sets the cortina usage flag (and locks it).
+  isCortina?: boolean;
 };
 
 /**
@@ -599,6 +717,8 @@ export function updateSong(input: UpdateSongInput): Song | null {
   if (!Number.isFinite(id)) return null;
   const exists = d.prepare('SELECT id FROM songs WHERE id = ?').get(id);
   if (!exists) return null;
+  // The cortina flag is optional on this input; when provided, set it and lock
+  // it (so a re-scan won't revert the DJ's choice), otherwise leave it untouched.
   d.prepare(
     `UPDATE songs SET
        title = @title,
@@ -606,7 +726,9 @@ export function updateSong(input: UpdateSongInput): Song | null {
        singer = @singer,
        album = @album,
        year = @year,
-       genre = @genre
+       genre = @genre,
+       is_cortina = CASE WHEN @setCortina = 1 THEN @isCortina ELSE is_cortina END,
+       cortina_locked = CASE WHEN @setCortina = 1 THEN 1 ELSE cortina_locked END
      WHERE id = @id`,
   ).run({
     id,
@@ -616,6 +738,8 @@ export function updateSong(input: UpdateSongInput): Song | null {
     album: input.album ?? null,
     year: input.year ?? null,
     genre: input.genre || 'tango',
+    setCortina: input.isCortina !== undefined ? 1 : 0,
+    isCortina: input.isCortina ? 1 : 0,
   });
   const row = d.prepare('SELECT * FROM songs WHERE id = ?').get(id) as SongRow;
   return rowToSong(row);

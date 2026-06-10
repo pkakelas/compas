@@ -2,7 +2,7 @@ import type {AppModule} from '../AppModule.js';
 import type {ModuleContext} from '../ModuleContext.js';
 import {BrowserWindow, dialog, ipcMain} from 'electron';
 import {basename} from 'node:path';
-import {scanFolder, guessStyle} from '../services/scan.js';
+import {scanFolder, guessStyle, looksLikeCortinaFolder} from '../services/scan.js';
 import {AnalysisManager, type AnalysisState} from '../services/loudness.js';
 import {LibraryWatcher} from '../services/watcher.js';
 import {writeSongTags} from '../services/tags.js';
@@ -28,6 +28,9 @@ import {
   saveAnalysisResult,
   savePlaylist,
   saveTanda,
+  setFolderCortina,
+  setFolderFlags,
+  setSongCortina,
   setSongGenres,
   updateSong,
   type Library,
@@ -44,6 +47,7 @@ type ImportTreeNode = {
   path: string; // relative folder path under the root ('' for the root itself)
   count: number;
   guess: string | null;
+  cortina: boolean; // folder name looks like a cortina folder (pre-checks the toggle)
   children: ImportTreeNode[];
 };
 
@@ -56,6 +60,7 @@ function buildImportTree(root: string, songs: ScannedSong[]): ImportTreeNode {
     path: '',
     count: songs.length,
     guess: guessStyle(basename(root)),
+    cortina: looksLikeCortinaFolder(basename(root)),
     children: [],
   };
   const byPath = new Map<string, ImportTreeNode>([['', rootNode]]);
@@ -67,7 +72,15 @@ function buildImportTree(root: string, songs: ScannedSong[]): ImportTreeNode {
       acc = acc ? `${acc} / ${seg}` : seg;
       let node = byPath.get(acc);
       if (!node) {
-        node = {key: acc, name: seg, path: acc, count: 0, guess: guessStyle(seg), children: []};
+        node = {
+          key: acc,
+          name: seg,
+          path: acc,
+          count: 0,
+          guess: guessStyle(seg),
+          cortina: looksLikeCortinaFolder(seg),
+          children: [],
+        };
         byPath.set(acc, node);
         parent.children.push(node);
       }
@@ -147,15 +160,25 @@ export class IpcModule implements AppModule {
 
     // Commit the previewed import. `types` maps a relative folder path to the
     // chosen style; a song with no entry for its folder is imported as 'mixed'.
+    // `cortinas` maps a folder path to its cortina flag (the per-folder toggle):
+    // an explicit entry overrides the folder-name heuristic, and `true` is also
+    // persisted in folder_flags so future imports into that folder inherit it.
     ipcMain.handle(
       'import:commit',
-      (_event, payload: {types?: Record<string, string>}): Library | null => {
+      (
+        _event,
+        payload: {types?: Record<string, string>; cortinas?: Record<string, boolean>},
+      ): Library | null => {
         if (!importPreview) return null;
         const types = (payload && payload.types) || {};
+        const cortinas = (payload && payload.cortinas) || {};
         const songs = importPreview.songs.map(s => ({
           ...s,
           genre: types[s.folderPath] || 'mixed',
+          isCortina: s.folderPath in cortinas ? cortinas[s.folderPath] : s.isCortina,
         }));
+        // Persist the folder-level flags so re-imports / dropped-in clips inherit.
+        setFolderFlags(importPreview.root, cortinas);
         importSongs(importPreview.root, songs);
         importPreview = null;
         analysis.enqueuePending();
@@ -178,6 +201,33 @@ export class IpcModule implements AppModule {
       broadcastLibrary(library);
       return library;
     });
+
+    // Flag/unflag songs as cortinas (the usage flag, independent of genre).
+    ipcMain.handle(
+      'songs:setCortina',
+      (_event, payload: {ids: string[]; isCortina: boolean}): Library => {
+        const library = setSongCortina(
+          Array.isArray(payload?.ids) ? payload.ids : [],
+          !!payload?.isCortina,
+        );
+        broadcastLibrary(library);
+        return library;
+      },
+    );
+
+    // Flag/unflag a whole folder as cortinas (persisted; future imports inherit).
+    ipcMain.handle(
+      'folders:setCortina',
+      (_event, payload: {root: string; folderPath: string; isCortina: boolean}): Library => {
+        const library = setFolderCortina(
+          payload?.root ?? '',
+          payload?.folderPath ?? '',
+          !!payload?.isCortina,
+        );
+        broadcastLibrary(library);
+        return library;
+      },
+    );
 
     ipcMain.handle('library:get', (): Library => getLibrary());
 

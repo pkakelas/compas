@@ -81,7 +81,6 @@ async function collectAudioFiles(dir: string, acc: string[] = []): Promise<strin
 // and as the live-watcher fallback.
 const STYLE_GUESS: [RegExp, string][] = [
   [/\bmixed\b/, 'mixed'],
-  [/\bcortinas?\b/, 'cortina'],
   [/\bvals(es)?\b|\bwaltz\b/, 'vals'],
   [/\bmilongas?\b/, 'milonga'],
   [/\btangos?\b/, 'tango'],
@@ -98,6 +97,16 @@ export function guessStyle(name: string | null | undefined): string | null {
   return null;
 }
 
+// Cortina is a usage flag, not a genre: a folder named like a cortina folder
+// flags its songs as cortinas while leaving their real (musical) genre intact.
+const CORTINA_FOLDER_RE = /\bcortinas?\b/;
+export function looksLikeCortinaFolder(name: string | null | undefined): boolean {
+  return CORTINA_FOLDER_RE.test((name || '').toLowerCase());
+}
+function segmentsAreCortina(segments: string[]): boolean {
+  return segments.some(looksLikeCortinaFolder);
+}
+
 function mapGenre(segments: string[], tag: string | undefined): string {
   // The deepest folder name that names a style wins.
   for (let i = segments.length - 1; i >= 0; i--) {
@@ -107,7 +116,6 @@ function mapGenre(segments: string[], tag: string | undefined): string {
   const t = (tag || '').toLowerCase();
   if (t.includes('vals')) return 'vals';
   if (t.includes('milonga')) return 'milonga';
-  if (t.includes('cortina')) return 'cortina';
   return 'tango';
 }
 
@@ -157,6 +165,7 @@ export async function scanFile(root: string, file: string): Promise<ScannedSong>
     year,
     durationSec,
     genre: mapGenre(segments, genreTag),
+    isCortina: segmentsAreCortina(segments),
     folder,
     folderPath,
   };

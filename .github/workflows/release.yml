@@ -44,6 +44,18 @@ jobs:
           # Must be a PAT with `contents: write` on the public compas-releases
           # repo — the default GITHUB_TOKEN can only write to this private repo.
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          # Windows code signing via Azure Trusted Signing. Secrets authenticate
+          # the service principal to Entra ID (read by electron-builder directly);
+          # the non-secret account/profile/endpoint/publisher come from repo
+          # variables and gate signing in electron-builder.mjs. Harmless on the
+          # macOS runner, which ignores the Windows config.
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ENDPOINT: ${{ vars.AZURE_CODE_SIGNING_ENDPOINT }}
+          AZURE_CODE_SIGNING_ACCOUNT: ${{ vars.AZURE_CODE_SIGNING_ACCOUNT }}
+          AZURE_CODE_SIGNING_PROFILE: ${{ vars.AZURE_CODE_SIGNING_PROFILE }}
+          AZURE_PUBLISHER_NAME: ${{ vars.AZURE_PUBLISHER_NAME }}
         run: |
           pnpm run build
           pnpm exec electron-builder build --config electron-builder.mjs --${{ matrix.platform }} --publish always

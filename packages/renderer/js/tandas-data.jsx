@@ -148,8 +148,13 @@ const Store = {
   // the songs in the app — the files stay on disk. Refreshes library + tandas/
   // playlists since deleting songs can empty out tandas that referenced them.
   async deleteFolder(node) {
-    const ids = collectSongIds(node);
-    if (!ids.length || !window.compas.deleteSongs) return;
+    return Store.deleteSongs(collectSongIds(node));
+  },
+  // Forget specific songs from the library (files stay on disk). Refreshes the
+  // library + tandas/playlists since deleting songs can empty out tandas that
+  // referenced them.
+  async deleteSongs(ids) {
+    if (!ids || !ids.length || !window.compas.deleteSongs) return;
     const library = await window.compas.deleteSongs(ids);
     if (library) _applyLibrary(library);
     const [tandas, playlists] = await Promise.all([
@@ -174,6 +179,32 @@ const Store = {
       _set({ tandas: tandas || [], playlists: playlists || [] });
     }
     return res ? res.song : null;
+  },
+  // Flag/unflag songs as cortinas (usage flag, independent of genre). Refreshes
+  // the library + tandas/playlists (embedded song copies carry the flag).
+  async setSongCortina(ids, isCortina) {
+    if (!window.compas.setSongCortina || !ids || !ids.length) return;
+    const library = await window.compas.setSongCortina(ids, !!isCortina);
+    if (library) _applyLibrary(library);
+    const [tandas, playlists] = await Promise.all([
+      window.compas.listTandas(),
+      window.compas.listPlaylists(),
+    ]);
+    _set({ tandas: tandas || [], playlists: playlists || [] });
+  },
+  // Flag/unflag every song under a library folder (and its subfolders) as
+  // cortinas. Uses the per-song flag so nested folders are covered too.
+  async setFolderCortina(node, isCortina) {
+    if (!window.compas.setSongCortina || !node) return;
+    const ids = collectSongIds(node);
+    if (!ids.length) return;
+    const library = await window.compas.setSongCortina(ids, !!isCortina);
+    if (library) _applyLibrary(library);
+    const [tandas, playlists] = await Promise.all([
+      window.compas.listTandas(),
+      window.compas.listPlaylists(),
+    ]);
+    _set({ tandas: tandas || [], playlists: playlists || [] });
   },
   // Smart Organize: ask the main process for proposed metadata changes across
   // the whole library (pure preview — nothing is written yet). Returns
@@ -203,11 +234,11 @@ const Store = {
     if (!window.compas.importScanPreview) return null;
     return await window.compas.importScanPreview();
   },
-  // Detailed import — step 2: commit with a per-folder style map. Refreshes the
-  // library + tandas/playlists.
-  async commitImport(types) {
+  // Detailed import — step 2: commit with a per-folder style map and cortina-flag
+  // map. Refreshes the library + tandas/playlists.
+  async commitImport(types, cortinas) {
     if (!window.compas.importCommit) return null;
-    const library = await window.compas.importCommit(types || {});
+    const library = await window.compas.importCommit(types || {}, cortinas || {});
     if (library) {
       _applyLibrary(library);
       const [tandas, playlists] = await Promise.all([

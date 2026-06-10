@@ -18,6 +18,9 @@
   },
   "dependencies": {
     "@app/preload": "workspace:*",
+    "@fontsource-variable/geist-mono": "^5.2.8",
+    "@fontsource-variable/newsreader": "^5.2.10",
+    "@fontsource-variable/schibsted-grotesk": "^5.2.8",
     "howler": "^2.2.4"
   }
 }

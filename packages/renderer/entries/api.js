@@ -18,6 +18,8 @@ window.compas = {
   removeSongIfMissing: preload.removeSongIfMissing,
   deleteSongs: preload.deleteSongs,
   updateSong: preload.updateSong,
+  setSongCortina: preload.setSongCortina,
+  setFolderCortina: preload.setFolderCortina,
   previewSmartOrganize: preload.previewSmartOrganize,
   applySmartOrganize: preload.applySmartOrganize,
   importScanPreview: preload.importScanPreview,
@@ -37,6 +39,10 @@ window.compas = {
   onAnalysisProgress: preload.onAnalysisProgress,
   // Live library sync: fires when songs are added/removed/renamed on disk.
   onLibraryChanged: preload.onLibraryChanged,
+  // Text-size commands from the View ▸ Zoom menu / Cmd·Ctrl +/-/0 accelerators,
+  // and the setter that applies the chosen size as native page zoom.
+  onZoomCommand: preload.onZoomCommand,
+  setTextZoom: preload.setTextZoom,
   // URL the audio engine can stream a song from (range requests supported).
   audioUrl: (id) => `${AUDIO_SCHEME}://song/${id}`,
 };

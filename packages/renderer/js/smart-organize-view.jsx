@@ -60,7 +60,7 @@ function SoDiff({ field, from, to, edited, onEdit }) {
             onClick={(ev) => ev.stopPropagation()}
             onChange={(ev) => { setVal(ev.target.value); commit(ev.target.value); }}
             onBlur={() => setEditing(false)}>
-            {(window.STYLE_TYPES || ["tango", "vals", "milonga", "cortina"]).map((t) => (
+            {(window.STYLE_TYPES || ["tango", "vals", "milonga"]).map((t) => (
               <option key={t} value={t}>{soStyleLabel(t)}</option>
             ))}
           </select>

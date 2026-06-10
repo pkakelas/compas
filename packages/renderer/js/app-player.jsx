@@ -89,16 +89,36 @@ function howlNode(howl) {
 }
 
 /* ---------- queue helpers ---------- */
-// For a tanda item, the playable song is data.songs[ix]; for a cortina the data IS the song.
+// A queue item is either a tanda (data.songs[]) or a single song (data IS the
+// song). A single song is rendered/behaves as a *cortina* only when it plays
+// that role — see actsAsCortina — otherwise it's just a song.
 function songOf(item, ix) {
   if (!item) return null;
-  if (item.type === "cortina") return item.data || null;
-  const songs = (item.data && item.data.songs) || [];
-  return songs[ix] || null;
+  if (item.type === "tanda") {
+    const songs = (item.data && item.data.songs) || [];
+    return songs[ix] || null;
+  }
+  return item.data || null;
 }
 function itemSongs(item) {
   if (!item) return [];
-  return item.type === "cortina" ? [item.data] : ((item.data && item.data.songs) || []);
+  return item.type === "tanda" ? ((item.data && item.data.songs) || []) : [item.data];
+}
+
+// Does the single-song item at `index` play the cortina role? Yes when the song
+// is flagged cortina material (song.isCortina), or when it sits directly between
+// two tandas (the item immediately before AND after it are both tandas). A lone
+// song bridging two tandas is a cortina; two or more songs between tandas are
+// just songs (none of them is the single floor-clearing bridge). Tandas
+// themselves are never cortinas. Drives both the curtain presentation and the
+// floor-clearing behaviours (snippet auto-fade, "fade to next tanda").
+function actsAsCortina(queue, index) {
+  const item = queue[index];
+  if (!item || item.type === "tanda") return false;
+  if (item.data && item.data.isCortina) return true;
+  const prev = queue[index - 1];
+  const next = queue[index + 1];
+  return !!(prev && prev.type === "tanda" && next && next.type === "tanda");
 }
 function queueDurationSec(queue) {
   return queue.reduce((a, it) => a + itemSongs(it).reduce((b, s) => b + (s.durationSec || secOf(s.dur)), 0), 0);
@@ -108,7 +128,8 @@ function queueDurationSec(queue) {
 
 function LibPlaylistCard({ pl, added, onAdd }) {
   const tandaCount = pl.items.filter((i) => i.type === "tanda").length;
-  const cortinaCount = pl.items.filter((i) => i.type === "cortina").length;
+  // Count single songs as cortinas only when they play that role.
+  const cortinaCount = pl.items.filter((it, i) => it.type !== "tanda" && actsAsCortina(pl.items, i)).length;
   const total = fmtDur(queueDurationSec(pl.items));
   return (
     <div className="tp-libcard">
@@ -140,7 +161,29 @@ function LibPlaylistCard({ pl, added, onAdd }) {
 
 const EMPTY_SET = new Set();
 
-function LibraryPanel({ tandas, playlists, onAddTanda, onAddSong, onAddPlaylist, makeDrag, draggingId, preview, flash }) {
+// A flagged cortina song in the Live "Cortinas" picker: audition on click, drag
+// to drop at a spot, or tap + to append. Added as a single-song item that —
+// because the song is flagged isCortina — renders as a cortina in the queue.
+function LibCortinaRow({ c, added, onAdd, preview, makeDrag, draggingId }) {
+  const playing = preview && preview.previewId === c.id && preview.playing;
+  const drag = makeDrag ? makeDrag(c) : {};
+  return (
+    <div className={"tp-cortrow" + (draggingId === c.id ? " is-dragging" : "")} {...drag}
+      onClick={preview ? () => preview.toggle(c) : undefined}
+      title={previewTitle(preview, playing, "Audition this cortina")}>
+      <span className="tp-cortrow-ic">{playing ? <EQ /> : (preview && preview.viaMonitor ? <span className="tp-cuebadge"><I.headphones s={14} /></span> : <I.curtain s={15} />)}</span>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div className="tp-cortrow-title">{c.title}</div>
+        <div className="tp-cortrow-meta">{c.orq || "Cortina"}<span className="tp-dotsep">·</span><span className="tp-mono">{c.dur}</span></div>
+      </div>
+      <button className={"tp-addbtn sm" + (added ? " is-added" : "")} onClick={(e) => { e.stopPropagation(); onAdd(); }} title="Add cortina to queue">
+        {added ? <I.check s={15} /> : <I.plus s={15} />}
+      </button>
+    </div>
+  );
+}
+
+function LibraryPanel({ tandas, cortinas, playlists, onAddTanda, onAddSong, onAddPlaylist, makeDrag, draggingId, preview, flash }) {
   const [tab, setTab] = useState("tandas");
   const [genre, setGenre] = useState("all");
   const [q, setQ] = useState("");
@@ -157,7 +200,13 @@ function LibraryPanel({ tandas, playlists, onAddTanda, onAddSong, onAddPlaylist,
     return q.trim() === "" || hay.includes(q.toLowerCase());
   }), [playlists, q]);
 
-  const placeholder = tab === "tandas" ? "Search orchestras, singers, titles…" : "Search playlists…";
+  const filteredCortinas = useMemo(() => (cortinas || []).filter((c) => {
+    const hay = ((c.title || "") + " " + (c.orq || "") + " " + (c.folder || "")).toLowerCase();
+    return q.trim() === "" || hay.includes(q.toLowerCase());
+  }), [cortinas, q]);
+
+  const placeholder = tab === "tandas" ? "Search orchestras, singers, titles…"
+    : tab === "cortinas" ? "Search cortinas…" : "Search playlists…";
 
   return (
     <div className="tp-lib">
@@ -165,6 +214,7 @@ function LibraryPanel({ tandas, playlists, onAddTanda, onAddSong, onAddPlaylist,
         <div className="tv-title">Add to queue</div>
         <div className="tp-tabs">
           <button className={"tp-tab" + (tab === "tandas" ? " is-on" : "")} onClick={() => setTab("tandas")}>Tandas</button>
+          <button className={"tp-tab" + (tab === "cortinas" ? " is-on" : "")} onClick={() => setTab("cortinas")}>Cortinas</button>
           <button className={"tp-tab" + (tab === "library" ? " is-on" : "")} onClick={() => setTab("library")}>Songs</button>
           <button className={"tp-tab" + (tab === "playlists" ? " is-on" : "")} onClick={() => setTab("playlists")}>Playlists</button>
         </div>
@@ -198,11 +248,18 @@ function LibraryPanel({ tandas, playlists, onAddTanda, onAddSong, onAddPlaylist,
               <TandaLibCard key={t.id} t={t} preview={preview} added={flash === "t:" + t.id}
                 onAdd={() => onAddTanda(t)} addTitle="Add tanda to queue" />
             ))}
+            {tab === "cortinas" && filteredCortinas.map((c) => (
+              <LibCortinaRow key={c.id} c={c} added={flash === "c:" + c.id} onAdd={() => onAddSong(c)}
+                preview={preview} makeDrag={makeDrag} draggingId={draggingId} />
+            ))}
             {tab === "playlists" && filteredPlaylists.map((p) => (
               <LibPlaylistCard key={p.id} pl={p} added={flash === "p:" + p.id} onAdd={() => onAddPlaylist(p)} />
             ))}
             {tab === "tandas" && filteredTandas.length === 0 && (
               <div className="tp-empty">{tandas.length ? "No tandas match." : "No tandas yet — build some in the Tandas view."}</div>
+            )}
+            {tab === "cortinas" && filteredCortinas.length === 0 && (
+              <div className="tp-empty">{(cortinas && cortinas.length) ? "No cortinas match." : "No cortinas yet — flag a song or folder as a cortina (in the Library or a song’s editor)."}</div>
             )}
             {tab === "playlists" && filteredPlaylists.length === 0 && (
               <div className="tp-empty">{playlists.length ? "No playlists match." : "No playlists yet — build one in the Playlists view."}</div>
@@ -272,6 +329,27 @@ function QueueCortina({ item, now, onPlay, onRemove, drag }) {
   );
 }
 
+// A single song in the queue that is NOT acting as a cortina (it's not between
+// tandas, e.g. an opener, an intro, or a one-off request). Rendered as a plain
+// track card — no curtain, no "floor clears" language.
+function QueueSong({ item, now, onPlay, onRemove, drag }) {
+  const s = item.data;
+  const { className: dragCls = "", ...handlers } = drag;
+  return (
+    <div className={"tp-songcard tp-qrow" + (now ? " is-now" : "") + " " + dragCls} {...handlers}
+      onClick={onPlay}>
+      <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
+      <span className="tp-songcard-glyph">{now ? <EQ /> : <I.note s={15} />}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="tp-songcard-title">{s.title}</div>
+        <div className="tp-songcard-sub">{s.orq || "Unknown"}{s.singer ? " · " + s.singer : ""}</div>
+      </div>
+      <div className="tp-fade"><I.clock s={13} /> {s.dur || "—"}</div>
+      {!now && <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove"><I.x s={14} /></button>}
+    </div>
+  );
+}
+
 // Shown between two tandas that have no cortina between them. A cortina isn't
 // required, but a DJ usually wants one to clear the floor, so we flag the gap.
 function MissingCortinaHint() {
@@ -299,6 +377,7 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, onPlay, onPlaySongAt, onRe
   const [savingNow, setSavingNow] = useState(false);
   const [clearArmed, setClearArmed] = useState(false);
   const saveInputRef = useRef(null);
+  const scrollRef = useRef(null);
   const { toast, flash, dismiss } = useToast();
   const tandaCount = queue.filter(i => i.type === "tanda").length;
   const setTotal = fmtDur(queueDurationSec(queue));
@@ -312,6 +391,33 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, onPlay, onPlaySongAt, onRe
   useEffect(() => { if (!queue.length && saveOpen) closeSave(); }, [queue.length]); // eslint-disable-line
   // Disarm the clear confirm whenever the queue empties (e.g. after clearing).
   useEffect(() => { if (!queue.length && clearArmed) setClearArmed(false); }, [queue.length]); // eslint-disable-line
+
+  // Keep the now-playing item in view as playback advances — like VLC, the list
+  // follows along so the DJ always sees what's on air and what's coming up. We
+  // park it a little below the top so a tanda of context stays visible above.
+  // Since every view stays mounted (hidden via display:none), a tanda can advance
+  // while the Live tab is off-screen — where there's no layout to scroll. So we
+  // also re-run when the panel regains layout (the DJ flips back to Live).
+  const wasHidden = useRef(true);
+  useEffect(() => {
+    const box = scrollRef.current;
+    if (!box) return;
+    const scrollToNow = () => {
+      if (!nowKey || !box.clientHeight) return;
+      const el = box.querySelector(".is-now");
+      if (!el) return;
+      const top = box.scrollTop + (el.getBoundingClientRect().top - box.getBoundingClientRect().top) - 24;
+      box.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    };
+    if (box.clientHeight) { scrollToNow(); wasHidden.current = false; }
+    const ro = new ResizeObserver(() => {
+      const visible = box.clientHeight > 0;
+      if (visible && wasHidden.current) scrollToNow();
+      wasHidden.current = !visible;
+    });
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [nowKey]);
 
   const handleClear = () => {
     if (!queue.length) return;
@@ -331,7 +437,8 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, onPlay, onPlaySongAt, onRe
 
   // While a cortina is on air, surface a quick "fade to next tanda" action that
   // floats over the queue — the DJ shouldn't have to hunt for it in the transport.
-  const cortinaPlaying = now && now.type === "cortina";
+  const nowIdx = now ? queue.findIndex((x) => x.key === now.key) : -1;
+  const cortinaPlaying = nowIdx >= 0 && actsAsCortina(queue, nowIdx);
   const upcomingTanda = cortinaPlaying ? nextTandaAfter(queue, now.key) : null;
 
   const clearDrag = () => { dragKey.current = null; setOverKey(null); setOverEnd(false); };
@@ -429,16 +536,21 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, onPlay, onPlaySongAt, onRe
         </div>
       )}
 
-      <div className={"tp-q-scroll" + (overEnd ? " drop-end" : "")} {...listDrop}>
+      <div ref={scrollRef} className={"tp-q-scroll" + (overEnd ? " drop-end" : "")} {...listDrop}>
         {queue.map((item, i) => {
           if (item.type === "tanda") tIx += 1;
           const dp = dragProps(item);
           const isNow = item.key === nowKey;
           const prev = queue[i - 1];
           const gap = item.type === "tanda" && prev && prev.type === "tanda";
-          const row = item.type === "tanda"
+          // A single song shows as a cortina only when it plays that role
+          // (between tandas, or flagged cortina material); otherwise it's a song.
+          const role = item.type === "tanda" ? "tanda" : (actsAsCortina(queue, i) ? "cortina" : "song");
+          const row = role === "tanda"
             ? <QueueTanda key={item.key} item={item} ix={tIx} now={isNow} nowIx={isNow ? nowIx : 0} onPlay={() => onPlay(item.key)} onPlaySong={(ix) => onPlaySongAt(item.key, ix)} onRemove={() => onRemove(item.key)} drag={dp} />
-            : <QueueCortina key={item.key} item={item} now={isNow} onPlay={() => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />;
+            : role === "cortina"
+              ? <QueueCortina key={item.key} item={item} now={isNow} onPlay={() => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />
+              : <QueueSong key={item.key} item={item} now={isNow} onPlay={() => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />;
           return gap
             ? <React.Fragment key={item.key}><MissingCortinaHint />{row}</React.Fragment>
             : row;
@@ -479,19 +591,25 @@ function SeekBar({ pos, dur, onSeek, className = "tp-nb-bar" }) {
 
 function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPause, onPrev, onNext, onSeek, onFadeToTanda, onVolume, onToggleMute, cortinaSnippetEnabled, cortinaSnippetSec }) {
   if (!now) {
+    // Nothing is selected yet. If the queue already has items, the main Play
+    // button must still work — it starts the set from the top (onPlayPause falls
+    // back to queue[0]). Only a truly empty queue leaves the transport inert.
+    const hasQueue = queue.length > 0;
     return (
       <div className="tp-nowbar">
         <div className="tp-nb-meta">
           <div className="tp-nb-mark"><I.note s={16} /></div>
           <div style={{ minWidth: 0 }}>
-            <div className="tp-nb-title">Nothing playing</div>
-            <div className="tp-nb-sub">Add a tanda or cortina, then press play</div>
+            <div className="tp-nb-title">{hasQueue ? "Ready to play" : "Nothing playing"}</div>
+            <div className="tp-nb-sub">
+              {hasQueue ? "Press play to start the set" : "Add a tanda or cortina, then press play"}
+            </div>
           </div>
         </div>
         <div className="tp-nb-wave" />
         <div className="tp-nb-ctrls">
           <button className="tp-tbtn" style={{ width: 40, height: 40 }} disabled><I.prev s={16} /></button>
-          <button className="tp-tbtn play" style={{ width: 52, height: 52 }} disabled><I.play s={22} /></button>
+          <button className="tp-tbtn play" style={{ width: 52, height: 52 }} onClick={hasQueue ? onPlayPause : undefined} disabled={!hasQueue}><I.play s={22} /></button>
           <button className="tp-tbtn" style={{ width: 40, height: 40 }} disabled><I.next s={16} /></button>
           <VolumeControl volume={volume} muted={muted} onVolume={onVolume} onToggleMute={onToggleMute} />
         </div>
@@ -500,7 +618,10 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
   }
 
   const remain = Math.max(0, (dur || 0) - (pos || 0));
-  const isCortina = now.type === "cortina";
+  // A single-song item shows as a cortina only when it plays that role; tandas
+  // (and the preview pseudo-tanda, which isn't in the queue) never do.
+  const nowIdx = queue.findIndex((x) => x.key === now.key);
+  const isCortina = now.type !== "tanda" && actsAsCortina(queue, nowIdx);
 
   if (isCortina) {
     const c = now.data;
@@ -548,20 +669,25 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
     );
   }
 
-  const t = now.data;
+  // Tanda or single song. A single song has no song list, so it shows no dots
+  // and reads its orchestra straight off the song.
+  const isTanda = now.type === "tanda";
   const song = songOf(now, nowIx);
-  const m = tandaMeta(t);
+  const orq = isTanda ? tandaMeta(now.data).orq : ((song && song.orq) || "Unknown");
+  const tandaSongs = isTanda ? (now.data.songs || []) : [];
   return (
     <div className="tp-nowbar">
       <div className="tp-nb-meta">
         <div className="tp-nb-mark">{playing ? <EQ /> : <I.pause s={16} />}</div>
         <div style={{ minWidth: 0 }}>
           <div className="tp-nb-title">{song ? song.title : "—"}</div>
-          <div className="tp-nb-sub"><b>{m.orq}</b>{song && song.singer ? " · " + song.singer : ""}</div>
+          <div className="tp-nb-sub"><b>{orq}</b>{song && song.singer ? " · " + song.singer : ""}</div>
         </div>
-        <span className="tp-nb-dots">
-          {t.songs.map((_, i) => <span key={i} className={"tp-dot" + (i < nowIx ? " done" : i === nowIx ? " now" : "")}></span>)}
-        </span>
+        {isTanda && (
+          <span className="tp-nb-dots">
+            {tandaSongs.map((_, i) => <span key={i} className={"tp-dot" + (i < nowIx ? " done" : i === nowIx ? " now" : "")}></span>)}
+          </span>
+        )}
       </div>
 
       <div className="tp-nb-wave">
@@ -686,8 +812,9 @@ function usePlayerEngine(mainDeviceId, playback) {
     const s = stateRef.current;
     if (!s.cortinaSnippetEnabled || s.preview) return;
     if (advancingRef.current || snippetFiredRef.current) return;
-    const item = s.queue.find((i) => i.key === s.nowKey);
-    if (!item || item.type !== "cortina") return;
+    // Only auto-fade when the current item is actually playing the cortina role.
+    const idx = s.queue.findIndex((i) => i.key === s.nowKey);
+    if (idx < 0 || !actsAsCortina(s.queue, idx)) return;
     if (cur < s.cortinaSnippetSec) return;
     const t = nextTandaAfter(s.queue, s.nowKey);
     if (!t) return;   // nothing to fade into — let it play out
@@ -1319,9 +1446,11 @@ function PlayerProvider({ children }) {
 /* ============================ LIVE PLAYER (library + queue) ============================ */
 
 function LivePlayer() {
-  const { tandas, playlists } = useStore();
+  const { tandas, songs, playlists } = useStore();
   const p = usePlayer();
   const [draggingId, setDraggingId] = useState(null);
+  // Cortina material is flagged per song (song.isCortina), independent of genre.
+  const cortinas = useMemo(() => (songs || []).filter((s) => s.isCortina), [songs]);
 
   // Drag source for library songs — mirrors the Tandas builder's payload so the
   // queue can read "song:<id>" off the drop.
@@ -1336,7 +1465,7 @@ function LivePlayer() {
 
   return (
     <div className="tp-main">
-      <LibraryPanel tandas={tandas} playlists={playlists}
+      <LibraryPanel tandas={tandas} cortinas={cortinas} playlists={playlists}
         onAddTanda={p.addTanda} onAddSong={p.addCortina} onAddPlaylist={p.addPlaylist}
         makeDrag={makeDrag} draggingId={draggingId} preview={preview} flash={p.flash} />
       <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} pos={p.pos} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onSavePlaylist={p.saveQueueAsPlaylist} onClearQueue={p.clearQueue} onFadeToTanda={p.fadeToTanda} cortinaSnippetEnabled={p.cortinaSnippetEnabled} cortinaSnippetSec={p.cortinaSnippetSec} />
@@ -1454,4 +1583,4 @@ function AnalysisBanner() {
   );
 }
 
-Object.assign(window, { LivePlayer, PlayerProvider, PlayerBar, usePlayer, AnalysisBanner, MissingCortinaHint, itemSongs, queueDurationSec });
+Object.assign(window, { LivePlayer, PlayerProvider, PlayerBar, usePlayer, AnalysisBanner, MissingCortinaHint, itemSongs, queueDurationSec, actsAsCortina });

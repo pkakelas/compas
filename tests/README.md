@@ -1,0 +1,47 @@
+# E2E tests (Playwright + Electron)
+
+These tests launch the **real, built** Electron app via Playwright's
+`_electron` driver — the actual main process, preload bridge, SQLite database,
+`compas-audio://` protocol, and Howler audio engine. This covers the paths a
+bare-browser tool (e.g. `/qa-only` against the Vite dev server) structurally
+cannot reach.
+
+## Run
+
+```bash
+pnpm test:e2e          # builds the app first (pretest:e2e), then runs headless
+pnpm test:e2e:headed   # watch the window while tests run
+```
+
+Build is required because tests load the renderer from `packages/renderer/dist`
+(production path), not the Vite dev server.
+
+## What's covered
+
+- **smoke.spec.ts** — app launches, window visible, title correct, preload
+  bridge present, all six nav views render, no uncaught JS errors.
+- **import.spec.ts** — stubs the native folder dialog, feeds a generated WAV
+  fixture library, drives the import-review modal, and asserts the library
+  populates through the real IPC → `scanFolder` → SQLite path.
+- **playback.spec.ts** — builds a tanda from imported tracks, queues it in Live,
+  hits play, and asserts Howler actually reports a playing sound.
+
+## How it stays isolated
+
+Each launched app gets a throwaway `--user-data-dir` (`helpers/app.ts`), so:
+
+- the test SQLite library never touches your real `compas.db`, and
+- Electron's single-instance lock doesn't collide with a running dev instance —
+  you can run the suite while `pnpm start` is open.
+
+## Fixtures
+
+`helpers/wav.ts` writes tiny valid PCM WAV files (no ffmpeg needed) into
+style-named folders (`Di Sarli - Tango`, `Biagi - Vals`) so the importer's
+folder-name genre heuristic has something realistic to classify.
+
+## Driving the native dialog
+
+The folder picker uses `dialog.showOpenDialog`, which Playwright can't click.
+`stubFolderDialog()` overrides it in the main process via `app.evaluate(...)` to
+return a fixture path. Call it before triggering the picker.

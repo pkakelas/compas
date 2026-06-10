@@ -3,6 +3,22 @@ import mapWorkspaces from '@npmcli/map-workspaces';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
+// Windows code signing via Azure Trusted Signing. Only the three AZURE_* auth
+// vars are secret; the account/profile/endpoint/publisher are not and come from
+// GitHub Actions repo *variables*. Signing is gated on the account name being
+// present so local `compile:win` (and any build without Azure creds) still
+// produces an unsigned binary instead of failing. electron-builder reads the
+// AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET env vars itself for
+// Entra ID auth, so they are not referenced here.
+const azureSignOptions = process.env.AZURE_CODE_SIGNING_ACCOUNT
+  ? {
+      publisherName: process.env.AZURE_PUBLISHER_NAME,
+      endpoint: process.env.AZURE_CODE_SIGNING_ENDPOINT,
+      codeSigningAccountName: process.env.AZURE_CODE_SIGNING_ACCOUNT,
+      certificateProfileName: process.env.AZURE_CODE_SIGNING_PROFILE,
+    }
+  : undefined;
+
 export default /** @type import('electron-builder').Configuration */
 ({
   appId: 'com.compas.player',
@@ -49,6 +65,9 @@ export default /** @type import('electron-builder').Configuration */
     target: [
       {target: 'nsis', arch: ['x64', 'arm64']},
     ],
+    // Present only when Azure creds are configured (CI release); otherwise the
+    // build is unsigned. See azureSignOptions definition at the top of the file.
+    ...(azureSignOptions ? {azureSignOptions} : {}),
   },
   nsis: {
     shortcutName: 'Compás',

@@ -15,7 +15,7 @@
   ],
   "engines": {
     "node": ">=23.0.0"
-  },  
+  },
   "packageManager": "pnpm@10.29.2",
   "scripts": {
     "build": "pnpm -r --if-present run build",
@@ -27,11 +27,15 @@
     "postinstall": "electron-builder install-app-deps",
     "start": "node packages/dev-mode.js",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
-    "typecheck": "pnpm -r --if-present run typecheck"
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "pretest:e2e": "pnpm run build",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",
     "@npmcli/map-workspaces": "5.0.3",
+    "@playwright/test": "^1.60.0",
     "@types/node": "25.5.0",
     "electron": "41.0.3",
     "electron-builder": "26.8.1",

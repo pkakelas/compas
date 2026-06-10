@@ -281,6 +281,13 @@ function SettingsView({ t, setTweak }) {
                 ))}
               </div>
             </SetRow>
+
+            <SetRow label="Text size"
+              desc="Make everything in the app larger or smaller. Also adjustable with ⌘/Ctrl + and −.">
+              <input className="tp-set-range" type="range" min={70} max={150} step={10}
+                value={t.fontScale} onChange={(e) => setTweak("fontScale", Number(e.target.value))} />
+              <span className="tp-set-range-val">{t.fontScale}%</span>
+            </SetRow>
           </SettingsCard>
         </div>
       </div>

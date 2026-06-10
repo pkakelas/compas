@@ -11,9 +11,13 @@ const plKid = () => "pl" + (_plKid++);
 // itemSongs + queueDurationSec are shared with the live player (window globals).
 function playlistMeta(items) {
   const list = items || [];
+  // A single-song item is counted as a cortina only when it plays that role
+  // (between tandas, or flagged cortina material); other single songs are loose.
+  let cortinas = 0;
+  list.forEach((it, i) => { if (it.type !== "tanda" && actsAsCortina(list, i)) cortinas += 1; });
   return {
     tandas: list.filter((i) => i.type === "tanda").length,
-    cortinas: list.filter((i) => i.type === "cortina").length,
+    cortinas,
     songs: list.reduce((a, it) => a + itemSongs(it).length, 0),
     total: fmtDur(queueDurationSec(list)),
   };
@@ -159,6 +163,27 @@ function PlEditorCortina({ it, slot, onRemove, preview }) {
   );
 }
 
+// A single song in a playlist that is NOT acting as a cortina — a plain track
+// row, no curtain. Mirrors the live queue's QueueSong.
+function PlEditorSongItem({ it, slot, onRemove, preview }) {
+  const s = it.data;
+  const playing = preview && preview.previewId === s.id && preview.playing;
+  return (
+    <div className={"tp-songcard tp-qrow tp-qdrag" + (slot.dragging ? " is-dragging" : "") + (slot.over ? " is-over" : "") + (playing ? " is-now" : "")}
+      {...slot.handlers}
+      onClick={() => preview && preview.toggle(s)} title={previewTitle(preview, playing, "Audition this song")}>
+      <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
+      <span className="tp-songcard-glyph">{playing ? <EQ /> : (preview && preview.viaMonitor ? <span className="tp-cuebadge"><I.headphones s={14} /></span> : <I.note s={15} />)}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="tp-songcard-title">{s.title}</div>
+        <div className="tp-songcard-sub">{s.orq || "Unknown"}{s.singer ? " · " + s.singer : ""}</div>
+      </div>
+      <div className="tp-fade"><I.clock s={13} /> {s.dur || "—"}</div>
+      <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove from playlist"><I.x s={14} /></button>
+    </div>
+  );
+}
+
 function PlEditorDock({ open, status, api, preview, onBack, onPlayAll, onDelete }) {
   const items = open.items;
   const slot = usePLReorder(api.reorder);
@@ -204,9 +229,13 @@ function PlEditorDock({ open, status, api, preview, onBack, onPlayAll, onDelete 
           const sp = slot(i);
           const prev = items[i - 1];
           const gap = it.type === "tanda" && prev && prev.type === "tanda";
-          const row = it.type === "tanda"
+          // A single song reads as a cortina only when it plays that role.
+          const role = it.type === "tanda" ? "tanda" : (actsAsCortina(items, i) ? "cortina" : "song");
+          const row = role === "tanda"
             ? <PlEditorTanda key={it.key} it={it} ix={tIx} slot={sp} onRemove={() => api.removeAt(i)} preview={preview} />
-            : <PlEditorCortina key={it.key} it={it} slot={sp} onRemove={() => api.removeAt(i)} preview={preview} />;
+            : role === "cortina"
+              ? <PlEditorCortina key={it.key} it={it} slot={sp} onRemove={() => api.removeAt(i)} preview={preview} />
+              : <PlEditorSongItem key={it.key} it={it} slot={sp} onRemove={() => api.removeAt(i)} preview={preview} />;
           return gap
             ? <React.Fragment key={it.key}><MissingCortinaHint />{row}</React.Fragment>
             : row;
@@ -239,8 +268,8 @@ function PlaylistCard({ pl, onOpen, onDelete, onPlay }) {
         {preview.map((it, i) => (
           <div key={it.type + i} className="tv-tcard-song">
             <span className="n">{i + 1}</span>
-            <span className="t">{it.type === "cortina" ? "“" + it.data.title + "”" : itemTitle(it)}</span>
-            <span className="d">{it.type === "cortina" ? "Cortina" : it.data.songs.length + "×"}</span>
+            <span className="t">{it.type !== "tanda" ? "“" + it.data.title + "”" : itemTitle(it)}</span>
+            <span className="d">{it.type !== "tanda" ? (actsAsCortina(pl.items, i) ? "Cortina" : "Song") : it.data.songs.length + "×"}</span>
           </div>
         ))}
         {pl.items.length > 6 && (
@@ -293,7 +322,8 @@ function PlManageGrid({ playlists, onOpen, onDelete, onPlay, onNew }) {
 /* ============================ PLAYLISTS VIEW (orchestrator) ============================ */
 function PlaylistsView({ onPlay }) {
   const { tandas, songs, playlists, imported } = useStore();
-  const cortinas = useMemo(() => songs.filter((s) => s.genre === "cortina"), [songs]);
+  // Cortina material is flagged per song (song.isCortina), independent of genre.
+  const cortinas = useMemo(() => songs.filter((s) => s.isCortina), [songs]);
   const preview = usePlayer().preview;
   const { toast, flash, dismiss } = useToast();
   const { ask, modal } = useConfirm();

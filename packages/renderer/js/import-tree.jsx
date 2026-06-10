@@ -1,10 +1,11 @@
 // import-tree.jsx — the detailed import / re-type tool.
 //
 // Shows a folder tree and lets the DJ optionally set a style (Mixed / Tango /
-// Vals / Milonga / Cortina / Kizomba / … / custom) per folder. Setting a
-// folder cascades to all its subfolders; any subfolder can override. On import,
-// folders left unset default to Mixed — for libraries organized by orchestra
-// rather than by style. Used in two modes:
+// Vals / Milonga / Kizomba / … / custom) per folder, plus a separate "Cortina"
+// flag (cortina is a usage flag, not a genre). Setting either cascades to all
+// subfolders; any subfolder can override. On import, folders left unset default
+// to Mixed — for libraries organized by orchestra rather than by style. Used in
+// two modes:
 //   • "import": a freshly-scanned (not-yet-saved) folder → commit with a
 //     per-folder style map.
 //   • "retype": the existing library → update the styles of existing songs.
@@ -33,11 +34,24 @@ function buildRetypeTree(songs) {
       child.count++; child.genres.add(s.genre);
       node = child;
     }
-    node.songs.push({ id: s.id, genre: s.genre }); // song lives in its leaf folder
+    node.songs.push({ id: s.id, genre: s.genre, isCortina: !!s.isCortina }); // song lives in its leaf folder
   }
-  // finalize: guess = the common current style (if uniform), sort children
+  // True only when the folder has songs and every one (incl. subfolders) is a
+  // cortina — mirrors how the style guess shows a value only when it's uniform.
+  const allCortina = (n) => {
+    let any = false, all = true;
+    const walk = (m) => {
+      (m.songs || []).forEach((s) => { any = true; if (!s.isCortina) all = false; });
+      (m.children || []).forEach(walk);
+    };
+    walk(n);
+    return any && all;
+  };
+  // finalize: guess = the common current style (if uniform), sort children,
+  // cortina = whether the folder is currently all-cortina.
   const finalize = (n) => {
     n.guess = n.genres.size === 1 ? [...n.genres][0] : null;
+    n.cortina = allCortina(n);
     n.children.sort((a, b) => a.name.localeCompare(b.name));
     n.children.forEach(finalize);
   };
@@ -96,10 +110,12 @@ function TypePicker({ resolved, explicit, onPick, onClear }) {
 }
 
 /* ---------- recursive tree row ---------- */
-function TreeRow({ node, depth, openSet, toggle, resolvedMap, assignments, onPick, onClear }) {
+function TreeRow({ node, depth, openSet, toggle, resolvedMap, assignments, onPick, onClear,
+                  showCortina, cortinaMap, onToggleCortina }) {
   const hasKids = node.children && node.children.length > 0;
   const isOpen = openSet.has(node.key);
   const r = resolvedMap.get(node.key) || {};
+  const cr = (cortinaMap && cortinaMap.get(node.key)) || {};
   return (
     <div className="it-node">
       <div className="it-row" style={{ paddingLeft: 8 + depth * 18 }}>
@@ -109,6 +125,15 @@ function TreeRow({ node, depth, openSet, toggle, resolvedMap, assignments, onPic
         <span className="it-fic">{isOpen && hasKids ? <I.folderOpen s={15} /> : <I.folder s={15} />}</span>
         <span className="it-name" title={node.name}>{node.name || "(root)"}</span>
         <span className="it-count">{node.count}</span>
+        {showCortina && (
+          <button className={"it-cortbtn" + (cr.resolved ? " on" : "")}
+            onClick={(e) => { e.stopPropagation(); onToggleCortina(node.key, !cr.resolved); }}
+            title={cr.resolved
+              ? "These are cortinas — click to unflag" + (cr.explicit ? "" : " (inherited/guessed)")
+              : "Flag this folder's songs as cortinas"}>
+            <I.curtain s={13} /> Cortinas
+          </button>
+        )}
         <TypePicker resolved={r.resolved} explicit={!!assignments[node.key]}
           onPick={(t) => onPick(node.key, t)} onClear={() => onClear(node.key)} />
       </div>
@@ -116,7 +141,8 @@ function TreeRow({ node, depth, openSet, toggle, resolvedMap, assignments, onPic
         <div className="it-kids">
           {node.children.map((c) => (
             <TreeRow key={c.key} node={c} depth={depth + 1} openSet={openSet} toggle={toggle}
-              resolvedMap={resolvedMap} assignments={assignments} onPick={onPick} onClear={onClear} />
+              resolvedMap={resolvedMap} assignments={assignments} onPick={onPick} onClear={onClear}
+              showCortina={showCortina} cortinaMap={cortinaMap} onToggleCortina={onToggleCortina} />
           ))}
         </div>
       )}
@@ -126,6 +152,7 @@ function TreeRow({ node, depth, openSet, toggle, resolvedMap, assignments, onPic
 
 function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
   const [assignments, setAssignments] = useState({});      // node.key -> style
+  const [cortinaAssign, setCortinaAssign] = useState({});  // node.key -> bool (explicit cortina flag)
   const [openSet, setOpenSet] = useState(() => {
     const s = new Set();
     const seed = (n, d) => { if (d < 2) s.add(n.key); (n.children || []).forEach((c) => seed(c, d + 1)); };
@@ -151,9 +178,32 @@ function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
     return map;
   }, [assignments, roots, importDefault]);
 
+  // Cortina is a usage flag (separate from style), offered in both import and
+  // re-type. Resolve it top-down like the style: an explicit toggle cascades to
+  // subfolders; the per-folder guess (node.cortina — folder name on import, or
+  // the folder's current state on re-type) only applies to its own folder.
+  const showCortina = true;
+  const cortinaMap = useMemo(() => {
+    const map = new Map();
+    const walk = (n, inherited) => {
+      const hasExplicit = Object.prototype.hasOwnProperty.call(cortinaAssign, n.key);
+      const explicit = hasExplicit ? cortinaAssign[n.key] : undefined;
+      let resolved;
+      if (explicit !== undefined) resolved = explicit;
+      else if (inherited !== undefined) resolved = inherited;
+      else resolved = !!n.cortina;
+      map.set(n.key, { resolved, explicit: explicit !== undefined });
+      const childInherited = explicit !== undefined ? explicit : inherited;
+      (n.children || []).forEach((c) => walk(c, childInherited));
+    };
+    (roots || []).forEach((r) => walk(r, undefined));
+    return map;
+  }, [cortinaAssign, roots]);
+
   const toggle = (key) => setOpenSet((s) => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
   const onPick = (key, t) => setAssignments((a) => ({ ...a, [key]: t }));
   const onClear = (key) => setAssignments((a) => { const n = { ...a }; delete n[key]; return n; });
+  const onToggleCortina = (key, val) => setCortinaAssign((a) => ({ ...a, [key]: val }));
 
   // Stats + the payload for confirm.
   const { explicitFolders, changeCount, build } = useMemo(() => {
@@ -163,22 +213,33 @@ function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
 
     if (mode === "import") {
       const types = {};
+      const cortinas = {};
       let typed = 0;
       (roots || []).forEach((r) => visit(r, (n) => {
         const res = (resolvedMap.get(n.key) || {}).resolved;
         if (res) { types[n.path] = res; typed++; }
+        // Send the resolved cortina flag for every folder so it overrides the
+        // scanner's folder-name guess with exactly what the DJ sees.
+        cortinas[n.path] = !!(cortinaMap.get(n.key) || {}).resolved;
       }));
-      return { explicitFolders: explicit, changeCount: typed, build: () => types };
+      return { explicitFolders: explicit, changeCount: typed, build: () => ({ types, cortinas }) };
     }
-    // retype: collect song genre changes (only where a style is resolved)
+    // retype: collect song genre changes (only where a style is resolved) plus
+    // cortina-flag changes (songs whose flag differs from the resolved value).
     const updates = [];
+    const cortinaOn = [];
+    const cortinaOff = [];
     (roots || []).forEach((r) => visit(r, (n) => {
       const res = (resolvedMap.get(n.key) || {}).resolved;
-      if (!res) return;
-      for (const s of n.songs || []) if (s.genre !== res) updates.push({ id: s.id, genre: res });
+      const wantCortina = !!(cortinaMap.get(n.key) || {}).resolved;
+      for (const s of n.songs || []) {
+        if (res && s.genre !== res) updates.push({ id: s.id, genre: res });
+        if (!!s.isCortina !== wantCortina) (wantCortina ? cortinaOn : cortinaOff).push(s.id);
+      }
     }));
-    return { explicitFolders: explicit, changeCount: updates.length, build: () => updates };
-  }, [resolvedMap, roots, mode]);
+    const changeCount = updates.length + cortinaOn.length + cortinaOff.length;
+    return { explicitFolders: explicit, changeCount, build: () => ({ updates, cortinaOn, cortinaOff }) };
+  }, [resolvedMap, cortinaMap, roots, mode]);
 
   const confirm = async () => {
     if (busy) return;
@@ -194,7 +255,7 @@ function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
           <div className="so-head-l">
             <span className="so-head-ic"><I.folderOpen s={17} /></span>
             <div>
-              <div className="so-head-title">{isImport ? "Import — set folder types (optional)" : "Re-type folders"}</div>
+              <div className="so-head-title">{isImport ? "Import — set folder types (optional)" : "Set folder genres"}</div>
               <div className="so-head-sub">{isImport
                 ? "Orchestra folders with tangos, vals and milongas together can stay Mixed — set a style only where your library is sorted by type."
                 : "Pick a style per folder. It applies to every folder below — override any subfolder."}</div>
@@ -207,14 +268,15 @@ function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
           <div className="it-hint">
             <span className="it-hint-ic"><I.folderOpen s={15} /></span>
             <div>{isImport
-              ? <>Set the genre for each folder so your library is easy to search later. Use <b>Set style</b> on any folder that holds a single genre — e.g. a <b>Vals</b> or <b>Milonga</b> folder — and it applies to everything inside it. Any folder you leave unset stays <b>Mixed</b>.</>
-              : <>Pick a style for each folder using the <b>Set style</b> button on the right.
-                It applies to every folder inside it — click a subfolder to give it a different style.</>}</div>
+              ? <>Set the genre for each folder so your library is easy to search later. Use <b>Set style</b> on any folder that holds a single genre — e.g. a <b>Vals</b> or <b>Milonga</b> folder — and it applies to everything inside it. Any folder you leave unset stays <b>Mixed</b>. Toggle <b>Cortina</b> to mark a folder of floor-clearers (kept separate from genre).</>
+              : <>Pick a style for each folder using the <b>Set style</b> button on the right, or toggle <b>Cortina</b> to mark a folder of floor-clearers.
+                Both apply to every folder inside — click a subfolder to override.</>}</div>
           </div>
           <div className="so-scroll it-scroll">
             {(roots || []).map((r) => (
               <TreeRow key={r.key} node={r} depth={0} openSet={openSet} toggle={toggle}
-                resolvedMap={resolvedMap} assignments={assignments} onPick={onPick} onClear={onClear} />
+                resolvedMap={resolvedMap} assignments={assignments} onPick={onPick} onClear={onClear}
+                showCortina={showCortina} cortinaMap={cortinaMap} onToggleCortina={onToggleCortina} />
             ))}
           </div>
         </div>
@@ -261,10 +323,11 @@ function useFolderImport(flash) {
     setTree(node);
   };
   const cancel = () => { setTree(null); Store.cancelImport(); };
-  const confirm = async (types) => {
+  const confirm = async (payload) => {
+    const { types, cortinas } = payload || {};
     const before = (Store.get().totalSongs) || 0;
     setTree(null);
-    const lib = await Store.commitImport(types);
+    const lib = await Store.commitImport(types, cortinas);
     if (lib && flash) {
       const added = (lib.totalSongs || 0) - before;
       flash(added > 0

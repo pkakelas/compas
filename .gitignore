@@ -13,3 +13,10 @@ thumbs.db
 # JetBrains / editor cruft
 .idea
 *.iml
+.gstack/
+
+# Playwright e2e artifacts
+/test-results/
+/tests/.report/
+/playwright-report/
+.last-run.json

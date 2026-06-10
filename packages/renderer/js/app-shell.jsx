@@ -4,16 +4,30 @@ const { useState } = React;
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "builderWidth": 380,
   "theme": "dark",
-  "startView": "Tandas"
+  "startView": "Tandas",
+  "fontScale": 100
 }/*EDITMODE-END*/;
+
+// Text size is a whole-app zoom (everything is sized in px, so scaling the page
+// is the cleanest way to make the letters bigger/smaller). Kept in 10% steps
+// between these bounds, driven by the Settings slider and the Cmd/Ctrl +/-/0
+// shortcuts alike.
+const FONT_SCALE_MIN = 70;
+const FONT_SCALE_MAX = 150;
+const FONT_SCALE_STEP = 10;
+const clampFontScale = (n) => Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, n));
 
 function AppShell() {
   // Seed the theme from the saved preference (default: dark) so the very first
   // render already matches what index.html painted — no flash, no restore race.
   const [t, setTweak] = useTweaks((() => {
     try {
-      const saved = localStorage.getItem("compas.theme");
-      return saved ? { ...TWEAK_DEFAULTS, theme: saved } : TWEAK_DEFAULTS;
+      const seed = { ...TWEAK_DEFAULTS };
+      const savedTheme = localStorage.getItem("compas.theme");
+      if (savedTheme) seed.theme = savedTheme;
+      const savedScale = parseInt(localStorage.getItem("compas.fontScale"), 10);
+      if (!isNaN(savedScale)) seed.fontScale = clampFontScale(savedScale);
+      return seed;
     } catch (e) { return TWEAK_DEFAULTS; }
   })());
 
@@ -26,6 +40,31 @@ function AppShell() {
     document.documentElement.dataset.theme = t.theme;
     localStorage.setItem("compas.theme", t.theme);
   }, [t.theme]);
+
+  // Apply the chosen text size as native page zoom and persist it. The preload
+  // already applied the saved value before first paint; this keeps it in sync as
+  // the DJ changes it.
+  React.useEffect(() => {
+    const scale = clampFontScale(t.fontScale || 100);
+    if (window.compas && window.compas.setTextZoom) window.compas.setTextZoom(scale / 100);
+    try { localStorage.setItem("compas.fontScale", String(scale)); } catch (e) { /* ignore */ }
+  }, [t.fontScale]);
+
+  // Cmd/Ctrl +/-/0 come in as menu-driven IPC commands (the View ▸ Zoom items own
+  // the accelerators on every platform). A ref holds the live scale so the
+  // listener stays mounted once instead of re-subscribing on every change.
+  const scaleRef = React.useRef(t.fontScale);
+  scaleRef.current = t.fontScale;
+  React.useEffect(() => {
+    if (!window.compas || !window.compas.onZoomCommand) return undefined;
+    return window.compas.onZoomCommand((dir) => {
+      const cur = scaleRef.current || 100;
+      const next = dir === "reset" ? 100
+        : dir === "in" ? cur + FONT_SCALE_STEP
+        : cur - FONT_SCALE_STEP;
+      setTweak("fontScale", clampFontScale(next));
+    });
+  }, [setTweak]);
 
   // The player engine lives above every view so the transport bar stays mounted
   // and audible no matter which tab the DJ is on.
