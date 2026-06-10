@@ -191,13 +191,16 @@
 }
 .tp-brand { display: flex; align-items: center; gap: 11px; }
 .tp-brand-mark {
-  width: 26px; height: 26px; border-radius: 7px;
-  /* fixed warm cream so the black/white headphones line-art reads in both
-     themes (the box would otherwise flip with --ink and bury the artwork). */
-  background: #F4EFE6;
-  display: grid; place-items: center; overflow: hidden;
+  width: 32px; height: 32px;
+  /* The headphones logo, rendered as a mask so it inherits --ink — the same
+     warm cream as the "Compás" wordmark in dark theme, and the near-black ink
+     in light theme. Effectively inverts the black source art onto the bar
+     without a backing chip, while staying legible in both themes. */
+  background: var(--ink);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain; mask-size: contain;
 }
-.tp-brand-glyph { width: 21px; height: 21px; object-fit: contain; display: block; }
 .tp-brand-name { font-weight: 700; font-size: 17px; letter-spacing: -.02em; }
 .tp-brand-name .acc { color: var(--accent); }
 

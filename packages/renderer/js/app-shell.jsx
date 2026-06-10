@@ -3,6 +3,7 @@ const { useState } = React;
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "builderWidth": 380,
+  "liveQueueWidth": 452,
   "theme": "dark",
   "startView": "Tandas",
   "fontScale": 100
@@ -98,7 +99,8 @@ function AppBody({ t, setTweak }) {
       <AnalysisBanner />
 
       <div className="tp-view" style={{ display: view === "Live" ? undefined : "none" }}>
-        <LivePlayer />
+        <LivePlayer queueWidth={t.liveQueueWidth}
+          onQueueWidthChange={(v) => setTweak("liveQueueWidth", v)} />
       </div>
       <div className="tp-view" style={{ display: view === "Library" ? undefined : "none" }}>
         <LibraryView />

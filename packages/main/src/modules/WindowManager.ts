@@ -1,8 +1,13 @@
 import type {AppModule} from '../AppModule.js';
 import {ModuleContext} from '../ModuleContext.js';
-import {BrowserWindow, Menu} from 'electron';
+import {BrowserWindow, Menu, nativeImage} from 'electron';
 import type {MenuItemConstructorOptions} from 'electron';
 import type {AppInitConfig} from '../AppInitConfig.js';
+import {APP_ICON_DATA_URL} from './appIcon.js';
+
+// The headphones app icon as a NativeImage, used for the BrowserWindow
+// (Windows/Linux taskbar) and the macOS Dock (see enable()).
+const appIcon = nativeImage.createFromDataURL(APP_ICON_DATA_URL);
 
 // Build the application menu. Beyond the standard roles (so copy/paste/quit and
 // friends keep working), the View menu owns the text-size shortcuts: each Zoom
@@ -54,6 +59,14 @@ class WindowManager implements AppModule {
   async enable({app}: ModuleContext): Promise<void> {
     await app.whenReady();
 
+    // Give the macOS Dock (and the Cmd+Tab app switcher) our headphones icon.
+    // Packaged builds already get it from buildResources/icon.icns, but a dev
+    // run launches the stock Electron binary, which otherwise shows Electron's
+    // default icon — so only override when running unpackaged.
+    if (process.platform === 'darwin' && !app.isPackaged) {
+      app.dock?.setIcon(appIcon);
+    }
+
     // Install our application menu on every platform. On macOS it lives in the
     // global menu bar; on Windows/Linux it's hidden by autoHideMenuBar (toggled
     // with Alt) but its accelerators — including Ctrl +/-/0 for text size — still
@@ -74,6 +87,7 @@ class WindowManager implements AppModule {
       minHeight: 600,
       backgroundColor: '#f0eee9',
       title: 'Compás',
+      icon: appIcon, // Windows/Linux taskbar + window icon (ignored on macOS).
       autoHideMenuBar: true,
       webPreferences: {
         nodeIntegration: false,

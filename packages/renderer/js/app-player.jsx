@@ -105,17 +105,18 @@ function itemSongs(item) {
   return item.type === "tanda" ? ((item.data && item.data.songs) || []) : [item.data];
 }
 
-// Does the single-song item at `index` play the cortina role? Yes when the song
-// is flagged cortina material (song.isCortina), or when it sits directly between
-// two tandas (the item immediately before AND after it are both tandas). A lone
-// song bridging two tandas is a cortina; two or more songs between tandas are
-// just songs (none of them is the single floor-clearing bridge). Tandas
-// themselves are never cortinas. Drives both the curtain presentation and the
-// floor-clearing behaviours (snippet auto-fade, "fade to next tanda").
+// Does the single-song item at `index` play the cortina role? Yes if and only if
+// it sits directly between two tandas (the item immediately before AND after it
+// are both tandas) — a lone song bridging two tandas is a cortina. The song's
+// own isCortina flag does NOT make it act as a cortina here: a flagged cortina
+// played on its own (or not wrapped by tandas) still presents as a plain song.
+// Two or more songs between tandas are just songs (none is the single
+// floor-clearing bridge). Tandas themselves are never cortinas. Drives both the
+// curtain presentation and the floor-clearing behaviours (snippet auto-fade,
+// "fade to next tanda").
 function actsAsCortina(queue, index) {
   const item = queue[index];
   if (!item || item.type === "tanda") return false;
-  if (item.data && item.data.isCortina) return true;
   const prev = queue[index - 1];
   const next = queue[index + 1];
   return !!(prev && prev.type === "tanda" && next && next.type === "tanda");
@@ -273,6 +274,41 @@ function LibraryPanel({ tandas, cortinas, playlists, onAddTanda, onAddSong, onAd
 
 /* ============================ QUEUE (right) ============================ */
 
+const LIVE_QUEUE_MIN_W = 360;
+const LIVE_QUEUE_MAX_W = 760;
+
+/* Draggable divider between the library and the queue — mirrors the Tandas
+ * builder's BuilderResizer. The queue is pinned right, so dragging left widens
+ * it; width is clamped and committed (persisted) on release. */
+function QueueResizer({ width, min, max, onResize, onCommit }) {
+  const start = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = width;
+    let last = startW;
+    const move = (ev) => {
+      last = Math.max(min, Math.min(max, startW - (ev.clientX - startX)));
+      onResize(last);
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      if (onCommit) onCommit(last);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+  return (
+    <div className="tv-resizer" onMouseDown={start} title="Drag to resize the queue">
+      <span className="grip" />
+    </div>
+  );
+}
+
 function QSong({ n, title, dur, state, onPlay }) {
   return (
     <div className={"tp-songrow" + (state === "now" ? " is-now" : "") + (onPlay ? " is-clickable" : "")}
@@ -368,7 +404,7 @@ function defaultPlaylistName() {
   return `Set · ${d.toLocaleString("en-US", { month: "short" })} ${d.getDate()}`;
 }
 
-function QueuePanel({ queue, nowKey, nowIx, now, pos, onPlay, onPlaySongAt, onRemove, onReorder, onInsertSong, onFadeToTanda, onSavePlaylist, onClearQueue, cortinaSnippetEnabled, cortinaSnippetSec }) {
+function QueuePanel({ queue, nowKey, nowIx, now, pos, width, onPlay, onPlaySongAt, onRemove, onReorder, onInsertSong, onFadeToTanda, onSavePlaylist, onClearQueue, cortinaSnippetEnabled, cortinaSnippetSec }) {
   const dragKey = useRef(null);              // set while reordering an existing queue item
   const [overKey, setOverKey] = useState(null);
   const [overEnd, setOverEnd] = useState(false);
@@ -479,7 +515,7 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, onPlay, onPlaySongAt, onRe
 
   let tIx = 0;
   return (
-    <div className="tp-queue">
+    <div className="tp-queue" style={width ? { flex: `0 0 ${width}px`, width } : undefined}>
       {cortinaPlaying && upcomingTanda && (
         <div className="tp-fade-float">
           <button className="tp-chip warn tp-fade-float-btn" onClick={onFadeToTanda}>
@@ -1445,10 +1481,15 @@ function PlayerProvider({ children }) {
 
 /* ============================ LIVE PLAYER (library + queue) ============================ */
 
-function LivePlayer() {
+function LivePlayer({ queueWidth, onQueueWidthChange }) {
   const { tandas, songs, playlists } = useStore();
   const p = usePlayer();
   const [draggingId, setDraggingId] = useState(null);
+
+  // Live queue width while dragging the divider; seeded from the persisted tweak.
+  const [qW, setQW] = useState(queueWidth || 452);
+  useEffect(() => { setQW(queueWidth || 452); }, [queueWidth]);
+  const commitQW = (w) => { if (onQueueWidthChange) onQueueWidthChange(w); };
   // Cortina material is flagged per song (song.isCortina), independent of genre.
   const cortinas = useMemo(() => (songs || []).filter((s) => s.isCortina), [songs]);
 
@@ -1468,7 +1509,9 @@ function LivePlayer() {
       <LibraryPanel tandas={tandas} cortinas={cortinas} playlists={playlists}
         onAddTanda={p.addTanda} onAddSong={p.addCortina} onAddPlaylist={p.addPlaylist}
         makeDrag={makeDrag} draggingId={draggingId} preview={preview} flash={p.flash} />
-      <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} pos={p.pos} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onSavePlaylist={p.saveQueueAsPlaylist} onClearQueue={p.clearQueue} onFadeToTanda={p.fadeToTanda} cortinaSnippetEnabled={p.cortinaSnippetEnabled} cortinaSnippetSec={p.cortinaSnippetSec} />
+      <QueueResizer width={qW} min={LIVE_QUEUE_MIN_W} max={LIVE_QUEUE_MAX_W}
+        onResize={setQW} onCommit={commitQW} />
+      <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} pos={p.pos} width={qW} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onSavePlaylist={p.saveQueueAsPlaylist} onClearQueue={p.clearQueue} onFadeToTanda={p.fadeToTanda} cortinaSnippetEnabled={p.cortinaSnippetEnabled} cortinaSnippetSec={p.cortinaSnippetSec} />
     </div>
   );
 }
