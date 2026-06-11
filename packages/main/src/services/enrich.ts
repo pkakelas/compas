@@ -21,6 +21,7 @@ import {
   isNonSingerNote,
   isIgnoredArtist,
   dancedStyleFromFolder,
+  styleFromMarker,
   styleToGenre,
   type Style,
 } from './tango-names.js';
@@ -66,8 +67,6 @@ function cleanSegment(s: string): string {
 
 /** Stage 1: derive structured fields from the raw song. */
 export function derive(song: EnrichInput): Derived {
-  const dancedStyle = dancedStyleFromFolder(song.folderPath);
-
   // Main artist: prefer a real tag, else the title's leading segment (filled in
   // below once we've parsed the title).
   // Trust the artist tag only if it's a real name — not the literal word
@@ -83,13 +82,20 @@ export function derive(song: EnrichInput): Derived {
   // Work on the title with the leading track number removed.
   let t = (song.title || '').trim().replace(/^\d{1,2}[\s.\-]+/, '');
 
-  // Parenthetical: a singer credit or an "(instrumental)" marker.
-  const paren = t.match(/\(([^)]*)\)/);
-  if (paren) {
-    const inside = paren[1].trim();
-    if (isInstrumentalCredit(inside)) instrumental = true;
-    else if (!isNonSingerNote(inside)) voices = splitVoices(inside);
-    t = (t.slice(0, paren.index) + t.slice((paren.index ?? 0) + paren[0].length)).trim();
+  // Parentheticals: each can be a singer credit, an "(instrumental)" marker, or
+  // a danced-style marker like "(V)"/"(Milonga)". Scan them all, classify each,
+  // and strip every parenthetical from the title text.
+  let markerStyle: Style | null = null;
+  const parens = [...t.matchAll(/\(([^)]*)\)/g)];
+  for (const p of parens) {
+    const inside = p[1].trim();
+    const ms = styleFromMarker(inside);
+    if (ms) markerStyle = ms;
+    else if (isInstrumentalCredit(inside)) instrumental = true;
+    else if (!isNonSingerNote(inside) && voices.length === 0) voices = splitVoices(inside);
+  }
+  if (parens.length) {
+    t = t.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   // Year (kept, then removed from the title text so it doesn't pollute the song).
@@ -130,6 +136,12 @@ export function derive(song: EnrichInput): Derived {
   }
 
   if (instrumental) voices = [];
+
+  // A per-song "(V)"/"(M)"/"(T)" marker is the most explicit *musical* style
+  // signal, so it wins over the folder — except a cortinas folder, which is a
+  // deliberate usage designation we must never override into a genre.
+  const folderStyle = dancedStyleFromFolder(song.folderPath);
+  const dancedStyle = folderStyle === 'cortina' ? 'cortina' : (markerStyle ?? folderStyle);
 
   return {songTitle, songTitleAlt, mainArtistRaw, voices, instrumental, year, dancedStyle};
 }
@@ -210,12 +222,13 @@ export function resolveSong(song: EnrichInput): Proposal | null {
     const g = styleToGenre(canon.style);
     if (g) proposed.genre = g;
 
-    // Surface disagreements between the catalog and the DJ's folder for review.
+    // Surface disagreements between the catalog and the DJ's own style signal
+    // (a "(V)"/"(M)" title marker or the folder) for review.
     if (d.dancedStyle !== 'other' && d.dancedStyle !== 'cortina') {
-      const folderGenre = styleToGenre(d.dancedStyle);
-      if (folderGenre && g && folderGenre !== g) {
+      const ownGenre = styleToGenre(d.dancedStyle);
+      if (ownGenre && g && ownGenre !== g) {
         tier = 'review';
-        note = `Folder suggests ${folderGenre}, catalog says ${g}`;
+        note = `Title/folder suggests ${ownGenre}, catalog says ${g}`;
       }
     }
   } else if (artistIsMisplacedSinger) {

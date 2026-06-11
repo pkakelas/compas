@@ -25,7 +25,8 @@
   --ink-2: #6E675A;         /* secondary */
   --ink-3: #9A938655;       /* faint */
   --ink-3s:#978E7E;         /* faint solid */
-  --on-accent: #FFFFFF;     /* text/icons sitting on accent/ink fills */
+  --on-accent: #FFFFFF;     /* text/icons sitting on accent fills */
+  --on-ink:    #FAF7F2;     /* text/icons sitting on ink fills (toasts, inverted buttons) */
 
   /* the one accent — tango red. Tints & shadows derive from it. */
   --accent:      #B82A3A;
@@ -34,8 +35,9 @@
   --accent-line: color-mix(in srgb, var(--accent) 22%, #fff);
 
   /* monitor / cue — a cool blue channel, deliberately distinct from the accent
-     so the DJ never confuses headphone preview with what's on the floor. */
-  --cue:      #2563EB;
+     so the DJ never confuses headphone preview with what's on the floor.
+     A touch deeper than a stock UI blue so it sits well on the warm paper. */
+  --cue:      #2D5FD3;
   --cue-deep: color-mix(in srgb, var(--cue) 82%, #000);
   --cue-soft: color-mix(in srgb, var(--cue) 9%, #fff);
   --cue-line: color-mix(in srgb, var(--cue) 30%, #fff);
@@ -48,16 +50,18 @@
   --dark-ink-2:#9C9384;
   --dark-line:#34302a;
 
-  /* status / categorical hues (genre + tag categories share these) */
+  /* status / categorical hues (genre + tag categories share these).
+     Tints & lines are derived with color-mix so the four families stay in
+     lockstep — same recipe the dark theme uses. */
   --vals:         #2C6E63;  /* green — vals / "age" tags */
-  --vals-line:    #BFE0D8;
-  --vals-soft:    #F1F9F6;
+  --vals-line:    color-mix(in srgb, var(--vals) 30%, #fff);
+  --vals-soft:    color-mix(in srgb, var(--vals) 7%, #fff);
   --milonga:      #9A5A12;  /* amber — milonga / "orquesta" tags */
-  --milonga-line: #EAD6B0;
-  --milonga-soft: #FBF4E6;
-  --mood:         #7A4BC9;  /* violet — "mood" tags */
-  --mood-line:    #DDCCF2;
-  --mood-soft:    #F6F1FC;
+  --milonga-line: color-mix(in srgb, var(--milonga) 30%, #fff);
+  --milonga-soft: color-mix(in srgb, var(--milonga) 8%, #fff);
+  --mood:         #8550C8;  /* violet, warmed toward plum — "mood" tags */
+  --mood-line:    color-mix(in srgb, var(--mood) 30%, #fff);
+  --mood-soft:    color-mix(in srgb, var(--mood) 8%, #fff);
   --ok:           #6EE79F;  /* success check on dark toasts */
 
   /* drop shadows — derived so they retint with the palette */
@@ -89,52 +93,57 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* surfaces — warm espresso, gently lifted in steps */
-  --bg:          #17130E;   /* deepest app field */
-  --surface:     #1F1A14;   /* cards / panels */
-  --surface-2:   #262019;   /* subtle insets */
-  --surface-3:   #2E271E;   /* deeper inset */
-  --line:        #2B241B;   /* hairline */
-  --line-2:      #3B3327;   /* stronger hairline */
+  /* surfaces — warm espresso on a deeper field. The ladder takes bigger
+     luminance steps than before so cards genuinely lift off the bg and the
+     hairlines stay legible at milonga-lighting brightness. */
+  --bg:          #14100A;   /* deepest app field */
+  --surface:     #1F1911;   /* cards / panels */
+  --surface-2:   #2A2216;   /* subtle insets */
+  --surface-3:   #362C1D;   /* deeper inset */
+  --line:        #322917;   /* hairline */
+  --line-2:      #483C26;   /* stronger hairline */
 
   /* ink — warm candlelit cream */
-  --ink:    #EFE8DA;        /* primary */
-  --ink-2:  #ADA28D;        /* secondary */
-  --ink-3:  #EFE8DA22;      /* faint */
-  --ink-3s: #847A68;        /* faint solid */
-  --on-accent: #FFFFFF;
+  --ink:    #F3ECDC;        /* primary */
+  --ink-2:  #B3A78E;        /* secondary */
+  --ink-3:  #F3ECDC24;      /* faint */
+  --ink-3s: #8C806C;        /* faint solid */
+  --on-accent: #FFF8EC;     /* warm cream on accent fills — softer than pure white */
+  --on-ink:    #1A150D;     /* espresso on cream (ink) fills — toasts invert in dark */
 
-  /* accent — tango red, lifted so it glows on the dark field */
-  --accent:      #D8454F;
-  --accent-deep: color-mix(in srgb, var(--accent) 76%, #fff);
-  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--bg));
-  --accent-line: color-mix(in srgb, var(--accent) 30%, var(--bg));
+  /* accent — tango red, lifted so it glows on the dark field; a notch deeper
+     and richer than before so filled pills read carmine, not salmon. Tints
+     anchor to --surface (not --bg) since that's where chips actually sit. */
+  --accent:      #D2424E;
+  --accent-deep: color-mix(in srgb, var(--accent) 78%, #fff);
+  --accent-soft: color-mix(in srgb, var(--accent) 15%, var(--surface));
+  --accent-line: color-mix(in srgb, var(--accent) 34%, var(--surface));
 
   /* monitor / cue — a calm steel blue, still clearly not the accent */
-  --cue:      #6BA1DA;
-  --cue-deep: color-mix(in srgb, var(--cue) 76%, #fff);
-  --cue-soft: color-mix(in srgb, var(--cue) 14%, var(--bg));
-  --cue-line: color-mix(in srgb, var(--cue) 30%, var(--bg));
+  --cue:      #74A5DC;
+  --cue-deep: color-mix(in srgb, var(--cue) 78%, #fff);
+  --cue-soft: color-mix(in srgb, var(--cue) 15%, var(--surface));
+  --cue-line: color-mix(in srgb, var(--cue) 34%, var(--surface));
 
-  /* cortina — the deepest, most recessed band */
-  --dark:     #110D09;
-  --dark-2:   #191410;
-  --dark-3:   #1F1812;
-  --dark-ink: #EFE8DA;
-  --dark-ink-2: color-mix(in srgb, #EFE8DA 50%, var(--dark));
-  --dark-line: #2B241B;
+  /* cortina — the deepest, most recessed band (sits below even the bg) */
+  --dark:     #0D0A06;
+  --dark-2:   #17120B;
+  --dark-3:   #1D170E;
+  --dark-ink: #F3ECDC;
+  --dark-ink-2: color-mix(in srgb, #F3ECDC 52%, var(--dark));
+  --dark-line: #2C2415;
 
   /* status / categorical hues — warm, muted, candlelit */
-  --vals:         #94B97C;  /* sage green */
-  --vals-line:    color-mix(in srgb, var(--vals) 34%, var(--bg));
-  --vals-soft:    color-mix(in srgb, var(--vals) 12%, var(--bg));
-  --milonga:      #D8A23E;  /* warm gold */
-  --milonga-line: color-mix(in srgb, var(--milonga) 34%, var(--bg));
-  --milonga-soft: color-mix(in srgb, var(--milonga) 12%, var(--bg));
-  --mood:         #B49AE8;  /* soft violet */
-  --mood-line:    color-mix(in srgb, var(--mood) 34%, var(--bg));
-  --mood-soft:    color-mix(in srgb, var(--mood) 12%, var(--bg));
-  --ok:           #84D49B;
+  --vals:         #98BD80;  /* sage green */
+  --vals-line:    color-mix(in srgb, var(--vals) 36%, var(--surface));
+  --vals-soft:    color-mix(in srgb, var(--vals) 13%, var(--surface));
+  --milonga:      #DBA742;  /* warm gold */
+  --milonga-line: color-mix(in srgb, var(--milonga) 36%, var(--surface));
+  --milonga-soft: color-mix(in srgb, var(--milonga) 13%, var(--surface));
+  --mood:         #B79EE6;  /* soft violet */
+  --mood-line:    color-mix(in srgb, var(--mood) 36%, var(--surface));
+  --mood-soft:    color-mix(in srgb, var(--mood) 13%, var(--surface));
+  --ok:           #86D69D;
 
   /* drop shadows — deep, against true black so they read on dark */
   --shadow-accent:   color-mix(in srgb, var(--accent) 38%, transparent);
@@ -341,7 +350,7 @@ button.tp-nav {
 .tp-songrow .n { font-family: var(--mono); font-size: 12px; color: var(--ink-3s); width: 16px;
   display: inline-flex; align-items: center; justify-content: flex-start; }
 .tp-songrow.is-clickable { cursor: pointer; }
-.tp-songrow.is-clickable:hover { background: var(--surface); }
+.tp-songrow.is-clickable:hover { background: var(--surface-2); }
 .tp-songrow.is-now.is-clickable:hover { background: var(--accent-soft); }
 /* swap the track number for a play glyph on hover */
 .tp-songrow .n .qn { display: inline; }
@@ -648,7 +657,9 @@ button.tp-nav {
 .tp-nb-cortitle { font-size: 18px; font-weight: 600; letter-spacing: -.01em; color: var(--ink);
   margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tp-nb-bar { flex: 1; min-width: 0; height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
-.tp-nb-bar-fill { height: 100%; background: var(--dark); border-radius: 99px; }
+/* --ink, not --dark: identical near-black in light, but still visible (cream)
+   against the dark theme's espresso track */
+.tp-nb-bar-fill { height: 100%; background: var(--ink); border-radius: 99px; }
 .tp-chip-tail { font-weight: 500; color: var(--accent-deep); opacity: .8; }
 .tp-snippet-badge {
   display: inline-flex; align-items: center; gap: 4px; margin-left: 9px;
@@ -1163,10 +1174,10 @@ button.tp-nav {
 }
 .tp-modal-cancel { background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2); }
 .tp-modal-cancel:hover { background: var(--surface-3); }
-.tp-modal-confirm { background: var(--ink); border: 1px solid var(--ink); color: var(--on-accent); }
+.tp-modal-confirm { background: var(--ink); border: 1px solid var(--ink); color: var(--on-ink); }
 .tp-modal-confirm:hover { opacity: .9; }
 .tp-modal-confirm.danger,
-.tp-modal-confirm.accent { background: var(--accent); border-color: var(--accent); }
+.tp-modal-confirm.accent { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .tp-modal-confirm.danger:hover,
 .tp-modal-confirm.accent:hover { background: var(--accent-deep); opacity: 1; }
 
@@ -1567,11 +1578,13 @@ button.tp-nav {
 .tv-toast {
   position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%);
   display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px;
-  background: var(--ink); color: var(--on-accent); font-size: 13.5px; font-weight: 500;
+  background: var(--ink); color: var(--on-ink); font-size: 13.5px; font-weight: 500;
   box-shadow: 0 16px 40px -12px var(--shadow-drop); z-index: 50; animation: tvFade .25s ease both;
 }
-.tv-toast .ic { color: var(--ok); display: inline-flex; }
-.tv-toast button { background: none; border: none; color: var(--on-accent); font: 600 13px var(--sans);
+/* the success check sits on the ink fill, so blend it toward --on-ink: mint on
+   the near-black toast in light, deep green on the cream toast in dark */
+.tv-toast .ic { color: color-mix(in srgb, var(--ok) 65%, var(--on-ink)); display: inline-flex; }
+.tv-toast button { background: none; border: none; color: var(--on-ink); font: 600 13px var(--sans);
   text-decoration: underline; cursor: pointer; opacity: .85; }
 .tv-toast button:hover { opacity: 1; }
 
@@ -1580,7 +1593,7 @@ button.tp-nav {
   position: fixed; left: 50%; bottom: 104px; transform: translateX(-50%);
   display: flex; align-items: center; gap: 11px; max-width: min(620px, 90vw);
   padding: 11px 12px 11px 15px; border-radius: 12px;
-  background: var(--ink); color: var(--on-accent); font-size: 13.5px; font-weight: 500;
+  background: var(--ink); color: var(--on-ink); font-size: 13.5px; font-weight: 500;
   box-shadow: 0 16px 40px -12px var(--shadow-drop); z-index: 60; animation: tvFade .25s ease both;
 }
 .tp-error-toast .ic {
@@ -1590,9 +1603,10 @@ button.tp-nav {
 .tp-error-toast .msg { min-width: 0; }
 .tp-error-toast .x {
   flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px; border: none; cursor: pointer;
-  background: rgba(255,255,255,.12); color: var(--on-accent); display: grid; place-items: center;
+  background: color-mix(in srgb, var(--on-ink) 12%, transparent);
+  color: var(--on-ink); display: grid; place-items: center;
 }
-.tp-error-toast .x:hover { background: rgba(255,255,255,.22); }
+.tp-error-toast .x:hover { background: color-mix(in srgb, var(--on-ink) 22%, transparent); }
 
 .tv-empty-manage { text-align: center; padding: 80px 20px; color: var(--ink-2); }
 .tv-empty-manage .ic { width: 60px; height: 60px; border-radius: 16px; background: var(--surface-2);
@@ -1724,7 +1738,7 @@ button.tp-nav {
 .tv-tag.cat-age.on      { background: var(--vals); border-color: var(--vals); }
 .tv-tag.cat-orquesta.on { background: var(--milonga); border-color: var(--milonga); }
 .tv-tag.cat-mood.on     { background: var(--mood); border-color: var(--mood); }
-.tv-tag.cat-custom.on   { background: var(--ink); border-color: var(--ink); }
+.tv-tag.cat-custom.on   { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
 .tv-tag.on .ct { opacity: .85; }
 
 /* ---- tag field (builder editor) ---- */
@@ -1825,6 +1839,10 @@ button.tp-nav {
   background-repeat: no-repeat; background-position: right 11px center;
 }
 .tp-set-select:focus { outline: none; border-color: var(--ink-3s); }
+/* the arrow is a data-URI, so it can't read var(--ink-2) — swap it per theme */
+:root[data-theme="dark"] .tp-set-select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%23B3A78E' d='M0 0h10L5 6z'/></svg>");
+}
 
 .tp-set-note {
   font-size: 12px; color: var(--ink-2); line-height: 1.45;
@@ -1845,8 +1863,12 @@ button.tp-nav {
   font: 600 11px var(--sans); letter-spacing: .14em; text-transform: uppercase;
   color: var(--ink-3s); margin-bottom: 5px;
 }
+.tp-about-signoff {
+  max-width: 42ch; font-size: 13px; line-height: 1.6; color: var(--ink-2);
+  margin: 2px 0 8px;
+}
 .tp-about-note { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
-.tp-about-heart { color: #e0245e; }
+.tp-about-heart { color: var(--accent); }
 .tp-about a { color: var(--cue); text-decoration: none; font-weight: 600; }
 .tp-about a:hover { text-decoration: underline; }
 
@@ -1910,10 +1932,10 @@ button.tp-nav {
 .tp-set-theme-pv.light .ac   { background: #B82A3A; }
 .tp-set-theme-pv.light .ln   { background: #DCD6C8; }
 
-.tp-set-theme-pv.dark .bg   { background: #17130E; }
-.tp-set-theme-pv.dark .card { background: #1F1A14; box-shadow: 0 0 0 1px #2B241B; }
-.tp-set-theme-pv.dark .ac   { background: #D8454F; }
-.tp-set-theme-pv.dark .ln   { background: #3B3327; }
+.tp-set-theme-pv.dark .bg   { background: #14100A; }
+.tp-set-theme-pv.dark .card { background: #1F1911; box-shadow: 0 0 0 1px #322917; }
+.tp-set-theme-pv.dark .ac   { background: #D2424E; }
+.tp-set-theme-pv.dark .ln   { background: #483C26; }
 
 .tp-set-theme-lb { display: flex; align-items: center; gap: 6px; font: 600 12.5px var(--sans); color: var(--ink); }
 .tp-set-theme-lb svg { color: var(--ink-2); }
@@ -1943,7 +1965,7 @@ button.tp-nav {
 .tp-analyze-sub { font-size: 12px; color: var(--ink-2); margin-top: 1px; }
 .tp-analyze-bar {
   height: 4px; margin-top: 7px; border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 18%, #fff);
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
   overflow: hidden;
 }
 .tp-analyze-bar-fill {

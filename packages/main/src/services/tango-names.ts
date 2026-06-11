@@ -228,6 +228,21 @@ export function dancedStyleFromFolder(folderPath: string | null | undefined): St
   return 'other';
 }
 
+/**
+ * The danced style named by a short parenthetical marker some DJs append to a
+ * song title to tag its style — "(V)"/"(Vals)" → vals, "(M)"/"(Milonga)" →
+ * milonga, "(T)"/"(Tango)" → tango. Matches the whole trimmed string,
+ * case-insensitively; returns null for anything else so genuine singer credits
+ * and notes are left untouched.
+ */
+export function styleFromMarker(s: string | null | undefined): Style | null {
+  const m = (s ?? '').trim().toLowerCase();
+  if (m === 't' || m === 'tango' || m === 'tangos') return 'tango';
+  if (m === 'v' || m === 'vals' || m === 'valses' || m === 'w' || m === 'waltz') return 'vals';
+  if (m === 'm' || m === 'milonga' || m === 'milongas') return 'milonga';
+  return null;
+}
+
 /** Map a CSV/danced style code to the app's stored genre, or null if unsupported.
  *  Cortina is a usage flag, not a musical genre, so it never maps to a genre
  *  value — Smart Organize must not stamp genre='cortina' on a song. */

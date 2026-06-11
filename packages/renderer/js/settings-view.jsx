@@ -305,6 +305,10 @@ function AboutFooter() {
   return (
     <footer className="tp-about">
       <div className="tp-about-ver">Compás{version ? ` v${version}` : ""}</div>
+      <div className="tp-about-signoff">
+        Built for the people who make the night — the DJs spinning, the dancers
+        in the ronda, everyone who keeps the floor alive. With all my heart. Enjoy.
+      </div>
       <div className="tp-about-note">
         Made with <span className="tp-about-heart" aria-label="love">♥</span> by Dimitris Lamprinos
       </div>
