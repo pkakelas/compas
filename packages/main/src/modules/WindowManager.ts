@@ -145,8 +145,8 @@ class WindowManager implements AppModule {
       height: state.height,
       x: onScreen ? state.x : undefined,
       y: onScreen ? state.y : undefined,
-      minWidth: 900,
-      minHeight: 600,
+      minWidth: 720,
+      minHeight: 520,
       backgroundColor: '#f0eee9',
       title: 'Compás',
       icon: appIcon, // Windows/Linux taskbar + window icon (ignored on macOS).

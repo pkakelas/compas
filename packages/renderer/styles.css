@@ -2263,3 +2263,150 @@ button.tp-nav {
   background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2); font: 600 12px var(--sans);
 }
 .it-pop-clear:hover { background: var(--surface-3); color: var(--ink); }
+
+/* ============================================================
+   RESPONSIVE — small windows & high text zoom
+   Every rule here lives behind a media query, so the default
+   layout at regular window sizes is untouched. The text-size
+   zoom (Cmd/Ctrl +) shrinks the CSS viewport too, so these
+   steps also serve DJs running large type on laptop screens.
+   · ≤1160px  compact — tighter gutters, side panels capped
+   · ≤920px   small   — chrome shrinks, optional columns hide
+   · ≤640px   tiny    — mostly reached via text zoom
+   plus one height step (≤620px) for short windows.
+   The .tp-queue / .tv-dock caps are max-widths on purpose:
+   they win over the inline width the drag-resizers set, so a
+   panel widened on a big screen can't starve the library on a
+   small one — and the DJ's saved width comes back untouched
+   the moment the window grows again.
+   ============================================================ */
+
+/* ---- compact (≤1160px) ---- */
+@media (max-width: 1160px) {
+  /* page gutters: 30px → 18px */
+  .tp-lib-head, .tv-head { padding: 20px 18px 14px; }
+  .tp-lib-controls { padding: 0 18px 14px; }
+  .tp-lib-scroll { padding: 4px 18px 22px; }
+  .tv-tree-head { padding: 4px 18px 12px; }
+  .tv-tree-scroll { padding: 6px 14px 24px; }
+  .tv-manage { padding: 18px 18px 32px; }
+  .tp-set-scroll { padding: 20px 18px 36px; }
+  .tv-import { padding: 24px; }
+
+  /* side panels stop starving the library: whatever width the DJ dragged
+     them to, they never take more than ~half of a small window */
+  .tp-queue { max-width: 46vw; }
+  .tv-dock { max-width: 44vw; }
+
+  /* panel gutters: 26/22px → 16px */
+  .tp-qhead { padding: 20px 16px 14px; }
+  .tp-qsave { padding: 12px 16px; }
+  .tp-q-scroll { padding: 14px 16px 20px; }
+  .pl-dhead { padding: 16px; }
+  .tv-dock-head { padding: 18px 16px 14px; }
+  .tv-dock-scroll { padding: 14px 16px; }
+  .tv-dock-foot { padding: 14px 16px 16px; }
+
+  /* transport bars: narrower meta column, tighter column gap */
+  .tp-nowbar, .tp-cuebar { gap: 18px; padding: 0 18px; }
+  .tp-nb-meta, .tp-cb-meta { width: 250px; flex-basis: 250px; }
+
+  /* manage grid keeps two columns longer before dropping to one */
+  .tv-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+}
+
+/* ---- small (≤920px) ---- */
+@media (max-width: 920px) {
+  .tp-topbar { padding: 0 14px; gap: 12px; }
+  .tp-navset { margin-left: 0; gap: 2px; }
+  .tp-nav { padding: 6px 9px; font-size: 13px; }
+
+  /* transport: the meta column gives way instead of squeezing the wave out */
+  .tp-nowbar, .tp-cuebar { gap: 12px; padding: 0 14px; }
+  .tp-nb-meta, .tp-cb-meta { width: auto; flex: 0 1 210px; min-width: 140px; }
+  .tp-nb-dots { display: none; }
+  .tp-chip-tail { display: none; }
+  .tp-vol-range { width: 70px; }
+  .tp-nb-vol { gap: 7px; margin-left: 2px; padding-left: 8px; }
+
+  /* song rows: the year column goes first; the title keeps the room */
+  .tv-song { grid-template-columns: 26px 1fr 54px 40px; }
+  .tv-song .yr { display: none; }
+
+  /* view headers wrap: tabs / actions drop below the title instead of
+     overflowing the pane */
+  .tp-lib-head, .tv-head { flex-wrap: wrap; row-gap: 10px; }
+  .tp-filters { flex-wrap: wrap; }
+
+  /* library toolbar (shared by the Library view and the Builder's pane): the
+     filter pickers take a full row of their own, and the cortina/collapse/sort
+     cluster forms a second full row beneath them — left-aligned to the same
+     edge as the pickers, with the count at the far right. Both views read the
+     same way no matter how narrow their pane gets. */
+  .tv-search-filters { flex: 1 1 100%; }
+  .tv-search-actions {
+    flex: 1 1 100%; min-width: 0; margin-left: 0;
+    flex-wrap: wrap; justify-content: flex-start; row-gap: 8px;
+  }
+  .tv-search-actions .tv-count { margin-left: auto; }
+  /* one consistent control height so the strip reads as a single row */
+  .tv-search-actions .tv-cortina-toggle,
+  .tv-search-actions .tv-collapse,
+  .tv-search-actions .tv-sort select { height: 30px; }
+
+  /* segmented controls + pills tighten */
+  .tp-tab { padding: 7px 12px; }
+  .tv-seg button { padding: 8px 13px; }
+  .tv-subtab { padding: 8px 11px; font-size: 13px; }
+  .tp-search { min-width: 140px; }
+
+  /* side panels may take half the window, no more */
+  .tp-queue { max-width: 52vw; }
+  .tv-dock { max-width: 50vw; }
+
+  /* settings: controls release their fixed widths and wrap when needed */
+  .tp-set-row { flex-wrap: wrap; }
+  .tp-set-select { min-width: 0; max-width: 100%; }
+  .tp-set-range { width: 150px; }
+  .tp-set-themes { flex-wrap: wrap; }
+
+  /* import card + modals breathe inside the smaller frame */
+  .tv-drop { padding: 36px 24px; }
+  .tv-assure { gap: 16px; }
+  .so-scrim { padding: 14px; }
+
+  /* dropdown menus never run past the window edge */
+  .tv-pick-menu { max-width: calc(100vw - 28px); }
+}
+
+/* ---- tiny (≤640px — reached mainly via text zoom) ---- */
+@media (max-width: 640px) {
+  .tp-topbar { gap: 8px; }
+  .tp-brand-name { display: none; }
+  .tp-navset { overflow-x: auto; scrollbar-width: none; }
+  .tp-nav { padding: 6px 8px; white-space: nowrap; }
+
+  .tp-nowbar, .tp-cuebar { gap: 10px; padding: 0 12px; }
+  .tp-nb-meta, .tp-cb-meta { flex: 0 1 170px; min-width: 120px; }
+  .tp-nb-t { display: none; }
+  .tp-vol-range { width: 56px; }
+  .tp-chip { padding: 0 11px; gap: 6px; }
+
+  .tv-grid { grid-template-columns: 1fr; }
+  .tv-song-edit-grid { grid-template-columns: 1fr; }
+  .tp-set-card { padding: 16px 14px; }
+  .tp-tabs, .tv-subtabs { flex-wrap: wrap; }
+
+  /* queue header: the save/clear pills drop below the title when cramped */
+  .tp-qhead { flex-wrap: wrap; row-gap: 8px; }
+  .tp-qhead-btns { flex-wrap: wrap; justify-content: flex-end; }
+}
+
+/* ---- short windows (≤620px tall) ---- */
+@media (max-height: 620px) {
+  .tp-nowbar { height: 78px; }
+  .tp-cuebar { height: 62px; }
+  .tp-tbtn.nb.play { width: 46px; height: 46px; }
+  .tp-lib-head, .tv-head { padding-top: 14px; padding-bottom: 10px; }
+  .tp-qhead { padding-top: 14px; }
+}
