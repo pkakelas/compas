@@ -12,9 +12,12 @@ window.Howler = Howler;
 const AUDIO_SCHEME = "compas-audio";
 
 window.compas = {
+  getAppVersion: preload.getAppVersion,
+  openExternal: preload.openExternal,
   getLibrary: preload.getLibrary,
   clearLibrary: preload.clearLibrary,
   pruneMissing: preload.pruneMissingLibrary,
+  reconcile: preload.reconcileLibrary,
   removeSongIfMissing: preload.removeSongIfMissing,
   deleteSongs: preload.deleteSongs,
   updateSong: preload.updateSong,
@@ -43,6 +46,11 @@ window.compas = {
   // and the setter that applies the chosen size as native page zoom.
   onZoomCommand: preload.onZoomCommand,
   setTextZoom: preload.setTextZoom,
+  // Auto-update: read a pending (already-downloaded) update, subscribe to the
+  // "downloaded" event, and restart into the new version on demand.
+  getUpdateStatus: preload.getUpdateStatus,
+  installUpdate: preload.installUpdate,
+  onUpdateDownloaded: preload.onUpdateDownloaded,
   // URL the audio engine can stream a song from (range requests supported).
   audioUrl: (id) => `${AUDIO_SCHEME}://song/${id}`,
 };

@@ -92,11 +92,39 @@ function TandaImpact({ emptied, shrunk }) {
 function TandaLibCard({ t, preview, onAdd, added, addTitle }) {
   const [open, setOpen] = useState(false);
   const m = tandaMeta(t);
+  const songNameOnly = useSongNameOnly();
   const hasTags = t.tags && t.tags.length > 0;
   const toggle = () => setOpen((o) => !o);
+  // On a short screen an opened tanda can be taller than the library viewport,
+  // pushing its last songs out of reach. When open, cap the song list to the
+  // space left in the viewport (below this card's header) and let it scroll on
+  // its own. The cap equals the available height, so a tanda that already fits
+  // never overflows — the scrollbar only appears when the screen is too small.
+  const headRef = useRef(null);
+  const songsRef = useRef(null);
+  const [songsMaxH, setSongsMaxH] = useState(null);
+  useEffect(() => {
+    if (!open) { setSongsMaxH(null); return; }
+    const songs = songsRef.current;
+    const scroll = songs && songs.closest(".tp-lib-scroll");
+    if (!scroll) return;
+    const recompute = () => {
+      const headH = headRef.current ? headRef.current.offsetHeight : 0;
+      const cs = getComputedStyle(scroll);
+      const padB = parseFloat(cs.paddingBottom) || 0;
+      // viewport height minus this card's header and the scroll area's bottom pad
+      const avail = scroll.clientHeight - headH - padB - 8;
+      setSongsMaxH(Math.max(140, avail));
+    };
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    ro.observe(scroll);
+    window.addEventListener("resize", recompute);
+    return () => { ro.disconnect(); window.removeEventListener("resize", recompute); };
+  }, [open]);
   return (
     <div className={"tp-tandax" + (open ? " is-open" : "")}>
-      <div className="tp-tandax-head">
+      <div ref={headRef} className="tp-tandax-head">
         <button className={"tp-tandax-caret" + (open ? " is-open" : "")} onClick={toggle}
           title={open ? "Hide songs" : "Show songs"} aria-expanded={open}>
           <I.chev s={14} />
@@ -121,7 +149,8 @@ function TandaLibCard({ t, preview, onAdd, added, addTitle }) {
         )}
       </div>
       {open && (
-        <div className="tp-tandax-songs">
+        <div ref={songsRef} className="tp-tandax-songs"
+          style={songsMaxH ? { maxHeight: songsMaxH, overflowY: "auto" } : undefined}>
           {t.songs.map((s, i) => {
             const playing = preview && preview.previewId === s.id && preview.playing;
             return (
@@ -132,7 +161,7 @@ function TandaLibCard({ t, preview, onAdd, added, addTitle }) {
                 title={previewTitle(preview, playing)}>
                 <span className="n"><PreviewGlyph preview={preview} playing={playing} n={i + 1} s={12} /></span>
                 <span className="tt">
-                  <div className="tp-song-title">{s.title}</div>
+                  <div className="tp-song-title">{songNameOnly ? cleanSongTitle(s) : s.title}</div>
                   {(s.singer || s.year) && (
                     <div className="tp-song-meta">{[s.singer, s.year].filter(Boolean).join(" · ")}</div>
                   )}
@@ -245,6 +274,11 @@ function SongEditRow({ s, onClose }) {
  * and adds a pencil to edit the song's metadata in place. */
 function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPlaying, onPreview, previewViaMonitor, library, editing: editingProp, onEdit, onCloseEdit, onContext, onSelect, selected }) {
   const isCort = !!s.isCortina;
+  // When the DJ opts into "song name only", strip the orchestra/singer/year
+  // cruft baked into the title field and show just the bare song name. The
+  // orchestra & singer still appear in the sub-line below, so nothing is lost.
+  const songNameOnly = useSongNameOnly();
+  const displayTitle = songNameOnly ? cleanSongTitle(s) : s.title;
   // Editing is parent-controlled in the Library view (so the right-click menu's
   // "Edit song" can open the editor) and self-managed everywhere else.
   const controlled = onEdit !== undefined;
@@ -301,9 +335,9 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
       </button>
       <div className="tt">
         <div className="tv-song-title">
-          {s.title}{isCort && <CortinaBadge />}
+          {displayTitle}{isCort && <CortinaBadge />}
         </div>
-        <div className="tv-song-sub">{s.orq}{s.singer ? " · " + s.singer : ""}</div>
+        <div className="tv-song-sub">{s.orq}{s.singer ? " · " + s.singer : (isInstrumental(s) ? <> · <i className="tv-inst">Instrumental</i></> : "")}</div>
       </div>
       <span className="yr">{s.year}</span>
       <span className="du">{s.dur}</span>
@@ -344,13 +378,20 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
 
 function _norm(v) { return v == null ? "" : String(v).toLowerCase(); }
 
+// An instrumental recording carries no singer credit. We surface it as its own
+// label in listings and as a pickable value in the singer filter. (Cortinas are
+// excluded — they're interludes, not instrumental tango.)
+const INSTRUMENTAL = "Instrumental";
+function isInstrumental(song) { return !song.isCortina && !(song.singer || "").trim(); }
+
 const EMPTY_SEARCH = { text: "", orq: "", singer: "", genre: "", year: "" };
 
 function buildSearchQuery(filters) {
   const words = _norm(filters.text || "").trim().split(/\s+/).filter(Boolean);
   const structured = [];
   if (filters.orq) structured.push({ field: "orq", value: _norm(filters.orq), exact: true });
-  if (filters.singer) structured.push({ field: "singer", value: _norm(filters.singer), exact: true });
+  if (filters.singer === INSTRUMENTAL) structured.push({ field: "singer", instrumental: true });
+  else if (filters.singer) structured.push({ field: "singer", value: _norm(filters.singer), exact: true });
   if (filters.genre) structured.push({ field: "genre", value: _norm(filters.genre), exact: true });
   if (filters.year) structured.push({ field: "year", value: String(filters.year), exact: true });
   return { words, filters: structured, active: words.length > 0 || structured.length > 0 };
@@ -471,6 +512,11 @@ function scoreSong(song, query) {
     if (f.field === "genre") {
       if (_norm(song.genre) !== f.value) return null;
       score += 6;
+      continue;
+    }
+    if (f.instrumental) {
+      if (!isInstrumental(song)) return null;
+      score += 20;
       continue;
     }
     if (f.exact) {
@@ -619,26 +665,35 @@ function songComparator(sort, hasQuery) {
 // out (used when building that field's option list from the other selections).
 function songMatchesDropdownFilters(song, filters, omit) {
   if (omit !== "orq" && filters.orq && (song.orq || "").trim() !== filters.orq) return false;
-  if (omit !== "singer" && filters.singer && (song.singer || "").trim() !== filters.singer) return false;
+  if (omit !== "singer" && filters.singer === INSTRUMENTAL) { if (!isInstrumental(song)) return false; }
+  else if (omit !== "singer" && filters.singer && (song.singer || "").trim() !== filters.singer) return false;
   if (omit !== "genre" && filters.genre && song.genre !== filters.genre) return false;
   if (omit !== "year" && filters.year && String(song.year || "") !== String(filters.year)) return false;
   return true;
 }
 
 // Unique orchestra / singer / style / year values for dropdowns. Each list is
-// scoped to songs that match the other active dropdown filters.
-function buildFilterOptions(songs, filters = EMPTY_SEARCH) {
+// scoped to songs that match the other active dropdown filters. When
+// `includeCortinas` is false, cortina songs contribute nothing to the option
+// lists — so a DJ browsing the normal repertoire never sees a floor-clearer's
+// orchestra/singer/year offered as a filter. They can still surface those songs
+// by browsing the tree or searching for them by text.
+function buildFilterOptions(songs, filters = EMPTY_SEARCH, includeCortinas = true) {
   const cmp = (a, b) => a.localeCompare(b, undefined, { sensitivity: "base" });
   const orqs = new Set(), singers = new Set(), genres = new Set(), years = new Set();
   for (const s of songs || []) {
+    if (!includeCortinas && s.isCortina) continue;
     if (songMatchesDropdownFilters(s, filters, "orq") && s.orq && s.orq.trim()) orqs.add(s.orq.trim());
-    if (songMatchesDropdownFilters(s, filters, "singer") && s.singer && s.singer.trim()) singers.add(s.singer.trim());
+    if (songMatchesDropdownFilters(s, filters, "singer")) {
+      if (s.singer && s.singer.trim()) singers.add(s.singer.trim());
+      else if (isInstrumental(s)) singers.add(INSTRUMENTAL);
+    }
     if (songMatchesDropdownFilters(s, filters, "genre") && s.genre) genres.add(s.genre);
     if (songMatchesDropdownFilters(s, filters, "year") && s.year) years.add(String(s.year));
   }
   return {
     orchestras: [...orqs].sort(cmp),
-    singers: [...singers].sort(cmp),
+    singers: [...singers].sort((a, b) => a === INSTRUMENTAL ? -1 : b === INSTRUMENTAL ? 1 : cmp(a, b)),
     genres: [...genres].sort((a, b) =>
       ((GENRE_ORDER[genreLabel(a)] ?? 99) - (GENRE_ORDER[genreLabel(b)] ?? 99)) || cmp(genreLabel(a), genreLabel(b)))
       .map((g) => ({ value: g, label: genreLabel(g) })),
@@ -646,8 +701,10 @@ function buildFilterOptions(songs, filters = EMPTY_SEARCH) {
   };
 }
 
-// Drop dropdown values that no longer exist after another filter changed.
-function sanitizeFilters(filters, songs) {
+// Drop dropdown values that no longer exist after another filter changed — or
+// after cortinas were hidden, which retires any selection that only a cortina
+// song satisfied.
+function sanitizeFilters(filters, songs, includeCortinas = true) {
   let next = null;
   let again = true;
   while (again) {
@@ -660,7 +717,7 @@ function sanitizeFilters(filters, songs) {
       ["year", "years", (o) => o],
     ]) {
       if (!cur[key]) continue;
-      const allowed = buildFilterOptions(songs, { ...cur, [key]: "" })[listKey].map(valOf);
+      const allowed = buildFilterOptions(songs, { ...cur, [key]: "" }, includeCortinas)[listKey].map(valOf);
       if (!allowed.includes(cur[key])) {
         if (!next) next = { ...filters };
         next[key] = "";
@@ -811,9 +868,78 @@ function SearchableSelect({ placeholder, value, onChange, options, disabled, all
   );
 }
 
+/* Inline picker shown inside the bulk right-click menu for setting the
+ * orchestra or singer on many songs at once. Lists the values already in the
+ * library, lets the DJ type a brand-new one (custom entry), and offers a
+ * "clear" row (Instrumental for singers, no orchestra otherwise). Mirrors the
+ * "Set genre" chips, but as a searchable list since these facets are open-ended. */
+function BulkValuePicker({ field, options, count, onPick, onBack }) {
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const searchRef = useRef(null);
+  const isSinger = field === "singer";
+  const noun = isSinger ? "singer" : "orchestra";
+
+  useEffect(() => { requestAnimationFrame(() => searchRef.current && searchRef.current.focus()); }, []);
+  useEffect(() => { setActive(0); }, [query]);
+
+  const q = query.trim();
+  const filtered = useMemo(() => {
+    const n = _norm(q);
+    let list = options || [];
+    if (n) list = list.filter((o) => _norm(o).includes(n));
+    return list.slice(0, PICK_LIST_CAP);
+  }, [options, q]);
+
+  // Clear row first, then a "use what I typed" row when the query isn't already
+  // an exact existing value, then the matching library values.
+  const rows = useMemo(() => {
+    const r = [{ value: "", label: isSinger ? "Instrumental (no singer)" : "No orchestra", clear: true }];
+    const exact = q && (options || []).some((o) => _norm(o) === _norm(q));
+    if (q && !exact) r.push({ value: q, label: `Use “${q}”`, custom: true });
+    for (const o of filtered) r.push({ value: o, label: o });
+    return r;
+  }, [filtered, q, options, isSinger]);
+
+  const onKey = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => (rows.length ? (a + 1) % rows.length : 0)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => (rows.length ? (a - 1 + rows.length) % rows.length : 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); const row = rows[active]; if (row) onPick(row.value); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onBack(); }
+  };
+
+  return (
+    <div className="tv-ctx-picker">
+      <div className="tv-ctx-pickhead">
+        <button className="tv-ctx-back" onClick={onBack} title="Back"><I.chev s={14} /></button>
+        <span className="ttl">Set {noun}</span>
+        <span className="ct">{count}</span>
+      </div>
+      <label className="tv-pick-search">
+        <I.search s={14} />
+        <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onKey}
+          placeholder={`Search or type a ${noun}…`} />
+      </label>
+      <div className="tv-pick-list" role="listbox">
+        {rows.map((o, i) => (
+          <button key={(o.clear ? "__clear" : o.custom ? "__custom" : "v:") + o.value} type="button"
+            className={"tv-pick-opt" + (i === active ? " active" : "") + (o.clear ? " clear" : "")}
+            onMouseEnter={() => setActive(i)} onClick={() => onPick(o.value)}>
+            <span className="tv-pick-opt-t">{o.label}</span>
+            {o.custom ? <span className="tv-pick-opt-ok"><I.plus s={13} /></span> : null}
+          </button>
+        ))}
+        {filtered.length === 0 && !q ? (
+          <div className="tv-pick-empty">No {noun}s yet — type one above.</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 /* Search + filter toolbar for the library tree. */
 function SongSearchBar({ filters, onChange, options, sort, setSort, searching, countLabel,
-  showCollapse, collapseOpen, onCollapse }) {
+  showCollapse, collapseOpen, onCollapse, includeCortinas, onToggleCortinas }) {
   const inputRef = useRef(null);
   const set = (key, val) => onChange({ ...filters, [key]: val });
   const clearText = () => { set("text", ""); inputRef.current && inputRef.current.focus(); };
@@ -854,6 +980,15 @@ function SongSearchBar({ filters, onChange, options, sort, setSort, searching, c
           ) : null}
         </div>
         <div className="tv-search-actions">
+          {onToggleCortinas ? (
+            <button type="button" className="tv-cortina-toggle" data-on={includeCortinas ? "1" : "0"}
+              role="switch" aria-checked={!!includeCortinas} onClick={() => onToggleCortinas(!includeCortinas)}
+              title={includeCortinas
+                ? "Cortinas are shown in the filter lists"
+                : "Cortinas are hidden from the filter lists"}>
+              <I.curtain s={14} /> Include cortinas
+            </button>
+          ) : null}
           {showCollapse ? (
             <button type="button" className="tv-collapse" onClick={onCollapse}>
               <I.chev s={12} /> {collapseOpen ? "Collapse" : "Expand"}
@@ -916,13 +1051,13 @@ function FolderRowFlat({ node, depth, isOpen, onToggle, onContext }) {
 /* ============================ LIBRARY BROWSER ============================
  * Shared folder-tree song browser for Library, Builder, and Live: search,
  * dropdown filters, sort, and a windowed list for large libraries. */
-function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, onSongContext, editingId, onSongEdit, onCloseEdit, library, builderIds, onAdd, makeDrag, draggingId, hint, selectedIds, setSelectedIds, anchorRef }) {
+function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, onSongContext, editingId, onSongEdit, onCloseEdit, library, builderIds, onAdd, makeDrag, draggingId, hint, selectedIds, setSelectedIds, anchorRef, includeCortinas, onToggleCortinas }) {
   const { tree, songs } = useStore();
   const scrollRef = useRef(null);
   const [sort, setSort] = useState("title");
   const [openSet, setOpenSet] = useState(() => new Set(tree.map((n) => n.path)));
-  const filterOptions = useMemo(() => buildFilterOptions(songs, filters), [songs, filters]);
-  const setFiltersSafe = (next) => setFilters(sanitizeFilters(next, songs));
+  const filterOptions = useMemo(() => buildFilterOptions(songs, filters, includeCortinas), [songs, filters, includeCortinas]);
+  const setFiltersSafe = (next) => setFilters(sanitizeFilters(next, songs, includeCortinas));
 
   useEffect(() => {
     if (tree.length) setOpenSet((s) => (s.size ? s : new Set(tree.map((n) => n.path))));
@@ -1084,7 +1219,8 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
       <div className="tv-tree-head">
         <SongSearchBar filters={filters} onChange={setFiltersSafe} options={filterOptions}
           sort={sort} setSort={setSort} searching={searching} countLabel={countLabel}
-          showCollapse={!searching && rows.length > 0} collapseOpen={anyOpen} onCollapse={toggleAll} />
+          showCollapse={!searching && rows.length > 0} collapseOpen={anyOpen} onCollapse={toggleAll}
+          includeCortinas={includeCortinas} onToggleCortinas={onToggleCortinas} />
         {hint && <div className="tv-songs-hint">{hint}</div>}
       </div>
       <div className="tv-treewrap">
@@ -1107,6 +1243,16 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
 function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, library }) {
   const { tandas, songs } = useStore();
   const [filters, setFilters] = useState(EMPTY_SEARCH);
+  // Cortinas are floor-clearers, not repertoire — by default their orchestras,
+  // singers and years stay out of the filter dropdowns so they don't clutter a
+  // DJ's browsing. Turning this on folds them back in. Cortina songs themselves
+  // are always in the tree and always findable by text search, regardless.
+  const [includeCortinas, setIncludeCortinas] = useState(false);
+  // When cortinas are hidden again, retire any active filter that only a cortina
+  // satisfied, so the tree doesn't sit on a now-invisible selection.
+  useEffect(() => {
+    setFilters((f) => sanitizeFilters(f, songs, includeCortinas));
+  }, [includeCortinas, songs]);
   const debouncedText = useDebounced(filters.text, 150);
   const query = useMemo(() => buildSearchQuery({
     text: debouncedText,
@@ -1116,6 +1262,7 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
     year: filters.year,
   }), [debouncedText, filters.orq, filters.singer, filters.genre, filters.year]);
   const [menu, setMenu] = useState(null);   // right-click menu: { kind, node?/song?, ids?, x, y }
+  const [bulkField, setBulkField] = useState(null); // bulk menu sub-picker: null | "orq" | "singer"
   const [editingId, setEditingId] = useState(null); // song whose editor is open
   // Multi-select for the library: a Set of (string) song ids, with an anchor
   // for shift-range selection. Lives here so the right-click menu can act on it.
@@ -1127,6 +1274,10 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
     for (const s of songs || []) m.set(String(s.id), s);
     return m;
   }, [songs]);
+  // Distinct orchestras/singers already in the library, for the bulk set-value
+  // pickers (the DJ can also type a new one). INSTRUMENTAL isn't a real singer
+  // name — it's the "no singer" state, offered as the picker's clear row.
+  const bulkOpts = useMemo(() => buildFilterOptions(songs), [songs]);
   const { ask, modal } = useConfirm();
 
   // Clamp to the viewport so the menu never opens off the right/bottom edge.
@@ -1136,7 +1287,7 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
     y: Math.min(e.clientY, window.innerHeight - h),
   });
   // Right-click a folder row to remove it from the library (files stay on disk).
-  const closeMenu = () => setMenu(null);
+  const closeMenu = () => { setMenu(null); setBulkField(null); };
   const openMenu = (e, node) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1157,7 +1308,7 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
       setSelectedIds(new Set([id]));
       anchorRef.current = id;
     }
-    setMenu({ kind: "song", song, ids, ...menuPos(e, ids.length > 1 ? 300 : 180) });
+    setMenu({ kind: "song", song, ids, ...menuPos(e, ids.length > 1 ? 380 : 180) });
   };
   // Closing the menu first, then confirming in the shared modal, keeps the flow
   // consistent with deleting tandas and playlists.
@@ -1273,6 +1424,21 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
           </button>
         </>
       ) : multi ? (
+        bulkField ? (
+          <BulkValuePicker
+            field={bulkField}
+            count={songIds.length}
+            options={bulkField === "orq"
+              ? bulkOpts.orchestras
+              : bulkOpts.singers.filter((s) => s !== INSTRUMENTAL)}
+            onBack={() => setBulkField(null)}
+            onPick={(value) => {
+              const ids = songIds, field = bulkField;
+              closeMenu();
+              Store.applySmartOrganize(ids.map((id) => ({ id, [field]: value })));
+            }}
+          />
+        ) : (
         <>
           <div className="tv-ctx-head">
             <span className="fic"><I.note s={14} /></span>
@@ -1287,6 +1453,12 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
               </button>
             ))}
           </div>
+          <button className="tv-ctx-item" onClick={() => setBulkField("orq")}>
+            <I.wave s={15} /> Set orchestra…
+          </button>
+          <button className="tv-ctx-item" onClick={() => setBulkField("singer")}>
+            <I.note s={15} /> Set singer…
+          </button>
           <button className="tv-ctx-item" onClick={() => { const ids = songIds; closeMenu(); Store.setSongCortina(ids, !selAllCortina); }}>
             <I.curtain s={15} /> {selAllCortina ? "Unmark as cortinas" : "Mark as cortinas"}
           </button>
@@ -1294,6 +1466,7 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
             <I.trash s={15} /> Delete {songIds.length} songs
           </button>
         </>
+        )
       ) : (
         <>
           <div className="tv-ctx-head">
@@ -1320,7 +1493,8 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
         onSongContext={openSongMenu} editingId={editingId} onSongEdit={(s) => setEditingId(s.id)} onCloseEdit={() => setEditingId(null)}
         library={library} builderIds={builderIds} onAdd={onAdd} makeDrag={makeDrag}
         draggingId={draggingId} hint={hint}
-        selectedIds={library ? selectedIds : undefined} setSelectedIds={library ? setSelectedIds : undefined} anchorRef={anchorRef} />
+        selectedIds={library ? selectedIds : undefined} setSelectedIds={library ? setSelectedIds : undefined} anchorRef={anchorRef}
+        includeCortinas={includeCortinas} onToggleCortinas={setIncludeCortinas} />
       {ctxMenu}
       {modal}
     </div>
@@ -1516,6 +1690,7 @@ function TandaSearchBar({ filters, onChange, options, countLabel }) {
 /* ============================ MANAGE GRID ============================ */
 function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, onDismiss }) {
   const m = tandaMeta(t);
+  const songNameOnly = useSongNameOnly();
   const viaMonitor = preview && preview.viaMonitor;
   // Suggestions have no stored name, so generate a DJ-style one from their songs
   // (same helper the builder offers). The orquesta tag is the fallback orchestra
@@ -1554,7 +1729,7 @@ function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, on
               onClick={preview ? () => preview.toggle(s) : undefined}
               title={previewTitle(preview, isPlaying)}>
               <span className="n"><PreviewGlyph preview={preview} playing={isPlaying} n={i + 1} s={11} /></span>
-              <span className="t">{s.title}</span>
+              <span className="t">{songNameOnly ? cleanSongTitle(s) : s.title}</span>
               <span className="d">{s.dur}</span>
             </div>
           );
@@ -1593,6 +1768,7 @@ function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, on
  * columns. Here each song gets the full row width, so it reads in full. */
 function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, onDismiss }) {
   const m = tandaMeta(t);
+  const songNameOnly = useSongNameOnly();
   const viaMonitor = preview && preview.viaMonitor;
   const orqTag = suggested ? (t.tags || []).find((g) => g.cat === "orquesta") : null;
   const displayName = suggested
@@ -1646,7 +1822,7 @@ function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave
               onClick={preview ? () => preview.toggle(s) : undefined}
               title={previewTitle(preview, isPlaying)}>
               <span className="n"><PreviewGlyph preview={preview} playing={isPlaying} n={i + 1} s={11} /></span>
-              <span className="t">{s.title}</span>
+              <span className="t">{songNameOnly ? cleanSongTitle(s) : s.title}</span>
               <span className="d">{s.dur}</span>
             </div>
           );

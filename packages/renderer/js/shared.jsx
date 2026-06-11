@@ -69,6 +69,43 @@ function Waveform({ progress = 0.45, bars = 138, seed = 7, height = 92, classNam
 /* small inline song-progress equalizer marker */
 function EQ() { return <span className="tp-eq"><i></i><i></i><i></i></span>; }
 
+/* Single-line label that scrolls its text horizontally when it's too wide to
+   fit — for long song/cortina titles in the live transport. When the text fits
+   it sits still and truncates exactly like a normal label, so short titles look
+   untouched. Re-measures whenever the text or the container width changes. */
+function Marquee({ text, className = "" }) {
+  const wrapRef = useRef(null);
+  const innerRef = useRef(null);
+  const [overflow, setOverflow] = useState(0); // px the text exceeds the wrap by; 0 = fits
+
+  useEffect(() => {
+    const wrap = wrapRef.current, inner = innerRef.current;
+    if (!wrap || !inner) return;
+    const measure = () => {
+      const over = Math.max(0, inner.scrollWidth - wrap.clientWidth);
+      // round to avoid sub-pixel jitter re-triggering the animation
+      setOverflow(over > 1 ? Math.round(over) : 0);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, [text]);
+
+  // Ping-pong: scrolls to the end and back. Duration grows with the distance so
+  // the speed stays roughly constant, and the keyframes hold at each end so both
+  // the start and the end of the title can be read before it moves on.
+  const dur = overflow ? Math.max(7, (overflow / 24) + 5) : 0;
+  return (
+    <div ref={wrapRef} className={"tp-marquee " + (overflow ? "is-rolling " : "") + className}>
+      <span ref={innerRef} className="tp-marquee-inner" style={overflow ? {
+        "--marquee-shift": "-" + overflow + "px",
+        animationDuration: dur + "s",
+      } : null}>{text}</span>
+    </div>
+  );
+}
+
 /* The leading glyph for any clickable "listen / audition" row — used by the live
    queue's tanda search, the tanda cards, the builder bench and the playlist
    editor so they all speak the same language. While this row is the active
@@ -232,4 +269,67 @@ function useConfirm() {
   return { ask, modal };
 }
 
-Object.assign(window, { I, Waveform, EQ, PreviewGlyph, previewTitle, clickKeys, GENRE_LABEL, GenreTag, useToast, Toast, ConfirmModal, useConfirm, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, STYLE_LABELS, isCoreStyle, genreLabel, genreClass });
+/* ===================== SONG-NAME-ONLY DISPLAY ======================
+ * A library display preference: strip the orchestra, singer, year and
+ * track-number cruft that's often baked into a song's title field, leaving
+ * just the bare song name. This mirrors the title-parsing heuristics the Smart
+ * Organize engine uses (packages/main/src/services/enrich.ts → derive()), but
+ * runs purely on display — it never edits the stored metadata.
+ */
+
+// A glued trailing "-Singer": a capitalized 1–3 word name after a hyphen with
+// no surrounding spaces, e.g. "Uno-Héctor Mauré". Conservative so genuinely
+// hyphenated titles survive. Kept in sync with GLUED_SINGER in enrich.ts.
+const SONG_GLUED_SINGER = /^(.+?)-\s*[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ.'’]+(?:\s+[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ.'’]+){0,2}$/;
+const SONG_YEAR_RE = /\b(18[5-9]\d|19\d\d|20[0-2]\d)\b/g;
+
+// Derive the bare song name from a song's (often messy) title field. Falls back
+// to the raw title whenever cleaning would leave nothing, so a row never blanks.
+function cleanSongTitle(s) {
+  const raw = ((s && s.title) || "").trim();
+  if (!raw) return raw;
+  // Drop a leading track number ("02 - …", "07. …").
+  let t = raw.replace(/^\d{1,2}[\s.\-]+/, "");
+  // Drop a parenthetical (singer credit, "(instrumental)", remaster note…).
+  t = t.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  // Drop a 4-digit year.
+  t = t.replace(SONG_YEAR_RE, " ").replace(/\s+/g, " ").trim();
+  // Split "Artist - Title" on spaced hyphens; the leading segment is the
+  // orchestra/artist, the rest is the song.
+  const segs = t
+    .split(/\s+[-–—]\s+/)
+    .map((x) => x.replace(/^[\s\-–—]+/, "").replace(/[\s\-–—]+$/, "").trim())
+    .filter(Boolean)
+    .filter((seg) => !/^\d{4}$/.test(seg));
+  let title = segs.length >= 2 ? segs.slice(1).join(" - ") : (segs[0] || "");
+  // A glued trailing "-Instrumental" / "-Singer" on the song name.
+  if (title) {
+    const instTail = title.replace(/\s*[-–—]\s*instrumental\s*$/i, "").trim();
+    if (instTail !== title) title = instTail;
+    else {
+      const g = title.match(SONG_GLUED_SINGER);
+      if (g) title = g[1].trim();
+    }
+  }
+  return title || raw;
+}
+
+// Reactive read of the "show song name only" library preference. Seeded from
+// localStorage and kept live via the same `tweakchange` event setTweak emits.
+function useSongNameOnly() {
+  const [on, setOn] = useState(() => {
+    try { return localStorage.getItem("compas.songNameOnly") === "1"; } catch (e) { return false; }
+  });
+  useEffect(() => {
+    const onTweak = (e) => {
+      if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, "songNameOnly")) {
+        setOn(!!e.detail.songNameOnly);
+      }
+    };
+    window.addEventListener("tweakchange", onTweak);
+    return () => window.removeEventListener("tweakchange", onTweak);
+  }, []);
+  return on;
+}
+
+Object.assign(window, { I, Waveform, EQ, Marquee, PreviewGlyph, previewTitle, clickKeys, GENRE_LABEL, GenreTag, useToast, Toast, ConfirmModal, useConfirm, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, STYLE_LABELS, isCoreStyle, genreLabel, genreClass, cleanSongTitle, useSongNameOnly });

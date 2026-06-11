@@ -56,6 +56,16 @@ export function yearFromFilename(path: string): number | null {
   return null;
 }
 
+/**
+ * Recursively list every audio file under `root` (absolute paths), skipping
+ * dotfiles/dotfolders. Cheap compared to {@link scanFolder} because it never
+ * parses tags — used by the startup reconcile to diff what's on disk against
+ * the DB before deciding which files actually need scanning.
+ */
+export function listAudioFiles(root: string): Promise<string[]> {
+  return collectAudioFiles(root);
+}
+
 async function collectAudioFiles(dir: string, acc: string[] = []): Promise<string[]> {
   let entries;
   try {

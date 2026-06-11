@@ -8,7 +8,8 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "theme": "dark",
   "startView": "Tandas",
   "fontScale": 100,
-  "tandaLayout": "grid"
+  "tandaLayout": "grid",
+  "songNameOnly": false
 }/*EDITMODE-END*/;
 
 // Text size is a whole-app zoom (everything is sized in px, so scaling the page
@@ -19,6 +20,62 @@ const FONT_SCALE_MIN = 70;
 const FONT_SCALE_MAX = 150;
 const FONT_SCALE_STEP = 10;
 const clampFontScale = (n) => Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, n));
+
+// Watches the main process for a downloaded auto-update. Resolves to the pending
+// update ({version, releaseNotes}) once one is ready, or null. It both subscribes
+// to the live "downloaded" event and queries the current status on mount, so an
+// update that finished downloading before this window painted is still caught.
+function useUpdateNotice() {
+  const [update, setUpdate] = React.useState(null);
+  React.useEffect(() => {
+    // Dev-only console helper (renderer is served over http only in dev): preview
+    // the "update ready" modal without a real download —
+    //   __previewUpdateModal({ version: "9.9.9" })   // show it
+    //   __previewUpdateModal(null)                    // hide it
+    if (location.protocol === "http:") window.__previewUpdateModal = setUpdate;
+    if (!window.compas) return undefined;
+    if (window.compas.getUpdateStatus) {
+      window.compas.getUpdateStatus().then((u) => { if (u) setUpdate(u); }).catch(() => {});
+    }
+    if (window.compas.onUpdateDownloaded) {
+      return window.compas.onUpdateDownloaded((u) => setUpdate(u));
+    }
+    return undefined;
+  }, []);
+  return [update, () => setUpdate(null)];
+}
+
+// "A new version is ready" modal. Restart installs the update; Later dismisses it
+// (it still applies on the next normal quit). Reuses the shared tp-modal styles.
+function UpdateModal({ update, onDismiss }) {
+  const [installing, setInstalling] = React.useState(false);
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); onDismiss(); } };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onDismiss]);
+  const restart = () => {
+    setInstalling(true);
+    if (window.compas && window.compas.installUpdate) window.compas.installUpdate();
+  };
+  return (
+    <div className="tp-modal-scrim" onMouseDown={onDismiss}>
+      <div className="tp-modal" role="alertdialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="tp-modal-icon accent"><I.arrowDn s={20} /></div>
+        <div className="tp-modal-title">Update ready</div>
+        <div className="tp-modal-msg">
+          Version {update.version} has been downloaded. Restart Compás to finish installing it.
+        </div>
+        <div className="tp-modal-actions">
+          <button className="tp-modal-cancel" onClick={onDismiss} disabled={installing}>Later</button>
+          <button className="tp-modal-confirm accent" onClick={restart} disabled={installing} autoFocus>
+            <I.arrowDn s={14} /> {installing ? "Restarting…" : "Restart & update"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AppShell() {
   // Seed the theme from the saved preference (default: dark) so the very first
@@ -32,6 +89,7 @@ function AppShell() {
       if (!isNaN(savedScale)) seed.fontScale = clampFontScale(savedScale);
       const savedLayout = localStorage.getItem("compas.tandaView");
       if (savedLayout === "list" || savedLayout === "grid") seed.tandaLayout = savedLayout;
+      seed.songNameOnly = localStorage.getItem("compas.songNameOnly") === "1";
       return seed;
     } catch (e) { return TWEAK_DEFAULTS; }
   })());
@@ -61,6 +119,12 @@ function AppShell() {
     try { localStorage.setItem("compas.tandaView", t.tandaLayout); } catch (e) { /* ignore */ }
   }, [t.tandaLayout]);
 
+  // Persist the "song name only" library display preference so it survives
+  // restarts and the seed read above can pick it up before first paint.
+  React.useEffect(() => {
+    try { localStorage.setItem("compas.songNameOnly", t.songNameOnly ? "1" : "0"); } catch (e) { /* ignore */ }
+  }, [t.songNameOnly]);
+
   // Cmd/Ctrl +/-/0 come in as menu-driven IPC commands (the View ▸ Zoom items own
   // the accelerators on every platform). A ref holds the live scale so the
   // listener stays mounted once instead of re-subscribing on every change.
@@ -89,6 +153,7 @@ function AppShell() {
 function AppBody({ t, setTweak }) {
   const [view, setView] = useState(TWEAK_DEFAULTS.startView);
   const player = usePlayer();
+  const [update, dismissUpdate] = useUpdateNotice();
 
   // Play a playlist in place (marks the active song, like playing a tanda). It
   // deliberately does NOT switch to the Live tab or load the live queue — a
@@ -131,6 +196,8 @@ function AppBody({ t, setTweak }) {
       </div>
 
       <PlayerBar />
+
+      {update && <UpdateModal update={update} onDismiss={dismissUpdate} />}
     </div>
   );
 }

@@ -85,6 +85,7 @@ function BuilderResizer({ width, min, max, onResize, onCommit }) {
 /* ============================ BUILDER · BENCH (side dock) ============================ */
 function BuilderBench({ builder, api, width, preview }) {
   const songs = builder.songs;
+  const songNameOnly = useSongNameOnly();
   const { dropTarget, slot, dropAt } = useBuilderDnD(api);
   const m = tandaMeta({ songs });
   const target = songs.length >= 8 ? songs.length : Math.max(4, songs.length + 1);
@@ -119,7 +120,7 @@ function BuilderBench({ builder, api, width, preview }) {
               <span className="num"><PreviewGlyph preview={preview} playing={isPlaying} n={i + 1} s={12} /></span>
               <span className="gr"><I.drag s={14} /></span>
               <div className="tt">
-                <div className="t">{s.title}</div>
+                <div className="t">{songNameOnly ? cleanSongTitle(s) : s.title}</div>
                 <div className="s">{s.orq}{s.singer ? " · " + s.singer : ""} · {s.year}</div>
               </div>
               <span className="du">{s.dur}</span>

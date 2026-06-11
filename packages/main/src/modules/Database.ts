@@ -1,7 +1,7 @@
 import type {AppModule} from '../AppModule.js';
 import type {ModuleContext} from '../ModuleContext.js';
 import {app} from 'electron';
-import {basename, dirname, join} from 'node:path';
+import {basename, dirname, join, sep} from 'node:path';
 import {existsSync} from 'node:fs';
 import Database from 'better-sqlite3';
 import {normalizeYear, yearFromFilename} from '../services/scan.js';
@@ -432,6 +432,60 @@ export function listLibraryRoots(): string[] {
   return (
     d.prepare('SELECT path FROM library_roots ORDER BY added_at').all() as {path: string}[]
   ).map(r => r.path);
+}
+
+/**
+ * Imported roots whose folder no longer exists on disk — typically because the
+ * library was moved or its drive is unmounted. These are *not* pruned (their
+ * songs stay so the DJ can relink via relocateRoot); the UI surfaces them with a
+ * "Locate…" action instead.
+ */
+export function listMissingRoots(): string[] {
+  return listLibraryRoots().filter(r => !existsSync(r));
+}
+
+/**
+ * Relocate a whole imported root to a new on-disk location, rebasing every song
+ * under it onto `newRoot` in place. A move preserves the folder layout beneath
+ * the root, so this is a pure prefix swap: song ids — and therefore loudness
+ * analysis and tanda/playlist membership — survive untouched, with no re-scan or
+ * re-analysis. `folder_path` is relative to the root and so is unchanged; only
+ * `folder` for songs sitting directly in the root is re-derived, since it mirrors
+ * the root's own name. The root's folder_flags move across too. Returns the
+ * number of songs rebased (0 if `oldRoot` isn't a known root) and the fresh
+ * library.
+ */
+export function relocateRoot(
+  oldRoot: string,
+  newRoot: string,
+): {moved: number; library: Library} {
+  const d = getDb();
+  if (oldRoot === newRoot) return {moved: 0, library: getLibrary()};
+  const oldPrefix = oldRoot.endsWith(sep) ? oldRoot : oldRoot + sep;
+  const newName = basename(newRoot) || newRoot;
+  const rows = d
+    .prepare('SELECT id, path, folder_path FROM songs WHERE root = ?')
+    .all(oldRoot) as {id: number; path: string; folder_path: string}[];
+
+  const tx = d.transaction(() => {
+    const upd = d.prepare('UPDATE songs SET path = ?, root = ?, folder = ? WHERE id = ?');
+    for (const r of rows) {
+      // Defensive: only rebase paths actually nested under the old root.
+      if (!r.path.startsWith(oldPrefix)) continue;
+      const rel = r.path.slice(oldPrefix.length);
+      const newPath = join(newRoot, rel);
+      // Subfolder songs keep their leaf folder name; root-level songs (no
+      // folder_path) take the new root's name, mirroring scanFile.
+      const folder = r.folder_path ? r.folder_path.split(' / ').pop()! : newName;
+      upd.run(newPath, newRoot, folder, r.id);
+    }
+    // Carry the registration and folder cortina flags onto the new path. OR
+    // REPLACE guards the rare case where newRoot was already a known root.
+    d.prepare('UPDATE OR REPLACE library_roots SET path = ? WHERE path = ?').run(newRoot, oldRoot);
+    d.prepare('UPDATE OR REPLACE folder_flags SET root = ? WHERE root = ?').run(newRoot, oldRoot);
+  });
+  tx();
+  return {moved: rows.length, library: getLibrary()};
 }
 
 export function clearLibrary(): void {
@@ -874,6 +928,21 @@ export function removeSongByPath(path: string): boolean {
   return true;
 }
 
+/** Every song path currently recorded under `root`, with its duration. Used by
+ *  the startup reconcile to diff the DB against what's really on disk (durations
+ *  let it pair a move performed while the app was closed). */
+export function listSongPathsByRoot(
+  root: string,
+): {path: string; durationSec: number | null}[] {
+  const d = getDb();
+  return (
+    d.prepare('SELECT path, duration_sec FROM songs WHERE root = ?').all(root) as {
+      path: string;
+      duration_sec: number | null;
+    }[]
+  ).map(r => ({path: r.path, durationSec: r.duration_sec}));
+}
+
 /** Whether a song exists for `path`, and its duration (used to pair renames). */
 export function getSongMetaByPath(
   path: string,
@@ -959,14 +1028,24 @@ export function removeSongIfMissing(
 }
 
 /**
- * Sweep the whole library and drop any song whose file no longer exists on disk
- * (e.g. the folder was moved or deleted while the app was closed). Runs on load
- * so phantom folders never linger in the tree. Returns the count + fresh library.
+ * Sweep the library and drop any song whose file is gone *while its root still
+ * exists* (e.g. individual tracks deleted on disk). Runs on load so phantom
+ * folders never linger in the tree. Songs under a root that has vanished
+ * entirely are left intact — that usually means the library was moved or its
+ * drive unmounted, and we want the DJ to relink it (relocateRoot) rather than
+ * silently lose its analysis and tanda membership. Returns count + fresh library.
  */
 export function pruneMissingSongs(): {removed: number; library: Library} {
   const d = getDb();
-  const rows = d.prepare('SELECT id, path FROM songs').all() as {id: number; path: string}[];
-  const missing = rows.filter(r => !existsSync(r.path)).map(r => r.id);
+  const liveRoots = new Set(listLibraryRoots().filter(r => existsSync(r)));
+  const rows = d.prepare('SELECT id, path, root FROM songs').all() as {
+    id: number;
+    path: string;
+    root: string;
+  }[];
+  const missing = rows
+    .filter(r => liveRoots.has(r.root) && !existsSync(r.path))
+    .map(r => r.id);
   deleteSongs(d, missing);
   return {removed: missing.length, library: getLibrary()};
 }

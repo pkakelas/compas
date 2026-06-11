@@ -11,13 +11,15 @@
 // playlist membership — instead of dropping it and re-analyzing a fresh copy
 // (which would needlessly show the "Preparing your music" banner).
 import chokidar, {type FSWatcher} from 'chokidar';
+import {existsSync} from 'node:fs';
 import {basename, sep} from 'node:path';
-import {scanFile, isAudioFile} from './scan.js';
+import {scanFile, isAudioFile, listAudioFiles} from './scan.js';
 import {
   getLibrary,
   getSongMetaByPath,
   importSongs,
   listLibraryRoots,
+  listSongPathsByRoot,
   removeSongByPath,
   renameSong,
   type Library,
@@ -175,9 +177,64 @@ export class LibraryWatcher {
       else newAdds.push(a);
     }
 
-    const available = [...unlinks];
-    let genuinelyAdded = 0;
+    // Re-scanned existing files: refresh their tags in place (no re-analysis).
+    for (const add of existingAdds) importSongs(add.root, [add.song]);
 
+    const genuinelyAdded = this.#applyMovesAddsRemovals(newAdds, [...unlinks]);
+
+    if (genuinelyAdded > 0) this.#deps.onSongsAdded();
+    this.#deps.onLibraryChanged(getLibrary());
+  }
+
+  /**
+   * One-shot reconcile of every imported root against what's actually on disk.
+   * The live watcher only sees events that fire while it's running, so changes
+   * made while the app was *closed* — songs dropped in, deleted, or moved —
+   * would otherwise be invisible until a manual re-import. Run this at startup
+   * to catch them. Like the live path, an old-path-gone + new-path-appeared pair
+   * for the same audio is recognised as a move and applied in place, preserving
+   * the song's id (and thus its analysis + tanda membership). Returns the fresh
+   * library; safe to call before/after start().
+   */
+  async reconcileRoots(): Promise<Library> {
+    const newAdds: PendingAdd[] = [];
+    const available: PendingUnlink[] = [];
+    for (const root of listLibraryRoots()) {
+      // A root that's gone entirely (moved/unmounted) would make every song
+      // under it look deleted. Leave those intact for relink (see relocateRoot)
+      // instead of pairing/dropping them here.
+      if (!existsSync(root)) continue;
+      const known = new Map(listSongPathsByRoot(root).map(s => [s.path, s.durationSec]));
+      const onDisk = new Set<string>();
+      for (const file of await listAudioFiles(root)) {
+        onDisk.add(file);
+        // Only unknown paths need a (tag-parsing) scan; everything else is
+        // already current — a tag edit made while closed isn't re-read, matching
+        // how importSongs treats `genre`/`singer` as DJ-owned once set.
+        if (!known.has(file)) newAdds.push({root, song: await scanFile(root, file)});
+      }
+      for (const [path, durationSec] of known) {
+        if (!onDisk.has(path)) available.push({path, durationSec});
+      }
+    }
+    if (newAdds.length === 0 && available.length === 0) return getLibrary();
+
+    const genuinelyAdded = this.#applyMovesAddsRemovals(newAdds, available);
+    if (genuinelyAdded > 0) this.#deps.onSongsAdded();
+    const library = getLibrary();
+    this.#deps.onLibraryChanged(library);
+    return library;
+  }
+
+  /**
+   * Apply a batch of new files and now-missing paths: pair moves first (matching
+   * an add to a missing path by duration so its id survives — see file header),
+   * import the genuinely new, then drop whatever missing path is left as a real
+   * deletion. `available` is mutated as moves consume entries. Returns the count
+   * of genuinely-new imports so the caller can kick off analysis.
+   */
+  #applyMovesAddsRemovals(newAdds: PendingAdd[], available: PendingUnlink[]): number {
+    let genuinelyAdded = 0;
     for (const add of newAdds) {
       const idx = this.#bestMoveMatch(add, available);
       if (idx >= 0) {
@@ -188,15 +245,9 @@ export class LibraryWatcher {
         genuinelyAdded += 1;
       }
     }
-
-    // Re-scanned existing files: refresh their tags in place (no re-analysis).
-    for (const add of existingAdds) importSongs(add.root, [add.song]);
-
     // Whatever's left really was deleted.
     for (const u of available) removeSongByPath(u.path);
-
-    if (genuinelyAdded > 0) this.#deps.onSongsAdded();
-    this.#deps.onLibraryChanged(getLibrary());
+    return genuinelyAdded;
   }
 
   /**

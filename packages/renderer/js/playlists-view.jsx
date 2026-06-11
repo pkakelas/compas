@@ -159,6 +159,7 @@ function PlEditorSong({ n, title, dur, playing, onPlay, preview }) {
 function PlEditorTanda({ it, ix, slot, onRemove, preview }) {
   const t = it.data;
   const m = tandaMeta(t);
+  const songNameOnly = useSongNameOnly();
   return (
     <div className={"tp-tandacard pl-tandacard tp-qdrag" + (slot.dragging ? " is-dragging" : "") + (slot.over ? " is-over" : "")}
       {...slot.handlers}>
@@ -172,7 +173,7 @@ function PlEditorTanda({ it, ix, slot, onRemove, preview }) {
       </div>
       {t.songs.map((s, i) => {
         const playing = preview && preview.previewId === s.id && preview.playing;
-        return <PlEditorSong key={s.id + ":" + i} n={i + 1} title={s.title} dur={s.dur || "—"}
+        return <PlEditorSong key={s.id + ":" + i} n={i + 1} title={songNameOnly ? cleanSongTitle(s) : s.title} dur={s.dur || "—"}
           playing={playing} onPlay={() => preview && preview.toggle(s)} preview={preview} />;
       })}
     </div>
@@ -203,6 +204,7 @@ function PlEditorCortina({ it, slot, onRemove, preview }) {
 // row, no curtain. Mirrors the live queue's QueueSong.
 function PlEditorSongItem({ it, slot, onRemove, preview }) {
   const s = it.data;
+  const songNameOnly = useSongNameOnly();
   const playing = preview && preview.previewId === s.id && preview.playing;
   return (
     <div className={"tp-songcard tp-qrow tp-qdrag" + (slot.dragging ? " is-dragging" : "") + (slot.over ? " is-over" : "") + (playing ? " is-now" : "")}
@@ -211,7 +213,7 @@ function PlEditorSongItem({ it, slot, onRemove, preview }) {
       <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
       <span className="tp-songcard-glyph">{playing ? <EQ /> : (preview && preview.viaMonitor ? <span className="tp-cuebadge"><I.headphones s={14} /></span> : <I.note s={15} />)}</span>
       <div className="tp-flex1">
-        <div className="tp-songcard-title">{s.title}</div>
+        <div className="tp-songcard-title">{songNameOnly ? cleanSongTitle(s) : s.title}</div>
         <div className="tp-songcard-sub">{s.orq || "Unknown"}{s.singer ? " · " + s.singer : ""}</div>
       </div>
       <div className="tp-fade"><I.clock s={13} /> {s.dur || "—"}</div>
@@ -288,6 +290,7 @@ function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, on
 function PlaylistCard({ pl, onOpen, onDelete, onPlay }) {
   const meta = playlistMeta(pl.items);
   const preview = pl.items.slice(0, 6);
+  const songNameOnly = useSongNameOnly();
   return (
     <div className="tv-tcard pl-card" onClick={() => onOpen(pl)} title="Open playlist">
       <div className="tv-tcard-top">
@@ -301,13 +304,18 @@ function PlaylistCard({ pl, onOpen, onDelete, onPlay }) {
         <span className="pl-card-open"><I.chev s={16} /></span>
       </div>
       <div className="tv-tcard-songs">
-        {preview.map((it, i) => (
-          <div key={it.type + i} className="tv-tcard-song">
-            <span className="n">{i + 1}</span>
-            <span className="t">{it.type !== "tanda" ? "“" + it.data.title + "”" : itemTitle(it)}</span>
-            <span className="d">{it.type !== "tanda" ? (actsAsCortina(pl.items, i) ? "Cortina" : "Song") : it.data.songs.length + "×"}</span>
-          </div>
-        ))}
+        {preview.map((it, i) => {
+          const role = it.type === "tanda" ? "tanda" : (actsAsCortina(pl.items, i) ? "cortina" : "song");
+          return (
+            <div key={it.type + i} className={"tv-tcard-song pl-row-" + role}>
+              <span className="n pl-typ" title={role === "tanda" ? "Tanda" : role === "cortina" ? "Cortina" : "Single song"}>
+                {role === "tanda" ? <I.rows s={13} /> : role === "cortina" ? <I.curtain s={13} /> : <I.note s={13} />}
+              </span>
+              <span className="t">{it.type !== "tanda" ? (songNameOnly && role === "song" ? cleanSongTitle(it.data) : it.data.title) : itemTitle(it)}</span>
+              <span className="d">{role === "tanda" ? it.data.songs.length + " songs" : role === "cortina" ? "Cortina" : "Song"}</span>
+            </div>
+          );
+        })}
         {pl.items.length > 6 && (
           <div className="tv-tcard-song"><span className="n" /><span className="t pl-more">+{pl.items.length - 6} more</span><span className="d" /></div>
         )}

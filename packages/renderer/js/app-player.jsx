@@ -325,6 +325,7 @@ function QSong({ n, title, dur, state, playing, onPlay }) {
 function QueueTanda({ item, ix, now, playing, nowIx, onPlay, onPlaySong, onRemove, drag }) {
   const t = item.data;
   const m = tandaMeta(t);
+  const songNameOnly = useSongNameOnly();
   const { className: dragCls = "", ...handlers } = drag;
   return (
     <div className={"tp-tandacard tp-qrow" + (now ? " is-now" : "") + " " + dragCls} {...handlers}
@@ -338,7 +339,7 @@ function QueueTanda({ item, ix, now, playing, nowIx, onPlay, onPlaySong, onRemov
         {!now && <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove"><I.x s={14} /></button>}
       </div>
       {t.songs.map((s, i) => (
-        <QSong key={s.id} n={i + 1} title={s.title} dur={s.dur || "—"}
+        <QSong key={s.id} n={i + 1} title={songNameOnly ? cleanSongTitle(s) : s.title} dur={s.dur || "—"}
           state={now ? (i < nowIx ? "done" : i === nowIx ? "now" : "up") : "up"}
           playing={playing}
           onPlay={() => onPlaySong(i)} />
@@ -371,6 +372,7 @@ function QueueCortina({ item, now, playing, onPlay, onRemove, drag }) {
 // track card — no curtain, no "floor clears" language.
 function QueueSong({ item, now, playing, onPlay, onRemove, drag }) {
   const s = item.data;
+  const songNameOnly = useSongNameOnly();
   const { className: dragCls = "", ...handlers } = drag;
   return (
     <div className={"tp-songcard tp-qrow" + (now ? " is-now" : "") + " " + dragCls} {...handlers}
@@ -378,7 +380,7 @@ function QueueSong({ item, now, playing, onPlay, onRemove, drag }) {
       <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
       <span className="tp-songcard-glyph">{now && playing ? <EQ /> : <I.note s={15} />}</span>
       <div className="tp-flex1">
-        <div className="tp-songcard-title">{s.title}</div>
+        <div className="tp-songcard-title">{songNameOnly ? cleanSongTitle(s) : s.title}</div>
         <div className="tp-songcard-sub">{s.orq || "Unknown"}{s.singer ? " · " + s.singer : ""}</div>
       </div>
       <div className="tp-fade"><I.clock s={13} /> {s.dur || "—"}</div>
@@ -608,6 +610,7 @@ function SeekBar({ pos, dur, onSeek, className = "tp-nb-bar" }) {
 }
 
 function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPause, onPrev, onNext, onSeek, onFadeToTanda, onVolume, onToggleMute, cortinaSnippetEnabled, cortinaSnippetSec }) {
+  const songNameOnly = useSongNameOnly();
   if (!now) {
     // Nothing is selected yet. If the queue already has items, the main Play
     // button must still work — it starts the set from the top (onPlayPause falls
@@ -654,7 +657,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
           <div className="tp-nb-mark cortina"><I.curtain s={18} /></div>
           <div style={{ minWidth: 0 }}>
             <div className="tp-nb-eyebrow">{snippetActive ? `Cortina · snippet ${cortinaSnippetSec}s` : "Cortina · floor clears"}</div>
-            <div className="tp-nb-cortitle">“{c.title}”</div>
+            <Marquee className="tp-nb-cortitle" text={"“" + c.title + "”"} />
             <div className="tp-nb-sub">
               {c.orq || "Cortina"}
               {snippetActive && (
@@ -698,7 +701,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
       <div className="tp-nb-meta">
         <div className="tp-nb-mark">{playing ? <EQ /> : <I.pause s={16} />}</div>
         <div style={{ minWidth: 0 }}>
-          <div className="tp-nb-title">{song ? song.title : "—"}</div>
+          <Marquee className="tp-nb-title" text={song ? (songNameOnly ? cleanSongTitle(song) : song.title) : "—"} />
           <div className="tp-nb-sub"><b>{orq}</b>{song && song.singer ? " · " + song.singer : ""}</div>
         </div>
         {isTanda && (
@@ -1577,6 +1580,7 @@ function VolumeControl({ volume, muted, onVolume, onToggleMute }) {
 // above the floor's NowBar. Only mounts while a track is cued, so it stays out
 // of the way until the DJ auditions something.
 function CueBar({ cue, monitorLabel }) {
+  const songNameOnly = useSongNameOnly();
   const song = cue.song;
   if (!song) return null;
   const remain = Math.max(0, (cue.dur || 0) - (cue.pos || 0));
@@ -1588,7 +1592,7 @@ function CueBar({ cue, monitorLabel }) {
         <div className="tp-cb-mark"><I.headphones s={20} /></div>
         <div style={{ minWidth: 0 }}>
           <div className="tp-cb-eyebrow">Pre-listen{monitorLabel ? " · " + monitorLabel : ""}</div>
-          <div className="tp-cb-title">{song.title}</div>
+          <div className="tp-cb-title">{songNameOnly ? cleanSongTitle(song) : song.title}</div>
           <div className="tp-cb-sub">{song.orq}{song.singer ? " · " + song.singer : ""}</div>
         </div>
       </div>

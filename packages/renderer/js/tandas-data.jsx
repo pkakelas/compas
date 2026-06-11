@@ -106,12 +106,17 @@ const Store = {
     return () => _subs.delete(fn);
   },
   async loadAll() {
-    // Prune songs whose files vanished while the app was closed first, so the
-    // tree (and the tandas/playlists we read next) reflect what's really there.
-    // Fall back to a plain read if the main process predates the prune handler.
+    // Reconcile the library with the filesystem first, so the tree (and the
+    // tandas/playlists we read next) reflect what's really on disk — this picks
+    // up songs added, removed, or moved while the app was closed. Degrade
+    // gracefully on an older main: reconcile → prune (removes vanished only) →
+    // a plain read.
     let library = null;
     try {
-      if (window.compas.pruneMissing) {
+      if (window.compas.reconcile) {
+        const res = await window.compas.reconcile();
+        library = res && res.library;
+      } else if (window.compas.pruneMissing) {
         const pruned = await window.compas.pruneMissing();
         library = pruned && pruned.library;
       }

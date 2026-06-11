@@ -16,6 +16,16 @@ function setTextZoom(factor: number) {
   webFrame.setZoomFactor(factor);
 }
 
+/** The running app's version string (from package.json), for the About card. */
+function getAppVersion(): Promise<string> {
+  return ipcRenderer.invoke('app:version');
+}
+
+/** Open a vetted external link (About footer website / email) in the OS handler. */
+function openExternal(url: string): Promise<void> {
+  return ipcRenderer.invoke('app:openExternal', url);
+}
+
 /** Read the current library (folder tree + flat songs) from the database. */
 function getLibrary() {
   return ipcRenderer.invoke('library:get');
@@ -29,6 +39,12 @@ function clearLibrary() {
 /** Remove songs whose files no longer exist. Returns {removed, library}. */
 function pruneMissingLibrary() {
   return ipcRenderer.invoke('library:pruneMissing');
+}
+
+/** Sync the library with the filesystem — picks up songs added, removed, or
+ *  moved while the app was closed. Returns the fresh {library}. */
+function reconcileLibrary() {
+  return ipcRenderer.invoke('library:reconcile');
 }
 
 /** Remove one song iff its file is gone. Returns {removed, song, library}. */
@@ -155,6 +171,26 @@ function onLibraryChanged(cb: (library: unknown) => void) {
   return () => ipcRenderer.removeListener('library:changed', listener);
 }
 
+/** The update (if any) that has already finished downloading and is waiting to
+ *  install — for a window that mounts after the download completed. Resolves to
+ *  `{version, releaseNotes}` or null. */
+function getUpdateStatus() {
+  return ipcRenderer.invoke('update:status');
+}
+
+/** Quit and relaunch into the freshly-downloaded update. */
+function installUpdate() {
+  return ipcRenderer.invoke('update:install');
+}
+
+/** Subscribe to "a new version has downloaded" events. The callback receives
+ *  `{version, releaseNotes}`. Returns an unsubscribe function. */
+function onUpdateDownloaded(cb: (info: unknown) => void) {
+  const listener = (_event: unknown, info: unknown) => cb(info);
+  ipcRenderer.on('update:downloaded', listener);
+  return () => ipcRenderer.removeListener('update:downloaded', listener);
+}
+
 /** Subscribe to text-size commands from the View ▸ Zoom menu / keyboard
  *  accelerators. The callback receives 'in' | 'out' | 'reset'. Returns an
  *  unsubscribe function. */
@@ -165,9 +201,12 @@ function onZoomCommand(cb: (dir: 'in' | 'out' | 'reset') => void) {
 }
 
 export {
+  getAppVersion,
+  openExternal,
   getLibrary,
   clearLibrary,
   pruneMissingLibrary,
+  reconcileLibrary,
   removeSongIfMissing,
   deleteSongs,
   updateSong,
@@ -191,4 +230,7 @@ export {
   onLibraryChanged,
   onZoomCommand,
   setTextZoom,
+  getUpdateStatus,
+  installUpdate,
+  onUpdateDownloaded,
 };

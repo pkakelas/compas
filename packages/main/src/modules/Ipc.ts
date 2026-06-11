@@ -1,6 +1,6 @@
 import type {AppModule} from '../AppModule.js';
 import type {ModuleContext} from '../ModuleContext.js';
-import {BrowserWindow, dialog, ipcMain} from 'electron';
+import {BrowserWindow, dialog, ipcMain, shell} from 'electron';
 import {basename} from 'node:path';
 import {scanFolder, guessStyle, looksLikeCortinaFolder} from '../services/scan.js';
 import {AnalysisManager, type AnalysisState} from '../services/loudness.js';
@@ -229,6 +229,18 @@ export class IpcModule implements AppModule {
       },
     );
 
+    // App version (from the packaged app's package.json) for the About card.
+    ipcMain.handle('app:version', (): string => app.getVersion());
+
+    // Open a vetted external link (the About footer's website / email) in the
+    // user's default browser or mail client. Restricted to known targets so the
+    // renderer can never hand us an arbitrary URL to open.
+    ipcMain.handle('app:openExternal', (_event, url: string): void => {
+      if (url === 'mailto:pkakelas@gmail.com' || url === 'https://t.me/pkakelas') {
+        shell.openExternal(url).catch(console.error);
+      }
+    });
+
     ipcMain.handle('library:get', (): Library => getLibrary());
 
     ipcMain.handle('library:clear', (): Library => {
@@ -240,6 +252,13 @@ export class IpcModule implements AppModule {
     // Drop every song whose file has gone missing from disk (and any folder/
     // tanda left empty as a result). Runs on load to keep the tree honest.
     ipcMain.handle('library:pruneMissing', () => pruneMissingSongs());
+
+    // Full reconcile of the imported roots against the filesystem: picks up
+    // songs added, removed, or moved while the app was closed (the live watcher
+    // only sees changes while running). Runs on load and supersedes the prune
+    // above — it removes the gone *and* imports the new, pairing moves so ids
+    // (and analysis/tanda membership) survive. Returns the fresh library.
+    ipcMain.handle('library:reconcile', () => watcher.reconcileRoots());
 
     // Remove a single song, but only if its file is truly gone — used when
     // playback fails so we self-heal the library instead of looping on errors.

@@ -60,11 +60,11 @@ function SetSelect({ value, options, onChange }) {
   );
 }
 
-function SetRow({ label, desc, children }) {
+function SetRow({ label, desc, pill, children }) {
   return (
     <div className="tp-set-row">
       <div className="tp-set-row-l">
-        <div className="lb">{label}</div>
+        <div className="lb">{label}{pill && <span className="tp-set-pill">{pill}</span>}</div>
         {desc && <div className="ds">{desc}</div>}
       </div>
       <div className="tp-set-ctrl">{children}</div>
@@ -253,6 +253,67 @@ function SilenceSpacingCard() {
   );
 }
 
+/* ============================ LIBRARY ============================ */
+// How songs read in the library list. "Song name only" reuses the Smart
+// Organize title-parsing heuristics to hide the orchestra/singer/year cruft
+// that's often baked into a title field — on display only, the stored
+// metadata is never touched.
+function LibraryDisplayCard({ t, setTweak }) {
+  return (
+    <SettingsCard icon={<I.spark s={16} />} title="Library display"
+      desc="Tidy how song titles read across Compás.">
+      <SetRow label="Show song name only" pill="Beta"
+        desc="Hide the orchestra, singer and year that are sometimes baked into a song’s title, leaving just the song name — everywhere songs appear: library, tandas, playlists and the live queue. The orchestra and singer still show on the line below.">
+        <SetSwitch checked={!!t.songNameOnly} onChange={(v) => setTweak("songNameOnly", v)} />
+      </SetRow>
+      {t.songNameOnly && (
+        <div className="tp-set-note">
+          Strips, on display only, the kinds of clutter that creep into title tags:
+          <div className="tp-set-strips">
+            <span>Leading artist <i>“Di Sarli – ”</i></span>
+            <span>Track numbers <i>“07. ”</i></span>
+            <span>Years <i>“1944”</i></span>
+            <span>Singer credits <i>“(Rufino)”</i></span>
+            <span><i>“(instrumental)”</i></span>
+            <span>Glued singer <i>“-Héctor Mauré”</i></span>
+          </div>
+          Best-effort heuristics — a few oddly-tagged titles may not clean up perfectly. Your files and saved metadata are never changed.
+        </div>
+      )}
+    </SettingsCard>
+  );
+}
+
+/* ============================ ABOUT ============================ */
+// App version + a friendly note, shown as a quiet footer below the cards (not in
+// a card of its own). The version is read once from the main process (the
+// packaged app's package.json) so it never drifts from the real build.
+function AboutFooter() {
+  const [version, setVersion] = React.useState("");
+  React.useEffect(() => {
+    let alive = true;
+    window.compas?.getAppVersion?.().then((v) => { if (alive) setVersion(v); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const open = (url) => (e) => { e.preventDefault(); window.compas?.openExternal?.(url); };
+
+  return (
+    <footer className="tp-about">
+      <div className="tp-about-ver">Compás{version ? ` v${version}` : ""}</div>
+      <div className="tp-about-note">
+        Made with <span className="tp-about-heart" aria-label="love">♥</span> by Dimitris Lamprinos
+      </div>
+      <div className="tp-about-note">
+        Bugs or suggestions? Reach out at{" "}
+        <a href="mailto:pkakelas@gmail.com" onClick={open("mailto:pkakelas@gmail.com")}>pkakelas@gmail.com</a>
+        {" "}or on Telegram{" "}
+        <a href="https://t.me/pkakelas" onClick={open("https://t.me/pkakelas")}>@pkakelas</a>
+      </div>
+    </footer>
+  );
+}
+
 /* ============================ SETTINGS VIEW ============================ */
 function SettingsView({ t, setTweak }) {
   return (
@@ -273,6 +334,8 @@ function SettingsView({ t, setTweak }) {
           <SilenceSpacingCard />
 
           <CortinaPlaybackCard />
+
+          <LibraryDisplayCard t={t} setTweak={setTweak} />
 
           <SettingsCard icon={<I.spark s={16} />} title="Appearance"
             desc="Choose how Compás looks.">
@@ -311,6 +374,8 @@ function SettingsView({ t, setTweak }) {
               </div>
             </SetRow>
           </SettingsCard>
+
+          <AboutFooter />
         </div>
       </div>
     </div>
