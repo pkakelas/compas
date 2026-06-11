@@ -169,6 +169,10 @@ function CortinaPlaybackCard() {
   return (
     <SettingsCard icon={<I.curtain s={17} />} title="Cortinas"
       desc="Control how cortinas play during a live set.">
+      <div className="tp-set-note">
+        These settings only affect cortinas — the songs in between tandas. The
+        snippet cut-off and fade out never apply to the tanda songs themselves.
+      </div>
       <SetRow label="Play only the first seconds"
         desc="Play a short snippet of each cortina, then fade to the next tanda automatically.">
         <SetSwitch checked={playback.cortinaSnippetEnabled} onChange={playback.setCortinaSnippetEnabled} />
