@@ -193,6 +193,21 @@ function SongEditRow({ s, onClose }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(false);
   const set = (k) => (e) => setDraft((d) => ({ ...d, [k]: e.target.value }));
+  const setVal = (k) => (v) => setDraft((d) => ({ ...d, [k]: v }));
+
+  // Open-ended facets (orchestra, singer) suggest values already in the library
+  // so existing names stay consistent — but the DJ can always type a brand-new
+  // one. Snapshot on mount; the library doesn't shift mid-edit.
+  const { orqOptions, singerOptions } = useMemo(() => {
+    const songs = (window.Store && window.Store.get().songs) || [];
+    const orqs = new Set(), singers = new Set();
+    for (const x of songs) {
+      if (x.orq && x.orq.trim()) orqs.add(x.orq.trim());
+      if (x.singer && x.singer.trim()) singers.add(x.singer.trim());
+    }
+    const cmp = (a, b) => a.localeCompare(b, undefined, { sensitivity: "base" });
+    return { orqOptions: [...orqs].sort(cmp), singerOptions: [...singers].sort(cmp) };
+  }, []);
 
   const save = async () => {
     if (saving) return;
@@ -230,9 +245,9 @@ function SongEditRow({ s, onClose }) {
         <label className="f wide"><span>Title</span>
           <input autoFocus value={draft.title} onChange={set("title")} placeholder="Title" /></label>
         <label className="f"><span>Orchestra</span>
-          <input value={draft.orq} onChange={set("orq")} placeholder="Orchestra" /></label>
+          <CreatableCombo value={draft.orq} onChange={setVal("orq")} options={orqOptions} placeholder="Orchestra" /></label>
         <label className="f"><span>Singer</span>
-          <input value={draft.singer} onChange={set("singer")} placeholder="Instrumental" /></label>
+          <CreatableCombo value={draft.singer} onChange={setVal("singer")} options={singerOptions} placeholder="Instrumental" /></label>
         <label className="f"><span>Year</span>
           <input value={draft.year} onChange={set("year")} inputMode="numeric" placeholder="—" maxLength={4} /></label>
         <label className="f"><span>Genre</span>
@@ -861,6 +876,77 @@ function SearchableSelect({ placeholder, value, onChange, options, disabled, all
             {!items.length ? (
               <div className="tv-pick-empty">{q ? "No matches" : `No ${placeholder.toLowerCase()}s yet`}</div>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* A creatable combo-box for the song editor's open-ended facets (orchestra,
+ * singer). Unlike SearchableSelect, the text field *is* the value — whatever
+ * the DJ types is kept verbatim — while the dropdown merely suggests values
+ * already in the library, so existing names get reused (and stay spelled the
+ * same) instead of being re-typed by hand. */
+function CreatableCombo({ value, onChange, options, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const rootRef = useRef(null);
+
+  const q = _norm(value).trim();
+  // Suggest values that match what's typed, minus an exact hit (no point
+  // offering the value already in the field). Empty field lists everything.
+  const filtered = useMemo(() => {
+    let list = options || [];
+    if (q) list = list.filter((o) => _norm(o).includes(q) && _norm(o) !== q);
+    return list.slice(0, PICK_LIST_CAP);
+  }, [options, q]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  useEffect(() => { setActive(-1); }, [value]);
+
+  const pick = (val) => { onChange(val); setActive(-1); setOpen(false); };
+
+  // The editor's form-level handler saves on Enter and closes on Escape, so we
+  // only swallow those keys while the dropdown is actively steering them
+  // (choosing a suggestion / dismissing the list); otherwise they bubble up.
+  const onKey = (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!open) { setOpen(true); return; }
+      setActive((a) => (filtered.length ? Math.min(a + 1, filtered.length - 1) : -1));
+    } else if (e.key === "ArrowUp") {
+      if (!open) return;
+      e.preventDefault();
+      setActive((a) => Math.max(a - 1, -1));
+    } else if (e.key === "Enter") {
+      if (open && active >= 0 && filtered[active]) { e.preventDefault(); e.stopPropagation(); pick(filtered[active]); }
+    } else if (e.key === "Escape") {
+      if (open) { e.preventDefault(); e.stopPropagation(); setOpen(false); }
+    }
+  };
+
+  return (
+    <div className={"tv-combo" + (open ? " is-open" : "")} ref={rootRef}>
+      <input value={value} placeholder={placeholder} autoComplete="off"
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)} onKeyDown={onKey} />
+      {open && filtered.length ? (
+        <div className="tv-pick-menu tv-combo-menu" onMouseDown={(e) => e.preventDefault()}>
+          <div className="tv-pick-list" role="listbox">
+            {filtered.map((o, i) => (
+              <button key={o} type="button"
+                className={"tv-pick-opt" + (i === active ? " active" : "")}
+                onMouseEnter={() => setActive(i)} onClick={() => pick(o)}>
+                <span className="tv-pick-opt-t">{o}</span>
+              </button>
+            ))}
           </div>
         </div>
       ) : null}

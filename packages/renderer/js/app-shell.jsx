@@ -154,6 +154,7 @@ function AppBody({ t, setTweak }) {
   const [view, setView] = useState(TWEAK_DEFAULTS.startView);
   const player = usePlayer();
   const [update, dismissUpdate] = useUpdateNotice();
+  const [showOnboarding, dismissOnboarding, startOnboarding] = useOnboarding();
 
   // Play a playlist in place (marks the active song, like playing a tanda). It
   // deliberately does NOT switch to the Live tab or load the live queue — a
@@ -192,12 +193,13 @@ function AppBody({ t, setTweak }) {
           onDockWidthChange={(v) => setTweak("playlistDockWidth", v)} />
       </div>
       <div className="tp-view" style={{ display: view === "Settings" ? undefined : "none" }}>
-        <SettingsView t={t} setTweak={setTweak} />
+        <SettingsView t={t} setTweak={setTweak} onReplayTour={startOnboarding} />
       </div>
 
       <PlayerBar />
 
       {update && <UpdateModal update={update} onDismiss={dismissUpdate} />}
+      {showOnboarding && <OnboardingWizard onClose={dismissOnboarding} />}
     </div>
   );
 }

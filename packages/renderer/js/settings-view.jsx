@@ -315,7 +315,7 @@ function AboutFooter() {
 }
 
 /* ============================ SETTINGS VIEW ============================ */
-function SettingsView({ t, setTweak }) {
+function SettingsView({ t, setTweak, onReplayTour }) {
   return (
     <div className="tv">
       <div className="tv-head">
@@ -374,6 +374,16 @@ function SettingsView({ t, setTweak }) {
               </div>
             </SetRow>
           </SettingsCard>
+
+          {onReplayTour && (
+            <SettingsCard icon={<I.play s={16} />} title="Getting started"
+              desc="New here, or just want a refresher?">
+              <SetRow label="Feature tour"
+                desc="Replay the welcome walkthrough of everything Compás can do.">
+                <button className="tp-btn" onClick={onReplayTour}>Replay tour</button>
+              </SetRow>
+            </SettingsCard>
+          )}
 
           <AboutFooter />
         </div>

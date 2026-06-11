@@ -25,4 +25,5 @@ import "../js/library-view.jsx";
 import "../js/tandas-view.jsx";
 import "../js/playlists-view.jsx";
 import "../js/settings-view.jsx";
+import "../js/onboarding.jsx";
 import "../js/app-shell.jsx";
