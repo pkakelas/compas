@@ -141,7 +141,7 @@ function BuilderBench({ builder, api, width, preview }) {
       </div>
 
       <div className="tv-dock-foot">
-        <button className="tv-save" disabled={!songs.length} onClick={api.save}>
+        <button className="tp-btn primary lg block" disabled={!songs.length} onClick={api.save}>
           <I.check s={17} /> {api.editing ? "Update tanda" : "Save tanda"}
         </button>
         <button className="tv-clear" disabled={!songs.length && !api.editing} onClick={api.clear}>
@@ -184,7 +184,7 @@ function SuggestTandasTip({ suggestions, onDismiss, onBrowse }) {
           <div className="sotip-chips">{orchestras.map((o) => <span key={o}>{o}</span>)}</div>
         )}
         <div className="sotip-actions">
-          <button className="sotip-go" onClick={onBrowse}><I.spark s={15} /> Browse suggestions</button>
+          <button className="tp-btn primary lg block" onClick={onBrowse}><I.spark s={15} /> Browse suggestions</button>
           <span className="sotip-safe"><I.check s={13} /> Save the ones you like, dismiss the rest</span>
         </div>
       </div>
@@ -196,7 +196,7 @@ function SuggestTandasTip({ suggestions, onDismiss, onBrowse }) {
 const BUILDER_MIN_W = 300;
 const BUILDER_MAX_W = 640;
 
-function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthChange }) {
+function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthChange, tandaLayout, onTandaLayoutChange }) {
   const { imported, tandas, suggestions, totalSongs, totalFolders, roots } = useStore();
   const goBuild = () => onNavigate && onNavigate("Builder");
   const goManage = () => onNavigate && onNavigate("Tandas");
@@ -222,10 +222,12 @@ function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthCh
   const dismissSuggestTip = () => { localStorage.setItem(SUGGEST_TIP_KEY, "1"); setSuggestTipDismissed(true); };
   const browseSuggestions = () => { setManageTab("suggestions"); dismissSuggestTip(); };
 
-  // Grid vs. list layout for the manage view. List gives each song the full row
-  // width, so long titles (often with the orquesta prepended) don't truncate.
-  const [tandaView, setTandaView] = useState(() => localStorage.getItem("compas.tandaView") === "list" ? "list" : "grid");
-  useEffect(() => { localStorage.setItem("compas.tandaView", tandaView); }, [tandaView]);
+  // Grid (tabs) vs. list (big rows) layout for the manage view. List gives each
+  // song the full row width, so long titles (often with the orquesta prepended)
+  // don't truncate. The preference lives in the app-level tweaks so it's shared
+  // with the Appearance settings; the header toggle below writes the same value.
+  const tandaView = tandaLayout === "list" ? "list" : "grid";
+  const setTandaView = (v) => onTandaLayoutChange && onTandaLayoutChange(v);
 
   /* ---- builder api ---- */
   const inBuilder = new Set(builder.songs.map((s) => s.id));
@@ -330,7 +332,7 @@ function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthCh
       </div>
       <div className="tv-head-r">
         {mode === "build" && (
-          <button className="tv-reimport" onClick={imp.begin} disabled={imp.scanning} title="Import another folder into your library">
+          <button className="tp-btn" onClick={imp.begin} disabled={imp.scanning} title="Import another folder into your library">
             <I.upload s={16} /> {imp.scanning ? "Scanning…" : "Add folder"}
           </button>
         )}

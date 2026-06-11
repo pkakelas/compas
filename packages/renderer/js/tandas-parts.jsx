@@ -128,6 +128,7 @@ function TandaLibCard({ t, preview, onAdd, added, addTitle }) {
               <div key={s.id + ":" + i}
                 className={"tp-songrow" + (preview ? " is-clickable" : "") + (playing ? " is-now" : "")}
                 onClick={preview ? (e) => { e.stopPropagation(); preview.toggle(s); } : undefined}
+                {...(preview ? clickKeys(() => preview.toggle(s)) : {})}
                 title={previewTitle(preview, playing)}>
                 <span className="n"><PreviewGlyph preview={preview} playing={playing} n={i + 1} s={12} /></span>
                 <span className="tt">
@@ -242,7 +243,7 @@ function SongEditRow({ s, onClose }) {
  * `library` renders the read-only variant used by the Library view: it keeps
  * the listen affordance but drops the builder drag handle and the +/add button,
  * and adds a pencil to edit the song's metadata in place. */
-function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPlaying, onPreview, previewViaMonitor, library, editing: editingProp, onEdit, onCloseEdit, onContext }) {
+function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPlaying, onPreview, previewViaMonitor, library, editing: editingProp, onEdit, onCloseEdit, onContext, onSelect, selected }) {
   const isCort = !!s.isCortina;
   // Editing is parent-controlled in the Library view (so the right-click menu's
   // "Edit song" can open the editor) and self-managed everywhere else.
@@ -252,7 +253,22 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
   const startEdit = () => { if (controlled) onEdit(s); else setEditingLocal(true); };
   const closeEdit = () => { if (controlled) { if (onCloseEdit) onCloseEdit(); } else setEditingLocal(false); };
   const clickTimer = useRef(null);
-  const handleClick = () => {
+  const handleClick = (e) => {
+    // Library rows double as a multi-select surface: shift/⌘/ctrl-clicks adjust
+    // the selection (for the bulk right-click menu) and never start a preview,
+    // while a plain click both selects just this song and previews it. The
+    // library has no double-click action, so we preview immediately rather than
+    // waiting out the dbl-click debounce — that way clicking a new song
+    // deactivates the previous one at once.
+    if (library) {
+      if (onSelect) {
+        const modifier = e.shiftKey || e.metaKey || e.ctrlKey;
+        onSelect(s, e);
+        if (modifier) return;
+      }
+      onPreview();
+      return;
+    }
     if (clickTimer.current) clearTimeout(clickTimer.current);
     clickTimer.current = setTimeout(() => {
       clickTimer.current = null;
@@ -272,14 +288,15 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
     ? (isPreview && isPlaying ? "Pause" : "Play preview")
     : (inBuilder ? "Already in the tanda" : "Double-click to add to tanda · click to play preview");
   const row = (
-    <div className={"tv-song clickable" + (isCort ? " cortina" : "") + (inBuilder ? " in-builder" : "") + (dragging ? " dragging" : "") + (isPreview ? " playing" : "") + (editing ? " editing" : "")}
+    <div className={"tv-song clickable" + (isCort ? " cortina" : "") + (inBuilder ? " in-builder" : "") + (dragging ? " dragging" : "") + (isPreview ? " playing" : "") + (editing ? " editing" : "") + (selected ? " selected" : "")}
       draggable={!library} {...(library ? {} : dragHandlers)}
+      onMouseDown={library && onSelect ? (e) => { if (e.shiftKey) e.preventDefault(); } : undefined}
       onClick={handleClick}
       onDoubleClick={library ? undefined : handleDoubleClick}
       onContextMenu={library && onContext ? (e) => onContext(e, s) : undefined}
       title={isPreview && isPlaying ? "Pause" : rowTitle}>
       <button className={"play" + (isPreview && isPlaying ? " on" : "") + (previewViaMonitor ? " monitor" : "")} onClick={(e) => { e.stopPropagation(); onPreview(); }}
-        title={isPreview && isPlaying ? "Pause" : previewViaMonitor ? "Listen in headphones (monitor)" : "Play preview"}>
+        title={isPreview && isPlaying ? "Pause" : previewViaMonitor ? "Pre-listen in headphones" : "Play preview"}>
         {isPreview && isPlaying ? <I.pause s={14} /> : (previewViaMonitor ? <I.headphones s={14} /> : <I.play s={14} />)}
       </button>
       <div className="tt">
@@ -899,7 +916,7 @@ function FolderRowFlat({ node, depth, isOpen, onToggle, onContext }) {
 /* ============================ LIBRARY BROWSER ============================
  * Shared folder-tree song browser for Library, Builder, and Live: search,
  * dropdown filters, sort, and a windowed list for large libraries. */
-function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, onSongContext, editingId, onSongEdit, onCloseEdit, library, builderIds, onAdd, makeDrag, draggingId, hint }) {
+function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, onSongContext, editingId, onSongEdit, onCloseEdit, library, builderIds, onAdd, makeDrag, draggingId, hint, selectedIds, setSelectedIds, anchorRef }) {
   const { tree, songs } = useStore();
   const scrollRef = useRef(null);
   const [sort, setSort] = useState("title");
@@ -951,6 +968,45 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
   }, [tree, query, sort, openSet, searching]);
 
   const rows = model.rows;
+
+  /* ---- multi-select (library only) ----
+   * Selection is keyed by song id and lifted to LibraryTree so the right-click
+   * menu can act on it. Range selection (shift) walks the songs in the order
+   * they're shown here, so the anchor→target span matches what the eye sees. */
+  const songOrder = useMemo(
+    () => rows.filter((r) => r.kind === "song").map((r) => String(r.song.id)),
+    [rows],
+  );
+  const onSongSelect = (song, e) => {
+    if (!setSelectedIds) return;
+    const id = String(song.id);
+    const additive = e.metaKey || e.ctrlKey;
+    if (e.shiftKey && anchorRef.current != null) {
+      const a = songOrder.indexOf(String(anchorRef.current));
+      const b = songOrder.indexOf(id);
+      if (a !== -1 && b !== -1) {
+        const [lo, hi] = a <= b ? [a, b] : [b, a];
+        const span = songOrder.slice(lo, hi + 1);
+        setSelectedIds((prev) => {
+          const n = new Set(additive ? prev : []);
+          span.forEach((x) => n.add(x));
+          return n;
+        });
+        return;
+      }
+    }
+    if (additive) {
+      setSelectedIds((prev) => {
+        const n = new Set(prev);
+        n.has(id) ? n.delete(id) : n.add(id);
+        return n;
+      });
+      anchorRef.current = id;
+      return;
+    }
+    setSelectedIds(new Set([id]));
+    anchorRef.current = id;
+  };
 
   /* ---- virtualization: render only the rows in view ----
    * Rows are single-line and their heights are enforced by CSS (see ROW_H +
@@ -1012,6 +1068,8 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
       <SongRow s={s} library={library}
         editing={library && editingId === s.id} onEdit={library ? onSongEdit : undefined} onCloseEdit={onCloseEdit}
         onContext={library ? onSongContext : undefined}
+        onSelect={library ? onSongSelect : undefined}
+        selected={library && selectedIds ? selectedIds.has(String(s.id)) : false}
         inBuilder={!library && builderIds && builderIds.has(s.id)}
         onAdd={() => onAdd && onAdd(s)}
         dragHandlers={!library && makeDrag ? makeDrag(s) : undefined}
@@ -1047,7 +1105,7 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
 }
 
 function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, library }) {
-  const { tandas } = useStore();
+  const { tandas, songs } = useStore();
   const [filters, setFilters] = useState(EMPTY_SEARCH);
   const debouncedText = useDebounced(filters.text, 150);
   const query = useMemo(() => buildSearchQuery({
@@ -1057,14 +1115,25 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
     genre: filters.genre,
     year: filters.year,
   }), [debouncedText, filters.orq, filters.singer, filters.genre, filters.year]);
-  const [menu, setMenu] = useState(null);   // right-click menu: { kind, node?/song?, x, y }
+  const [menu, setMenu] = useState(null);   // right-click menu: { kind, node?/song?, ids?, x, y }
   const [editingId, setEditingId] = useState(null); // song whose editor is open
+  // Multi-select for the library: a Set of (string) song ids, with an anchor
+  // for shift-range selection. Lives here so the right-click menu can act on it.
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const anchorRef = useRef(null);
+  const clearSelection = () => { setSelectedIds(new Set()); anchorRef.current = null; };
+  const byId = useMemo(() => {
+    const m = new Map();
+    for (const s of songs || []) m.set(String(s.id), s);
+    return m;
+  }, [songs]);
   const { ask, modal } = useConfirm();
 
   // Clamp to the viewport so the menu never opens off the right/bottom edge.
-  const menuPos = (e) => ({
+  // The bulk song menu is taller (genre row + extra item), so it reserves more.
+  const menuPos = (e, h = 180) => ({
     x: Math.min(e.clientX, window.innerWidth - 244),
-    y: Math.min(e.clientY, window.innerHeight - 180),
+    y: Math.min(e.clientY, window.innerHeight - h),
   });
   // Right-click a folder row to remove it from the library (files stay on disk).
   const closeMenu = () => setMenu(null);
@@ -1074,10 +1143,21 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
     setMenu({ kind: "folder", node, ...menuPos(e) });
   };
   // Right-click a song row: edit, flag as cortina, or remove it from the library.
+  // If the row is part of a multi-selection, the menu acts on the whole set;
+  // otherwise the selection collapses to just the clicked song (single mode).
   const openSongMenu = (e, song) => {
     e.preventDefault();
     e.stopPropagation();
-    setMenu({ kind: "song", song, ...menuPos(e) });
+    const id = String(song.id);
+    let ids;
+    if (selectedIds.has(id) && selectedIds.size > 1) {
+      ids = [...selectedIds];
+    } else {
+      ids = [id];
+      setSelectedIds(new Set([id]));
+      anchorRef.current = id;
+    }
+    setMenu({ kind: "song", song, ids, ...menuPos(e, ids.length > 1 ? 300 : 180) });
   };
   // Closing the menu first, then confirming in the shared modal, keeps the flow
   // consistent with deleting tandas and playlists.
@@ -1111,9 +1191,12 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
     });
   };
 
-  // Same cascade story as folders, scoped to a single song.
-  const requestDeleteSong = (song) => {
-    const delIds = new Set([String(song.id)]);
+  // Same cascade story as folders, scoped to one or more selected songs.
+  const requestDeleteSongs = (ids, oneTitle) => {
+    const list = (ids || []).map(String);
+    const n = list.length;
+    if (!n) return;
+    const delIds = new Set(list);
     const affected = (tandas || []).filter((t) =>
       t.songs.some((s) => delIds.has(String(s.id))));
     const emptied = affected.filter((t) =>
@@ -1121,10 +1204,14 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
     const shrunk = affected.length - emptied.length;
     closeMenu();
     ask({
-      title: "Delete this song?",
+      title: n === 1 ? "Delete this song?" : `Delete ${n} songs?`,
       message: (
         <>
-          <div>Remove “{song.title}” from your library? Your file stays on disk.</div>
+          <div>
+            {n === 1 && oneTitle
+              ? <>Remove “{oneTitle}” from your library? Your file stays on disk.</>
+              : <>Remove {n} songs from your library? Your files stay on disk.</>}
+          </div>
           {affected.length > 0 && (
             <div className="tp-modal-note">
               <TandaImpact emptied={emptied} shrunk={shrunk} />
@@ -1132,8 +1219,8 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
           )}
         </>
       ),
-      confirmLabel: "Delete song",
-      onConfirm: () => Store.deleteSongs([song.id]),
+      confirmLabel: n === 1 ? "Delete song" : `Delete ${n} songs`,
+      onConfirm: () => { Store.deleteSongs(list); clearSelection(); },
     });
   };
 
@@ -1151,10 +1238,23 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
     };
   }, [menu]);
 
+  // Escape clears the selection even when no menu is open.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") setSelectedIds((s) => (s.size ? new Set() : s)); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   const isFolder = menu && menu.kind === "folder";
   const menuCount = isFolder ? countSongs(menu.node) : 0;
   // Are the folder's songs already cortinas? Drives the toggle's label/action.
   const folderIsCortina = isFolder ? folderAllCortina(menu.node) : false;
+  // Song menu: bulk when more than one row is selected.
+  const songIds = menu && menu.kind === "song" ? menu.ids : [];
+  const multi = songIds.length > 1;
+  const selAllCortina = songIds.length > 0 && songIds.every((id) => byId.get(String(id))?.isCortina);
+  const genreOpts = (window.STYLE_TYPES || ["tango", "vals", "milonga", "cortina"]).filter((g) => g !== "cortina");
+  const genreLabel = window.genreLabel || ((g) => g);
   const ctxMenu = menu && (
     <div className="tv-ctx" style={{ top: menu.y, left: menu.x }}
       onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()}>
@@ -1172,6 +1272,28 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
             <I.trash s={15} /> Remove folder from library
           </button>
         </>
+      ) : multi ? (
+        <>
+          <div className="tv-ctx-head">
+            <span className="fic"><I.note s={14} /></span>
+            <span className="nm">{songIds.length} songs selected</span>
+          </div>
+          <div className="tv-ctx-label">Set genre</div>
+          <div className="tv-ctx-genres">
+            {genreOpts.map((g) => (
+              <button key={g} className="tv-ctx-genre"
+                onClick={() => { const ids = songIds; closeMenu(); Store.setSongGenres(ids.map((id) => ({ id, genre: g }))); }}>
+                {genreLabel(g)}
+              </button>
+            ))}
+          </div>
+          <button className="tv-ctx-item" onClick={() => { const ids = songIds; closeMenu(); Store.setSongCortina(ids, !selAllCortina); }}>
+            <I.curtain s={15} /> {selAllCortina ? "Unmark as cortinas" : "Mark as cortinas"}
+          </button>
+          <button className="tv-ctx-item del" onClick={() => requestDeleteSongs(songIds)}>
+            <I.trash s={15} /> Delete {songIds.length} songs
+          </button>
+        </>
       ) : (
         <>
           <div className="tv-ctx-head">
@@ -1184,7 +1306,7 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
           <button className="tv-ctx-item" onClick={() => { const sg = menu.song; closeMenu(); Store.setSongCortina([sg.id], !sg.isCortina); }}>
             <I.curtain s={15} /> {menu.song.isCortina ? "Unmark as cortina" : "Flag as cortina"}
           </button>
-          <button className="tv-ctx-item del" onClick={() => requestDeleteSong(menu.song)}>
+          <button className="tv-ctx-item del" onClick={() => requestDeleteSongs([menu.song.id], menu.song.title)}>
             <I.trash s={15} /> Delete song
           </button>
         </>
@@ -1197,7 +1319,8 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
       <LibraryBrowser filters={filters} setFilters={setFilters} query={query} preview={preview} onFolderContext={openMenu}
         onSongContext={openSongMenu} editingId={editingId} onSongEdit={(s) => setEditingId(s.id)} onCloseEdit={() => setEditingId(null)}
         library={library} builderIds={builderIds} onAdd={onAdd} makeDrag={makeDrag}
-        draggingId={draggingId} hint={hint} />
+        draggingId={draggingId} hint={hint}
+        selectedIds={library ? selectedIds : undefined} setSelectedIds={library ? setSelectedIds : undefined} anchorRef={anchorRef} />
       {ctxMenu}
       {modal}
     </div>
@@ -1441,7 +1564,7 @@ function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, on
         <div className="tv-tcard-total">{t.songs.length} songs · <b>{m.total}</b></div>
         {onPlay && (
           <button className="tv-tcbtn pl-play" onClick={(e) => { e.stopPropagation(); onPlay(t); }} disabled={!t.songs.length}
-            title={viaMonitor ? "Listen to full tanda in headphones (monitor)" : "Load this tanda into the live player"}>
+            title={viaMonitor ? "Pre-listen to full tanda in headphones" : "Play this tanda"}>
             {viaMonitor ? <I.headphones s={13} /> : <I.play s={13} />} Play tanda
           </button>
         )}
@@ -1494,7 +1617,7 @@ function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave
         <div className="tv-litem-actions">
           {onPlay && (
             <button className="tv-tcbtn pl-play" onClick={(e) => { e.stopPropagation(); onPlay(t); }} disabled={!t.songs.length}
-              title={viaMonitor ? "Listen to full tanda in headphones (monitor)" : "Load this tanda into the live player"}>
+              title={viaMonitor ? "Pre-listen to full tanda in headphones" : "Play this tanda"}>
               {viaMonitor ? <I.headphones s={13} /> : <I.play s={13} />} Play
             </button>
           )}
@@ -1605,9 +1728,9 @@ function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew
           <h3>No tandas yet</h3>
           <p>Build your first tanda from the songs you imported{suggs.length ? ", or start from a suggestion" : ""}.</p>
           <div className="tv-empty-actions">
-            <button className="tv-save" onClick={onNew}><I.plus s={17} /> Build a tanda</button>
+            <button className="tp-btn primary lg" onClick={onNew}><I.plus s={17} /> Build a tanda</button>
             {suggs.length > 0 && (
-              <button className="tv-reimport" onClick={onBrowseSuggestions}><I.spark s={16} /> Browse {suggs.length} suggestion{suggs.length === 1 ? "" : "s"}</button>
+              <button className="tp-btn lg" onClick={onBrowseSuggestions}><I.spark s={16} /> Browse {suggs.length} suggestion{suggs.length === 1 ? "" : "s"}</button>
             )}
           </div>
         </div>

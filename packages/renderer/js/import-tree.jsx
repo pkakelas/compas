@@ -290,8 +290,8 @@ function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
               : <><I.check s={13} /> Saved in Compás only — your files aren’t modified.</>}
           </div>
           <div className="so-foot-actions">
-            <button className="so-btn ghost" onClick={onCancel} disabled={busy}>Cancel</button>
-            <button className="so-btn primary" onClick={confirm} disabled={busy || (!isImport && changeCount === 0)}>
+            <button className="tp-btn" onClick={onCancel} disabled={busy}>Cancel</button>
+            <button className="tp-btn primary" onClick={confirm} disabled={busy || (!isImport && changeCount === 0)}>
               {busy ? (isImport ? "Importing…" : "Applying…")
                     : isImport ? "Import" : `Apply ${changeCount} change${changeCount === 1 ? "" : "s"}`}
             </button>

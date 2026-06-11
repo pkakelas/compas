@@ -102,43 +102,50 @@ function AudioOutputsCard() {
         <div className="tp-set-note">
           Grant access once so your output cards show their real names.
           <div className="tp-set-actions" style={{ marginTop: 9 }}>
-            <button className="tp-set-btn primary" onClick={dev.requestAccess}>Allow audio device access</button>
+            <button className="tp-btn primary sm" onClick={dev.requestAccess}>Allow audio device access</button>
           </div>
         </div>
       )}
 
       <SetRow label="Main (floor)" desc="Heard by the dancers.">
         <SetSelect value={dev.mainDeviceId} options={mainOpts} onChange={dev.setMainDeviceId} />
-        <button className="tp-set-btn test" title="Play a test tone" onClick={() => playTestTone(dev.mainDeviceId)}>
+        <button className="tp-btn sm square" title="Play a test tone" onClick={() => playTestTone(dev.mainDeviceId)}>
           <I.vol s={15} />
         </button>
       </SetRow>
 
-      <SetRow label="Monitor / cueing" desc="Enable a separate headphone cue output.">
+      <SetRow label="Pre-listen" desc="Enable a separate headphone output for pre-listening.">
         <SetSwitch checked={dev.cueingEnabled} onChange={dev.setCueingEnabled} />
       </SetRow>
 
       {dev.cueingEnabled && (
         <React.Fragment>
-          <SetRow label="Monitor (cue)" desc="Your headphones / second card.">
+          <SetRow label="Pre-listen output" desc="Your headphones / second card.">
             <SetSelect value={dev.monitorDeviceId} options={monitorOpts} onChange={dev.setMonitorDeviceId} />
-            <button className="tp-set-btn test" title="Play a test tone" disabled={!dev.monitorDeviceId}
+            <button className="tp-btn sm square" title="Play a test tone" disabled={!dev.monitorDeviceId}
               onClick={() => dev.monitorDeviceId && playTestTone(dev.monitorDeviceId)}>
               <I.headphones s={15} />
             </button>
           </SetRow>
 
           {sameCard && (
-            <div className="tp-set-warn">Monitor and main are the same card — previews will be audible on the floor.</div>
+            <div className="tp-set-warn">Pre-listen and main are the same card — previews will be audible on the floor.</div>
           )}
           {!dev.monitorDeviceId && (
-            <div className="tp-set-note">Pick a monitor output to enable the headphone cue buttons.</div>
+            <div className="tp-set-note">Pick a pre-listen output to enable the headphone buttons.</div>
+          )}
+          {dev.monitorDeviceId && !sameCard && (
+            <div className="tp-set-note">
+              The play buttons in your library turn into a blue headphone
+              {" "}<span style={{ color: "var(--cue)", verticalAlign: "-2px", display: "inline-block" }}><I.headphones s={14} /></span>.
+              {" "}Click one and that track plays only on your pre-listen card — the dancers on the floor won't hear it.
+            </div>
           )}
         </React.Fragment>
       )}
 
       <div className="tp-set-actions">
-        <button className="tp-set-btn ghost" onClick={dev.refresh}>Refresh devices</button>
+        <button className="tp-btn ghost sm" onClick={dev.refresh}>Refresh devices</button>
       </div>
     </SettingsCard>
   );
@@ -152,6 +159,10 @@ function fmtSnippetLen(sec) {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return s ? `${m}m ${s}s` : `${m}m`;
+}
+function fmtFade(sec) {
+  if (!sec) return "Instant";
+  return Number.isInteger(sec) ? `${sec}s` : `${sec.toFixed(1)}s`;
 }
 function CortinaPlaybackCard() {
   const { playback } = usePlayer();
@@ -171,6 +182,14 @@ function CortinaPlaybackCard() {
           <span className="tp-set-range-val">{fmtSnippetLen(playback.cortinaSnippetSec)}</span>
         </SetRow>
       )}
+
+      <SetRow label="Fade out"
+        desc="How long the cortina takes to fade into the next tanda, for both the auto-fade and the “Fade to next tanda” button.">
+        <input className="tp-set-range" type="range" min={0} max={10} step={0.5}
+          value={playback.cortinaFadeSec}
+          onChange={(e) => playback.setCortinaFadeSec(Number(e.target.value))} />
+        <span className="tp-set-range-val">{fmtFade(playback.cortinaFadeSec)}</span>
+      </SetRow>
     </SettingsCard>
   );
 }
@@ -255,15 +274,6 @@ function SettingsView({ t, setTweak }) {
 
           <CortinaPlaybackCard />
 
-          <SettingsCard icon={<I.scissor s={17} />} title="Tanda builder"
-            desc="How the builder is laid out in the Builder view.">
-            <SetRow label="Builder width">
-              <input className="tp-set-range" type="range" min={300} max={640} step={10}
-                value={t.builderWidth} onChange={(e) => setTweak("builderWidth", Number(e.target.value))} />
-              <span className="tp-set-range-val">{t.builderWidth}px</span>
-            </SetRow>
-          </SettingsCard>
-
           <SettingsCard icon={<I.spark s={16} />} title="Appearance"
             desc="Choose how Compás looks.">
             <SetRow label="Theme" desc="Switch between the light and dark colour schemes.">
@@ -287,6 +297,18 @@ function SettingsView({ t, setTweak }) {
               <input className="tp-set-range" type="range" min={70} max={150} step={10}
                 value={t.fontScale} onChange={(e) => setTweak("fontScale", Number(e.target.value))} />
               <span className="tp-set-range-val">{t.fontScale}%</span>
+            </SetRow>
+
+            <SetRow label="Tanda layout"
+              desc="Show your saved tandas as compact tabs or as full-width big rows.">
+              <div className="tv-viewtoggle labeled" role="group" aria-label="Tanda layout">
+                <button type="button" className={"tv-vt" + ((t.tandaLayout || "grid") === "grid" ? " on" : "")}
+                  onClick={() => setTweak("tandaLayout", "grid")}
+                  title="Tabs" aria-pressed={(t.tandaLayout || "grid") === "grid"}><I.grid s={15} /> Tabs</button>
+                <button type="button" className={"tv-vt" + (t.tandaLayout === "list" ? " on" : "")}
+                  onClick={() => setTweak("tandaLayout", "list")}
+                  title="Big rows" aria-pressed={t.tandaLayout === "list"}><I.rows s={15} /> Big rows</button>
+              </div>
             </SetRow>
           </SettingsCard>
         </div>

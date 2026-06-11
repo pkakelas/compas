@@ -7,7 +7,7 @@ let _kid = 100;
 const kid = () => "q" + (_kid++);
 const mk = (type, data) => ({ key: kid(), type, data });
 
-const FADE_TO_TANDA_MS = 2500;
+const FADE_TO_TANDA_MS = 2500;   // fallback fade when no preference is set
 
 /* ---------- sound leveling (loudness + silence trim) ----------
    Both derive from the raw per-song measurements stored by the background
@@ -173,7 +173,7 @@ function LibCortinaRow({ c, added, onAdd, preview, makeDrag, draggingId }) {
       onClick={preview ? () => preview.toggle(c) : undefined}
       title={previewTitle(preview, playing, "Audition this cortina")}>
       <span className="tp-cortrow-ic">{playing ? <EQ /> : (preview && preview.viaMonitor ? <span className="tp-cuebadge"><I.headphones s={14} /></span> : <I.curtain s={15} />)}</span>
-      <div style={{ minWidth: 0, flex: 1 }}>
+      <div className="tp-flex1">
         <div className="tp-cortrow-title">{c.title}</div>
         <div className="tp-cortrow-meta">{c.orq || "Cortina"}<span className="tp-dotsep">·</span><span className="tp-mono">{c.dur}</span></div>
       </div>
@@ -309,20 +309,20 @@ function QueueResizer({ width, min, max, onResize, onCommit }) {
   );
 }
 
-function QSong({ n, title, dur, state, onPlay }) {
+function QSong({ n, title, dur, state, playing, onPlay }) {
   return (
-    <div className={"tp-songrow" + (state === "now" ? " is-now" : "") + (onPlay ? " is-clickable" : "")}
-      style={state === "done" ? { opacity: .4 } : null}
+    <div className={"tp-songrow" + (state === "now" ? " is-now" : "") + (state === "done" ? " is-done" : "") + (onPlay ? " is-clickable" : "")}
       onClick={onPlay ? (e) => { e.stopPropagation(); onPlay(); } : undefined}
+      {...(onPlay ? clickKeys(onPlay) : {})}
       title={onPlay ? "Play this song" : undefined}>
-      <span className="n">{state === "now" ? <EQ /> : <><span className="qn">{n}</span><I.play s={12} /></>}</span>
+      <span className="n">{state === "now" && playing ? <EQ /> : <><span className="qn">{n}</span><I.play s={12} /></>}</span>
       <span className="tt"><div className="tp-song-title">{title}</div></span>
       <span className="tp-song-dur">{dur}</span>
     </div>
   );
 }
 
-function QueueTanda({ item, ix, now, nowIx, onPlay, onPlaySong, onRemove, drag }) {
+function QueueTanda({ item, ix, now, playing, nowIx, onPlay, onPlaySong, onRemove, drag }) {
   const t = item.data;
   const m = tandaMeta(t);
   const { className: dragCls = "", ...handlers } = drag;
@@ -340,13 +340,14 @@ function QueueTanda({ item, ix, now, nowIx, onPlay, onPlaySong, onRemove, drag }
       {t.songs.map((s, i) => (
         <QSong key={s.id} n={i + 1} title={s.title} dur={s.dur || "—"}
           state={now ? (i < nowIx ? "done" : i === nowIx ? "now" : "up") : "up"}
+          playing={playing}
           onPlay={() => onPlaySong(i)} />
       ))}
     </div>
   );
 }
 
-function QueueCortina({ item, now, onPlay, onRemove, drag }) {
+function QueueCortina({ item, now, playing, onPlay, onRemove, drag }) {
   const c = item.data;
   const { className: dragCls = "", ...handlers } = drag;
   return (
@@ -355,11 +356,11 @@ function QueueCortina({ item, now, onPlay, onRemove, drag }) {
       <div className="curtain"></div>
       <span className="tp-grip dark" title="Drag to reorder"><I.grip s={15} /></span>
       <I.curtain s={17} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="tp-cortina-label">{now ? "Cortina · playing" : "Cortina"}</div>
+      <div className="tp-flex1">
+        <div className="tp-cortina-label">{now ? (playing ? "Cortina · playing" : "Cortina · paused") : "Cortina"}</div>
         <div className="tp-cortina-sub">“{c.title}” · {c.orq || "Cortina"}</div>
       </div>
-      <div className="tp-fade">{now ? <EQ /> : <I.clock s={13} />} {c.dur}</div>
+      <div className="tp-fade">{now && playing ? <EQ /> : <I.clock s={13} />} {c.dur}</div>
       <button className="tp-qx dark" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove"><I.x s={14} /></button>
     </div>
   );
@@ -368,15 +369,15 @@ function QueueCortina({ item, now, onPlay, onRemove, drag }) {
 // A single song in the queue that is NOT acting as a cortina (it's not between
 // tandas, e.g. an opener, an intro, or a one-off request). Rendered as a plain
 // track card — no curtain, no "floor clears" language.
-function QueueSong({ item, now, onPlay, onRemove, drag }) {
+function QueueSong({ item, now, playing, onPlay, onRemove, drag }) {
   const s = item.data;
   const { className: dragCls = "", ...handlers } = drag;
   return (
     <div className={"tp-songcard tp-qrow" + (now ? " is-now" : "") + " " + dragCls} {...handlers}
       onClick={onPlay}>
       <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
-      <span className="tp-songcard-glyph">{now ? <EQ /> : <I.note s={15} />}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <span className="tp-songcard-glyph">{now && playing ? <EQ /> : <I.note s={15} />}</span>
+      <div className="tp-flex1">
         <div className="tp-songcard-title">{s.title}</div>
         <div className="tp-songcard-sub">{s.orq || "Unknown"}{s.singer ? " · " + s.singer : ""}</div>
       </div>
@@ -404,17 +405,17 @@ function defaultPlaylistName() {
   return `Set · ${d.toLocaleString("en-US", { month: "short" })} ${d.getDate()}`;
 }
 
-function QueuePanel({ queue, nowKey, nowIx, now, pos, width, onPlay, onPlaySongAt, onRemove, onReorder, onInsertSong, onFadeToTanda, onSavePlaylist, onClearQueue, cortinaSnippetEnabled, cortinaSnippetSec }) {
+function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, onPlaySongAt, onRemove, onReorder, onInsertSong, onSavePlaylist, onClearQueue }) {
   const dragKey = useRef(null);              // set while reordering an existing queue item
   const [overKey, setOverKey] = useState(null);
   const [overEnd, setOverEnd] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [savingNow, setSavingNow] = useState(false);
-  const [clearArmed, setClearArmed] = useState(false);
   const saveInputRef = useRef(null);
   const scrollRef = useRef(null);
   const { toast, flash, dismiss } = useToast();
+  const { ask, modal } = useConfirm();
   const tandaCount = queue.filter(i => i.type === "tanda").length;
   const setTotal = fmtDur(queueDurationSec(queue));
 
@@ -425,8 +426,6 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, width, onPlay, onPlaySongA
   }, [saveOpen]);
   // Close the namer if the queue empties out from under it.
   useEffect(() => { if (!queue.length && saveOpen) closeSave(); }, [queue.length]); // eslint-disable-line
-  // Disarm the clear confirm whenever the queue empties (e.g. after clearing).
-  useEffect(() => { if (!queue.length && clearArmed) setClearArmed(false); }, [queue.length]); // eslint-disable-line
 
   // Keep the now-playing item in view as playback advances — like VLC, the list
   // follows along so the DJ always sees what's on air and what's coming up. We
@@ -457,10 +456,12 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, width, onPlay, onPlaySongA
 
   const handleClear = () => {
     if (!queue.length) return;
-    if (!clearArmed) { setClearArmed(true); return; }
-    setClearArmed(false);
-    onClearQueue();
-    flash("Queue cleared");
+    ask({
+      title: "Clear the queue?",
+      message: `${tandaCount} ${tandaCount === 1 ? "tanda" : "tandas"} and the rest of the set will be removed. Your library and playlists aren't affected.`,
+      confirmLabel: "Clear queue",
+      onConfirm: () => { onClearQueue(); flash("Queue cleared"); },
+    });
   };
 
   const commitSave = () => {
@@ -470,12 +471,6 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, width, onPlay, onPlaySongA
       .then(() => { closeSave(); flash("Saved to Playlists"); })
       .catch(() => { setSavingNow(false); flash("Couldn’t save playlist"); });
   };
-
-  // While a cortina is on air, surface a quick "fade to next tanda" action that
-  // floats over the queue — the DJ shouldn't have to hunt for it in the transport.
-  const nowIdx = now ? queue.findIndex((x) => x.key === now.key) : -1;
-  const cortinaPlaying = nowIdx >= 0 && actsAsCortina(queue, nowIdx);
-  const upcomingTanda = cortinaPlaying ? nextTandaAfter(queue, now.key) : null;
 
   const clearDrag = () => { dragKey.current = null; setOverKey(null); setOverEnd(false); };
 
@@ -516,19 +511,6 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, width, onPlay, onPlaySongA
   let tIx = 0;
   return (
     <div className="tp-queue" style={width ? { flex: `0 0 ${width}px`, width } : undefined}>
-      {cortinaPlaying && upcomingTanda && (
-        <div className="tp-fade-float">
-          <button className="tp-chip warn tp-fade-float-btn" onClick={onFadeToTanda}>
-            <I.fwd s={15} /> Fade to next tanda
-            <span className="tp-chip-tail"> · {tandaMeta(upcomingTanda.data).orq}</span>
-          </button>
-          {cortinaSnippetEnabled && (
-            <div className="tp-fade-float-note">
-              Auto-fade in {fmtDur(Math.max(0, cortinaSnippetSec - (pos || 0)))}
-            </div>
-          )}
-        </div>
-      )}
       <div className="tp-qhead">
         <div className="tp-qhead-l">
           <div className="tv-title">Queue</div>
@@ -544,10 +526,9 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, width, onPlay, onPlaySongA
               title={queue.length ? "Save this set as a playlist" : "Add tandas to save a playlist"}>
               <I.plus s={14} /> Save as playlist
             </button>
-            <button className={"tp-clearq" + (clearArmed ? " is-armed" : "")} onClick={handleClear}
-              onBlur={() => setClearArmed(false)} disabled={!queue.length}
+            <button className="tp-clearq" onClick={handleClear} disabled={!queue.length}
               title={queue.length ? "Clear the whole queue" : "Queue is already empty"}>
-              <I.trash s={14} /> {clearArmed ? "Confirm clear" : "Clear queue"}
+              <I.trash s={14} /> Clear queue
             </button>
           </div>
         </div>
@@ -565,10 +546,10 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, width, onPlay, onPlaySongA
               }}
               placeholder="Name this set…" />
           </label>
-          <button className="tp-qsave-save" onClick={commitSave} disabled={savingNow}>
+          <button className="tp-btn primary" onClick={commitSave} disabled={savingNow}>
             <I.check s={15} /> {savingNow ? "Saving…" : "Save"}
           </button>
-          <button className="tp-qsave-cancel" onClick={closeSave}>Cancel</button>
+          <button className="tp-btn ghost" onClick={closeSave}>Cancel</button>
         </div>
       )}
 
@@ -583,10 +564,10 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, width, onPlay, onPlaySongA
           // (between tandas, or flagged cortina material); otherwise it's a song.
           const role = item.type === "tanda" ? "tanda" : (actsAsCortina(queue, i) ? "cortina" : "song");
           const row = role === "tanda"
-            ? <QueueTanda key={item.key} item={item} ix={tIx} now={isNow} nowIx={isNow ? nowIx : 0} onPlay={() => onPlay(item.key)} onPlaySong={(ix) => onPlaySongAt(item.key, ix)} onRemove={() => onRemove(item.key)} drag={dp} />
+            ? <QueueTanda key={item.key} item={item} ix={tIx} now={isNow} playing={playing} nowIx={isNow ? nowIx : 0} onPlay={() => onPlay(item.key)} onPlaySong={(ix) => onPlaySongAt(item.key, ix)} onRemove={() => onRemove(item.key)} drag={dp} />
             : role === "cortina"
-              ? <QueueCortina key={item.key} item={item} now={isNow} onPlay={() => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />
-              : <QueueSong key={item.key} item={item} now={isNow} onPlay={() => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />;
+              ? <QueueCortina key={item.key} item={item} now={isNow} playing={playing} onPlay={() => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />
+              : <QueueSong key={item.key} item={item} now={isNow} playing={playing} onPlay={() => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />;
           return gap
             ? <React.Fragment key={item.key}><MissingCortinaHint />{row}</React.Fragment>
             : row;
@@ -598,6 +579,7 @@ function QueuePanel({ queue, nowKey, nowIx, now, pos, width, onPlay, onPlaySongA
         </div>
       </div>
       <Toast toast={toast} onDismiss={dismiss} />
+      {modal}
     </div>
   );
 }
@@ -644,9 +626,9 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
         </div>
         <div className="tp-nb-wave" />
         <div className="tp-nb-ctrls">
-          <button className="tp-tbtn" style={{ width: 40, height: 40 }} disabled><I.prev s={16} /></button>
-          <button className="tp-tbtn play" style={{ width: 52, height: 52 }} onClick={hasQueue ? onPlayPause : undefined} disabled={!hasQueue}><I.play s={22} /></button>
-          <button className="tp-tbtn" style={{ width: 40, height: 40 }} disabled><I.next s={16} /></button>
+          <button className="tp-tbtn nb" disabled><I.prev s={16} /></button>
+          <button className="tp-tbtn nb play" onClick={hasQueue ? onPlayPause : undefined} disabled={!hasQueue}><I.play s={22} /></button>
+          <button className="tp-tbtn nb" disabled><I.next s={16} /></button>
           <VolumeControl volume={volume} muted={muted} onVolume={onVolume} onToggleMute={onToggleMute} />
         </div>
       </div>
@@ -691,11 +673,11 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
         </div>
 
         <div className="tp-nb-ctrls">
-          <button className="tp-tbtn" style={{ width: 40, height: 40 }} onClick={onPrev}><I.prev s={16} /></button>
-          <button className="tp-tbtn play" style={{ width: 52, height: 52 }} onClick={onPlayPause}>
+          <button className="tp-tbtn nb" onClick={onPrev}><I.prev s={16} /></button>
+          <button className="tp-tbtn nb play" onClick={onPlayPause}>
             {playing ? <I.pause s={22} /> : <I.play s={22} />}
           </button>
-          <button className="tp-tbtn" style={{ width: 40, height: 40 }} onClick={onNext}><I.next s={16} /></button>
+          <button className="tp-tbtn nb" onClick={onNext}><I.next s={16} /></button>
           <button className="tp-chip warn" style={{ marginLeft: 6 }} onClick={onFadeToTanda} disabled={!upcoming}>
             <I.fwd s={15} /> Fade to next tanda{upcoming ? <span className="tp-chip-tail"> · {tandaMeta(upcoming.data).orq}</span> : null}
           </button>
@@ -728,7 +710,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
 
       <div className="tp-nb-wave">
         <span className="tp-mono tp-nb-t">{fmtDur(pos)}</span>
-        <div style={{ flex: 1, minWidth: 0, cursor: dur > 0 ? "pointer" : "default" }}
+        <div className="tp-flex1" style={{ cursor: dur > 0 ? "pointer" : "default" }}
           onClick={(e) => {
             if (dur <= 0) return;
             const r = e.currentTarget.getBoundingClientRect();
@@ -740,11 +722,11 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
       </div>
 
       <div className="tp-nb-ctrls">
-        <button className="tp-tbtn" style={{ width: 40, height: 40 }} onClick={onPrev}><I.prev s={16} /></button>
-        <button className="tp-tbtn play" style={{ width: 52, height: 52 }} onClick={onPlayPause}>
+        <button className="tp-tbtn nb" onClick={onPrev}><I.prev s={16} /></button>
+        <button className="tp-tbtn nb play" onClick={onPlayPause}>
           {playing ? <I.pause s={22} /> : <I.play s={22} />}
         </button>
-        <button className="tp-tbtn" style={{ width: 40, height: 40 }} onClick={onNext}><I.next s={16} /></button>
+        <button className="tp-tbtn nb" onClick={onNext}><I.next s={16} /></button>
         <VolumeControl volume={volume} muted={muted} onVolume={onVolume} onToggleMute={onToggleMute} />
       </div>
     </div>
@@ -764,6 +746,7 @@ function usePlayerEngine(mainDeviceId, playback) {
   // Defensive default so the engine works even before settings are wired in.
   const cortinaSnippetEnabled = !!(playback && playback.cortinaSnippetEnabled);
   const cortinaSnippetSec = (playback && playback.cortinaSnippetSec) || CORTINA_SNIPPET_DEFAULT_SEC;
+  const cortinaFadeSec = playback && typeof playback.cortinaFadeSec === "number" ? playback.cortinaFadeSec : CORTINA_FADE_DEFAULT_SEC;
   // Sound-leveling settings (with safe defaults).
   const normalizeEnabled = !playback || playback.normalizeEnabled !== false;
   const targetLufs = (playback && playback.targetLufs) || TARGET_LUFS_DEFAULT;
@@ -813,7 +796,7 @@ function usePlayerEngine(mainDeviceId, playback) {
 
   // Keep mutable copies for use inside Howl callbacks.
   const stateRef = useRef({});
-  stateRef.current = { queue, nowKey, nowIx, playing, preview, mainDeviceId, cortinaSnippetEnabled, cortinaSnippetSec, normalizeEnabled, targetLufs, trimSilenceEnabled, trimPadMs, trimEverywhere, songGapSec };
+  stateRef.current = { queue, nowKey, nowIx, playing, preview, mainDeviceId, cortinaSnippetEnabled, cortinaSnippetSec, cortinaFadeSec, normalizeEnabled, targetLufs, trimSilenceEnabled, trimPadMs, trimEverywhere, songGapSec };
 
   const stopTick = () => { if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; } };
   const startTick = () => {
@@ -913,13 +896,16 @@ function usePlayerEngine(mainDeviceId, playback) {
   // manual "Fade to next tanda" button and the automatic cortina-snippet fade.
   function startFadeTo(targetKey) {
     const h = howlRef.current;
+    const fadeSec = stateRef.current.cortinaFadeSec;
+    const fadeMs = Number.isFinite(fadeSec) && fadeSec >= 0
+      ? Math.round(fadeSec * 1000) : FADE_TO_TANDA_MS;
     if (h && h.playing()) {
       advancingRef.current = true;
-      h.fade(h.volume(), 0, FADE_TO_TANDA_MS);
+      h.fade(h.volume(), 0, fadeMs);
       setTimeout(() => {
         advancingRef.current = false;
         setPreview(null); setNowKey(targetKey); setNowIx(0); setPlaying(true);
-      }, FADE_TO_TANDA_MS);
+      }, fadeMs);
     } else {
       setPreview(null); setNowKey(targetKey); setNowIx(0); setPlaying(true);
     }
@@ -1187,6 +1173,8 @@ function usePlayerEngine(mainDeviceId, playback) {
 // — only play the first few seconds of a cortina, then auto-fade to the next
 // tanda. Persisted in localStorage so the choice survives restarts.
 const CORTINA_SNIPPET_DEFAULT_SEC = 90;
+// How long the auto-fade out of a cortina takes, in seconds.
+const CORTINA_FADE_DEFAULT_SEC = 2.5;
 // Sound-leveling defaults. Target loudness is where every song is pulled toward;
 // -18 LUFS is a comfortable level for a tango set. Trim pad keeps a hair of
 // silence so a hard cut never clips the first attack / final note.
@@ -1200,6 +1188,10 @@ function usePlaybackSettings() {
   const [cortinaSnippetSec, setSnippetSecState] = useState(() => {
     const v = parseInt(localStorage.getItem("compas.cortinaSnippetSec"), 10);
     return Number.isFinite(v) && v > 0 ? v : CORTINA_SNIPPET_DEFAULT_SEC;
+  });
+  const [cortinaFadeSec, setFadeSecState] = useState(() => {
+    const v = parseFloat(localStorage.getItem("compas.cortinaFadeSec"));
+    return Number.isFinite(v) && v >= 0 ? v : CORTINA_FADE_DEFAULT_SEC;
   });
   // Sound leveling — default on so a freshly-analyzed library "just works".
   const [normalizeEnabled, setNorm] = useState(() => localStorage.getItem("compas.normalizeEnabled") !== "0");
@@ -1223,6 +1215,10 @@ function usePlaybackSettings() {
     const n = Math.max(1, Math.round(Number(v) || CORTINA_SNIPPET_DEFAULT_SEC));
     setSnippetSecState(n); localStorage.setItem("compas.cortinaSnippetSec", String(n));
   }, []);
+  const setCortinaFadeSec = useCallback((v) => {
+    const n = Math.max(0, Math.min(10, Math.round((Number(v) || 0) * 2) / 2));
+    setFadeSecState(n); localStorage.setItem("compas.cortinaFadeSec", String(n));
+  }, []);
   const setNormalizeEnabled = useCallback((v) => {
     setNorm(!!v); localStorage.setItem("compas.normalizeEnabled", v ? "1" : "0");
   }, []);
@@ -1243,6 +1239,7 @@ function usePlaybackSettings() {
 
   return {
     cortinaSnippetEnabled, cortinaSnippetSec, setCortinaSnippetEnabled, setCortinaSnippetSec,
+    cortinaFadeSec, setCortinaFadeSec,
     normalizeEnabled, targetLufs, trimSilenceEnabled, trimPadMs: TRIM_PAD_MS_DEFAULT,
     setNormalizeEnabled, setTargetLufs, setTrimSilenceEnabled,
     trimEverywhere, songGapSec, setTrimEverywhere: setTrimEverywhereCb, setSongGapSec,
@@ -1453,29 +1450,73 @@ function PlayerProvider({ children }) {
   const engine = usePlayerEngine(devices.mainDeviceId, playback);
   const cueEngine = useCueEngine(devices.monitorDeviceId);
 
-  // Unified "listen" affordance for the library/tandas play buttons. With a
-  // monitor ready, auditioning a song routes to the headphone card so the floor
-  // is never interrupted; otherwise it falls back to the single shared engine.
-  const preview = devices.monitorReady
-    ? { previewId: cueEngine.song ? cueEngine.song.id : null, playing: cueEngine.playing, toggle: cueEngine.cue, viaMonitor: true }
+  // Turning pre-listen off tears down any in-progress cue immediately — stop()
+  // clears the cue song, which makes the blue CueBar strip disappear at once.
+  useEffect(() => {
+    if (!devices.cueingEnabled) cueEngine.stop();
+  }, [devices.cueingEnabled, cueEngine.stop]);
+
+  // Unified "listen" affordance for the library/tandas play buttons, and the
+  // source of the now-playing highlight in cards/editors. The cue engine is the
+  // single "play in place" chain for tandas, playlists, and single-song
+  // auditions — it never touches the live queue. The highlight follows the cue
+  // engine whenever it's playing something (so the active song shows with or
+  // without a monitor); only single-song auditions on a monitor-less setup fall
+  // back to the shared floor engine.
+  const cueActive = !!cueEngine.song;
+  const preview = (devices.monitorReady || cueActive)
+    ? { previewId: cueEngine.song ? cueEngine.song.id : null, playing: cueEngine.playing, toggle: cueEngine.cue, viaMonitor: devices.monitorReady }
     : { previewId: engine.previewId, playing: engine.playing, toggle: engine.previewSong, viaMonitor: false };
 
-  // Play a whole tanda: audition on the monitor when the floor isn't live,
-  // otherwise load it into the live queue (same handoff as Playlists → Play all).
-  const playTanda = useCallback((t) => {
-    if (!t || !t.songs || !t.songs.length) return;
+  // Play a list of songs "in place" on the cue engine: it marks the playing song
+  // active in the card/editor and never touches the live queue. The live queue is
+  // only ever fed by the explicit "Import to Live" action in the Live tab.
+  const playSongs = useCallback((songs) => {
+    if (!songs || !songs.length) return;
     engine.clearPreview();
-    // Audition the whole tanda on the monitor when the floor isn't live;
-    // otherwise hand it to the live queue (same as Playlists → Play all).
-    if (devices.monitorReady && !engine.livePlaying) {
-      cueEngine.cueSongs(t.songs);
-    } else {
-      cueEngine.stop();
-      engine.loadPlaylist([{ type: "tanda", data: t }]);
-    }
-  }, [devices.monitorReady, engine, cueEngine]);
+    cueEngine.cueSongs(songs);
+  }, [engine, cueEngine]);
 
-  const value = { ...engine, devices, playback, cue: cueEngine, preview, playTanda };
+  // Play a whole tanda in place.
+  const playTanda = useCallback((t) => {
+    if (t && t.songs) playSongs(t.songs);
+  }, [playSongs]);
+
+  // Play a saved playlist in place — every item (tandas, cortinas, loose songs)
+  // flattened into one ordered run on the cue engine.
+  const playPlaylist = useCallback((items) => {
+    if (!items || !items.length) return;
+    playSongs(items.flatMap((it) => itemSongs(it)));
+  }, [playSongs]);
+
+  // Spacebar is a global play/pause toggle. While the floor is live and the
+  // headphone monitor (the "backup player") is enabled, Space drives the monitor
+  // so it can never pause the dancers mid-tanda by accident; otherwise it toggles
+  // the floor. Kept in a ref so the listener subscribes once.
+  const spaceRef = useRef(() => {});
+  spaceRef.current = () => {
+    if (engine.livePlaying && devices.monitorReady) cueEngine.toggle();
+    else engine.playPause();
+  };
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.code !== "Space" && e.key !== " ") return;
+      // Leave the spacebar alone while typing or inside an interactive control
+      // (text fields, selects, buttons, switches) so it keeps its native role.
+      const el = e.target;
+      if (el && (
+        el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" ||
+        el.tagName === "BUTTON" || el.isContentEditable ||
+        (el.closest && el.closest('[role="switch"],[role="button"],a[href]'))
+      )) return;
+      e.preventDefault();
+      spaceRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const value = { ...engine, devices, playback, cue: cueEngine, preview, playTanda, playPlaylist };
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }
 
@@ -1511,7 +1552,7 @@ function LivePlayer({ queueWidth, onQueueWidthChange }) {
         makeDrag={makeDrag} draggingId={draggingId} preview={preview} flash={p.flash} />
       <QueueResizer width={qW} min={LIVE_QUEUE_MIN_W} max={LIVE_QUEUE_MAX_W}
         onResize={setQW} onCommit={commitQW} />
-      <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} pos={p.pos} width={qW} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onSavePlaylist={p.saveQueueAsPlaylist} onClearQueue={p.clearQueue} onFadeToTanda={p.fadeToTanda} cortinaSnippetEnabled={p.cortinaSnippetEnabled} cortinaSnippetSec={p.cortinaSnippetSec} />
+      <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} playing={p.playing} pos={p.pos} width={qW} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onSavePlaylist={p.saveQueueAsPlaylist} onClearQueue={p.clearQueue} />
     </div>
   );
 }
@@ -1546,7 +1587,7 @@ function CueBar({ cue, monitorLabel }) {
       <div className="tp-cb-meta">
         <div className="tp-cb-mark"><I.headphones s={20} /></div>
         <div style={{ minWidth: 0 }}>
-          <div className="tp-cb-eyebrow">Monitor{monitorLabel ? " · " + monitorLabel : ""}</div>
+          <div className="tp-cb-eyebrow">Pre-listen{monitorLabel ? " · " + monitorLabel : ""}</div>
           <div className="tp-cb-title">{song.title}</div>
           <div className="tp-cb-sub">{song.orq}{song.singer ? " · " + song.singer : ""}</div>
         </div>
@@ -1562,8 +1603,8 @@ function CueBar({ cue, monitorLabel }) {
         <button className="tp-tbtn sm" onClick={cue.toggle} title={cue.playing ? "Pause preview" : "Play preview"}>
           {cue.playing ? <I.pause s={18} /> : <I.play s={18} />}
         </button>
-        <button className="tp-tbtn sm ghost" onClick={cue.stop} title="Close monitor"><I.x s={16} /></button>
-        <div className="tp-nb-vol" title="Monitor volume">
+        <button className="tp-tbtn sm ghost" onClick={cue.stop} title="Close pre-listen"><I.x s={16} /></button>
+        <div className="tp-nb-vol" title="Pre-listen volume">
           <span className="tp-vol-btn cue" aria-hidden="true">{off ? <I.volX s={15} /> : <I.headphones s={15} />}</span>
           <input className="tp-vol-range cue" type="range" min="0" max="100" step="1" value={pct}
             style={{ "--vfill": pct + "%" }}

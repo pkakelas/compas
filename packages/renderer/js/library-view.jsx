@@ -24,7 +24,7 @@ function SmartOrganizeTip({ onTry, onDismiss }) {
           <span>Orchestras</span><span>Singers</span><span>Years</span><span>Styles</span>
         </div>
         <div className="sotip-actions">
-          <button className="sotip-go" onClick={onTry}><I.spark s={15} /> Try it</button>
+          <button className="tp-btn primary lg block" onClick={onTry}><I.spark s={15} /> Try it</button>
           <span className="sotip-safe"><I.check s={13} /> You approve every change first</span>
         </div>
       </div>
@@ -67,13 +67,13 @@ function LibraryView() {
         </div>
         {imported && (
           <div className="tv-head-r">
-            <button className="tv-reimport" onClick={openRetype} title="Set the genre (and cortinas) for each folder">
+            <button className="tp-btn" onClick={openRetype} title="Set the genre (and cortinas) for each folder">
               <I.folder s={15} /> Set folder genres
             </button>
-            <button className="tv-smartorg" onClick={() => setOrganizing(true)} title="Clean up orchestras, singers, years & styles — review before anything changes">
+            <button className="tp-btn accent" onClick={() => setOrganizing(true)} title="Clean up orchestras, singers, years & styles — review before anything changes">
               <I.spark s={15} /> Smart Organize
             </button>
-            <button className="tv-reimport" onClick={imp.begin} disabled={imp.scanning} title="Import another folder into your library">
+            <button className="tp-btn" onClick={imp.begin} disabled={imp.scanning} title="Import another folder into your library">
               <I.upload s={15} /> {imp.scanning ? "Scanning…" : "Add folder"}
             </button>
           </div>

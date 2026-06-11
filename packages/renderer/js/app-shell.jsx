@@ -4,9 +4,11 @@ const { useState } = React;
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "builderWidth": 380,
   "liveQueueWidth": 452,
+  "playlistDockWidth": 452,
   "theme": "dark",
   "startView": "Tandas",
-  "fontScale": 100
+  "fontScale": 100,
+  "tandaLayout": "grid"
 }/*EDITMODE-END*/;
 
 // Text size is a whole-app zoom (everything is sized in px, so scaling the page
@@ -28,6 +30,8 @@ function AppShell() {
       if (savedTheme) seed.theme = savedTheme;
       const savedScale = parseInt(localStorage.getItem("compas.fontScale"), 10);
       if (!isNaN(savedScale)) seed.fontScale = clampFontScale(savedScale);
+      const savedLayout = localStorage.getItem("compas.tandaView");
+      if (savedLayout === "list" || savedLayout === "grid") seed.tandaLayout = savedLayout;
       return seed;
     } catch (e) { return TWEAK_DEFAULTS; }
   })());
@@ -50,6 +54,12 @@ function AppShell() {
     if (window.compas && window.compas.setTextZoom) window.compas.setTextZoom(scale / 100);
     try { localStorage.setItem("compas.fontScale", String(scale)); } catch (e) { /* ignore */ }
   }, [t.fontScale]);
+
+  // Persist the tanda layout (tabs vs. big rows) so the Settings choice and the
+  // in-view header toggle share one preference across restarts.
+  React.useEffect(() => {
+    try { localStorage.setItem("compas.tandaView", t.tandaLayout); } catch (e) { /* ignore */ }
+  }, [t.tandaLayout]);
 
   // Cmd/Ctrl +/-/0 come in as menu-driven IPC commands (the View ▸ Zoom items own
   // the accelerators on every platform). A ref holds the live scale so the
@@ -80,10 +90,10 @@ function AppBody({ t, setTweak }) {
   const [view, setView] = useState(TWEAK_DEFAULTS.startView);
   const player = usePlayer();
 
-  const playPlaylist = (pl) => {
-    player.loadPlaylist(pl.items);
-    setView("Live");
-  };
+  // Play a playlist in place (marks the active song, like playing a tanda). It
+  // deliberately does NOT switch to the Live tab or load the live queue — a
+  // playlist only reaches the live queue via the explicit Import action there.
+  const playPlaylist = (pl) => player.playPlaylist(pl.items);
 
   // The builder and the saved-tandas collection are two top-level tabs now, but
   // they share one mounted TandasView so the builder's in-progress state never
@@ -108,10 +118,13 @@ function AppBody({ t, setTweak }) {
       <div className="tp-view" style={{ display: showTandas ? undefined : "none" }}>
         <TandasView mode={view === "Builder" ? "build" : "manage"} onNavigate={setView}
           builderWidth={t.builderWidth}
-          onBuilderWidthChange={(v) => setTweak("builderWidth", v)} />
+          onBuilderWidthChange={(v) => setTweak("builderWidth", v)}
+          tandaLayout={t.tandaLayout}
+          onTandaLayoutChange={(v) => setTweak("tandaLayout", v)} />
       </div>
       <div className="tp-view" style={{ display: view === "Playlists" ? undefined : "none" }}>
-        <PlaylistsView onPlay={playPlaylist} />
+        <PlaylistsView onPlay={playPlaylist} dockWidth={t.playlistDockWidth}
+          onDockWidthChange={(v) => setTweak("playlistDockWidth", v)} />
       </div>
       <div className="tp-view" style={{ display: view === "Settings" ? undefined : "none" }}>
         <SettingsView t={t} setTweak={setTweak} />

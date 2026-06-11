@@ -8,6 +8,25 @@ const BRAND_LOGO = "data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjAiIHhtbG5zPS
 
 function TopBar({ active = "Live", onNav }) {
   const navs = ["Library", "Builder", "Tandas", "Playlists", "Live", "Settings"];
+  // Proper ARIA tablist: each tab is a real <button role="tab"> (the CSS strips
+  // native chrome so they read like the old text links) with a roving tabindex —
+  // only the selected tab is in the tab order, and the arrow keys move selection
+  // AND focus together (selection-follows-focus), so the nav is fully keyboard
+  // operable. Enter/Space activate via the button's native onClick.
+  const tabRefs = React.useRef([]);
+  const onKeyDown = (e) => {
+    const i = navs.indexOf(active);
+    let j = null;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") j = (i + 1) % navs.length;
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") j = (i - 1 + navs.length) % navs.length;
+    else if (e.key === "Home") j = 0;
+    else if (e.key === "End") j = navs.length - 1;
+    if (j === null) return;
+    e.preventDefault();
+    if (onNav) onNav(navs[j]);
+    const el = tabRefs.current[j];
+    if (el) el.focus();
+  };
   return (
     <div className="tp-topbar">
       <div className="tp-brand">
@@ -15,13 +34,15 @@ function TopBar({ active = "Live", onNav }) {
           style={{ WebkitMaskImage: `url("${BRAND_LOGO}")`, maskImage: `url("${BRAND_LOGO}")` }} />
         <div className="tp-brand-name">Comp<span className="acc">á</span>s</div>
       </div>
-      <div className="tp-navset">
-        {navs.map((n) => (
-          <div key={n}
+      <div className="tp-navset" role="tablist" aria-label="Primary" onKeyDown={onKeyDown}>
+        {navs.map((n, idx) => (
+          <button key={n} type="button" role="tab"
+            ref={(el) => { tabRefs.current[idx] = el; }}
+            aria-selected={n === active} tabIndex={n === active ? 0 : -1}
             className={"tp-nav is-link" + (n === active ? " is-active" : "")}
             onClick={onNav ? () => onNav(n) : undefined}>
             {n}
-          </div>
+          </button>
         ))}
       </div>
       <div className="tp-spacer"></div>

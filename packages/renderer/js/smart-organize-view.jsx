@@ -334,7 +334,7 @@ function SmartOrganizeModal({ onClose, onApplied }) {
           <div className="so-ic err"><I.x s={22} /></div>
           <h3>Something went wrong</h3>
           <p>Smart Organize couldn’t finish. Your library is unchanged.</p>
-          <button className="so-btn primary" onClick={onClose}>Close</button>
+          <button className="tp-btn primary" onClick={onClose}>Close</button>
         </div>
       );
     }
@@ -344,7 +344,7 @@ function SmartOrganizeModal({ onClose, onApplied }) {
           <div className="so-ic ok"><I.check s={22} /></div>
           <h3>Everything looks tidy</h3>
           <p>We didn’t find any metadata worth changing. Your orchestras, singers, years and styles are already consistent.</p>
-          <button className="so-btn primary" onClick={onClose}>Close</button>
+          <button className="tp-btn primary" onClick={onClose}>Close</button>
         </div>
       );
     }
@@ -354,7 +354,7 @@ function SmartOrganizeModal({ onClose, onApplied }) {
           <div className="so-ic ok"><I.check s={22} /></div>
           <h3>Updated {appliedCount} song{appliedCount === 1 ? "" : "s"}</h3>
           <p>Changes are saved in Compás. Your audio files on disk were not modified.</p>
-          <button className="so-btn primary" onClick={onClose}>Done</button>
+          <button className="tp-btn primary" onClick={onClose}>Done</button>
         </div>
       );
     }
@@ -427,8 +427,8 @@ function SmartOrganizeModal({ onClose, onApplied }) {
           <footer className="so-foot">
             <div className="so-foot-note"><I.check s={13} /> Saved in Compás only — your files are never modified.</div>
             <div className="so-foot-actions">
-              <button className="so-btn ghost" onClick={onClose} disabled={phase === "applying"}>Cancel</button>
-              <button className="so-btn primary" onClick={apply} disabled={phase === "applying" || tabSelectedCount === 0}>
+              <button className="tp-btn" onClick={onClose} disabled={phase === "applying"}>Cancel</button>
+              <button className="tp-btn primary" onClick={apply} disabled={phase === "applying" || tabSelectedCount === 0}>
                 {phase === "applying"
                   ? "Applying…"
                   : <>Apply {tabSelectedCount} change{tabSelectedCount === 1 ? "" : "s"}</>}
@@ -447,7 +447,7 @@ function SmartOrganizeModal({ onClose, onApplied }) {
                   ? <>Saved in Compás. Next up: <b>{(SO_TIERS.find((t) => t.id === applied.nextTab) || {}).title}</b>.</>
                   : "Saved in Compás. Your audio files on disk were not modified."}
               </p>
-              <button className="so-btn primary" onClick={dismissApplied}>
+              <button className="tp-btn primary" onClick={dismissApplied}>
                 {applied.nextTab
                   ? <>Continue to {(SO_TIERS.find((t) => t.id === applied.nextTab) || {}).title}</>
                   : "Done"}

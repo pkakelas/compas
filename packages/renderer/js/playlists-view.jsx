@@ -48,7 +48,7 @@ function PlAddCortinaRow({ c, onAdd }) {
   return (
     <div className="tp-cortrow">
       <span className="tp-cortrow-ic"><I.curtain s={15} /></span>
-      <div style={{ minWidth: 0, flex: 1 }}>
+      <div className="tp-flex1">
         <div className="tp-cortrow-title">{c.title}</div>
         <div className="tp-cortrow-meta">{c.orq || "Cortina"}<span className="tp-dotsep">·</span><span className="tp-mono">{c.dur}</span></div>
       </div>
@@ -105,6 +105,41 @@ function PlLibrary({ tandas, cortinas, onAdd, preview }) {
   );
 }
 
+/* ---------- draggable divider between the library and the editor dock ----------
+ * Mirrors the Live tab's QueueResizer: the dock is pinned right, so dragging
+ * left widens it; width is clamped and committed (persisted) on release. */
+const PL_DOCK_MIN_W = 360;
+const PL_DOCK_MAX_W = 760;
+
+function PlDockResizer({ width, min, max, onResize, onCommit }) {
+  const start = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = width;
+    let last = startW;
+    const move = (ev) => {
+      last = Math.max(min, Math.min(max, startW - (ev.clientX - startX)));
+      onResize(last);
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      if (onCommit) onCommit(last);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+  return (
+    <div className="tv-resizer" onMouseDown={start} title="Drag to resize the playlist">
+      <span className="grip" />
+    </div>
+  );
+}
+
 /* ============================ EDITOR QUEUE (right) ============================
  * The same visual language as the live queue: tandas read as full cards with
  * their song list, cortinas as the calm dark band. Rows are draggable to
@@ -112,7 +147,8 @@ function PlLibrary({ tandas, cortinas, onAdd, preview }) {
 function PlEditorSong({ n, title, dur, playing, onPlay, preview }) {
   return (
     <div className={"tp-songrow is-clickable" + (playing ? " is-now" : "")}
-      onClick={(e) => { e.stopPropagation(); onPlay(); }} title={previewTitle(preview, playing, "Audition this song")}>
+      onClick={(e) => { e.stopPropagation(); onPlay(); }} {...clickKeys(onPlay)}
+      title={previewTitle(preview, playing, "Audition this song")}>
       <span className="n"><PreviewGlyph preview={preview} playing={playing} n={n} s={12} /></span>
       <span className="tt"><div className="tp-song-title">{title}</div></span>
       <span className="tp-song-dur">{dur}</span>
@@ -153,7 +189,7 @@ function PlEditorCortina({ it, slot, onRemove, preview }) {
       <div className="curtain"></div>
       <span className="tp-grip dark" title="Drag to reorder"><I.grip s={15} /></span>
       <span className="tp-cort-glyph">{playing ? <EQ /> : (preview && preview.viaMonitor ? <span className="tp-cuebadge"><I.headphones s={14} /></span> : <I.curtain s={17} />)}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="tp-flex1">
         <div className="tp-cortina-label">{playing ? "Cortina · playing" : "Cortina"}</div>
         <div className="tp-cortina-sub">“{c.title}” · {c.orq || "Cortina"}</div>
       </div>
@@ -174,7 +210,7 @@ function PlEditorSongItem({ it, slot, onRemove, preview }) {
       onClick={() => preview && preview.toggle(s)} title={previewTitle(preview, playing, "Audition this song")}>
       <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
       <span className="tp-songcard-glyph">{playing ? <EQ /> : (preview && preview.viaMonitor ? <span className="tp-cuebadge"><I.headphones s={14} /></span> : <I.note s={15} />)}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="tp-flex1">
         <div className="tp-songcard-title">{s.title}</div>
         <div className="tp-songcard-sub">{s.orq || "Unknown"}{s.singer ? " · " + s.singer : ""}</div>
       </div>
@@ -184,17 +220,17 @@ function PlEditorSongItem({ it, slot, onRemove, preview }) {
   );
 }
 
-function PlEditorDock({ open, status, api, preview, onBack, onPlayAll, onDelete }) {
+function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, onDelete }) {
   const items = open.items;
   const slot = usePLReorder(api.reorder);
   const meta = playlistMeta(items);
 
   let tIx = 0;
   return (
-    <div className="tp-queue pl-dock">
+    <div className="tp-queue pl-dock" style={width ? { flex: `0 0 ${width}px`, width } : undefined}>
       <div className="pl-dhead">
         <div className="pl-dhead-top">
-          <button className="pl-back" onClick={onBack} title="Back to playlists">
+          <button className="tp-btn pill sm pl-back" onClick={onBack} title="Back to playlists">
             <I.chev s={15} /> <span>Playlists</span>
           </button>
           <span className={"pl-saved is-" + status}>
@@ -209,7 +245,7 @@ function PlEditorDock({ open, status, api, preview, onBack, onPlayAll, onDelete 
           {items.length > 0 && <><span>·</span> <b className="tp-mono">{meta.total}</b></>}
         </div>
         <div className="pl-actions">
-          <button className="pl-playall" onClick={onPlayAll} disabled={!items.length} title="Load this set into the live player">
+          <button className="tp-btn primary lg grow" onClick={onPlayAll} disabled={!items.length} title="Play this set">
             <I.play s={15} /> Play all
           </button>
           <button className="pl-del" onClick={onDelete} title="Delete playlist"><I.trash s={15} /></button>
@@ -282,7 +318,7 @@ function PlaylistCard({ pl, onOpen, onDelete, onPlay }) {
       <div className="tv-tcard-foot">
         <div className="tv-tcard-total"><b>{meta.total}</b></div>
         <button className="tv-tcbtn pl-play" onClick={(e) => { e.stopPropagation(); onPlay(pl); }} disabled={!pl.items.length}><I.play s={13} /> Play</button>
-        <button className="tv-tcbtn" onClick={(e) => { e.stopPropagation(); onOpen(pl); }}><I.pencil s={14} /> Open</button>
+        <button className="tv-tcbtn" onClick={(e) => { e.stopPropagation(); onOpen(pl); }}>Open</button>
         <button className="tv-tcbtn del" onClick={(e) => { e.stopPropagation(); onDelete(pl); }} title="Delete playlist"><I.trash s={15} /></button>
       </div>
     </div>
@@ -297,7 +333,7 @@ function PlManageGrid({ playlists, onOpen, onDelete, onPlay, onNew }) {
           <div className="ic"><I.note s={26} /></div>
           <h3>No playlists yet</h3>
           <p>Save a set of tandas &amp; cortinas you can replay any night.</p>
-          <button className="tv-save" style={{ width: 220, margin: "0 auto" }} onClick={onNew}>
+          <button className="tp-btn primary lg" onClick={onNew}>
             <I.plus s={17} /> Build a playlist
           </button>
         </div>
@@ -320,13 +356,18 @@ function PlManageGrid({ playlists, onOpen, onDelete, onPlay, onNew }) {
 }
 
 /* ============================ PLAYLISTS VIEW (orchestrator) ============================ */
-function PlaylistsView({ onPlay }) {
+function PlaylistsView({ onPlay, dockWidth, onDockWidthChange }) {
   const { tandas, songs, playlists, imported } = useStore();
   // Cortina material is flagged per song (song.isCortina), independent of genre.
   const cortinas = useMemo(() => songs.filter((s) => s.isCortina), [songs]);
   const preview = usePlayer().preview;
   const { toast, flash, dismiss } = useToast();
   const { ask, modal } = useConfirm();
+
+  // Live dock width while dragging the divider; seeded from the persisted tweak.
+  const [dockW, setDockW] = useState(dockWidth || 452);
+  useEffect(() => { setDockW(dockWidth || 452); }, [dockWidth]);
+  const commitDockW = (w) => { if (onDockWidthChange) onDockWidthChange(w); };
 
   // `open` is the working copy of the playlist being edited (null = landing
   // grid). Edits mutate it locally and persist to the DB in the background.
@@ -427,7 +468,9 @@ function PlaylistsView({ onPlay }) {
       <div className="tv">
         <div className="tv-body">
           <PlLibrary tandas={tandas} cortinas={cortinas} onAdd={api.addItem} preview={preview} />
-          <PlEditorDock open={open} status={status} api={api} preview={preview}
+          <PlDockResizer width={dockW} min={PL_DOCK_MIN_W} max={PL_DOCK_MAX_W}
+            onResize={setDockW} onCommit={commitDockW} />
+          <PlEditorDock open={open} status={status} api={api} preview={preview} width={dockW}
             onBack={back} onPlayAll={playAll} onDelete={deleteOpen} />
         </div>
         <Toast toast={toast} onDismiss={dismiss} />
@@ -445,7 +488,7 @@ function PlaylistsView({ onPlay }) {
           <div className="tv-sub">Open a set to reorder, trim &amp; audition it</div>
         </div>
         <div className="tv-head-r">
-          <button className="tv-reimport" onClick={newPlaylist}><I.plus s={15} /> New playlist</button>
+          <button className="tp-btn" onClick={newPlaylist}><I.plus s={15} /> New playlist</button>
         </div>
       </div>
 
