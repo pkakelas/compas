@@ -3,13 +3,14 @@ const { useState } = React;
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "builderWidth": 380,
-  "liveQueueWidth": 452,
+  "liveQueueWidth": 600,
   "playlistDockWidth": 452,
   "theme": "dark",
   "startView": "Tandas",
   "fontScale": 100,
   "tandaLayout": "grid",
-  "songNameOnly": false
+  "songNameOnly": false,
+  "collapseFoldersByDefault": false
 }/*EDITMODE-END*/;
 
 // Text size is a whole-app zoom (everything is sized in px, so scaling the page
@@ -90,6 +91,7 @@ function AppShell() {
       const savedLayout = localStorage.getItem("compas.tandaView");
       if (savedLayout === "list" || savedLayout === "grid") seed.tandaLayout = savedLayout;
       seed.songNameOnly = localStorage.getItem("compas.songNameOnly") === "1";
+      seed.collapseFoldersByDefault = localStorage.getItem("compas.collapseFoldersByDefault") === "1";
       return seed;
     } catch (e) { return TWEAK_DEFAULTS; }
   })());
@@ -124,6 +126,12 @@ function AppShell() {
   React.useEffect(() => {
     try { localStorage.setItem("compas.songNameOnly", t.songNameOnly ? "1" : "0"); } catch (e) { /* ignore */ }
   }, [t.songNameOnly]);
+
+  // Persist whether folder trees (Library + Builder) start collapsed, so the
+  // preference survives restarts and the seed read above can pick it up.
+  React.useEffect(() => {
+    try { localStorage.setItem("compas.collapseFoldersByDefault", t.collapseFoldersByDefault ? "1" : "0"); } catch (e) { /* ignore */ }
+  }, [t.collapseFoldersByDefault]);
 
   // Cmd/Ctrl +/-/0 come in as menu-driven IPC commands (the View ▸ Zoom items own
   // the accelerators on every platform). A ref holds the live scale so the
@@ -166,6 +174,19 @@ function AppBody({ t, setTweak }) {
   // gets thrown away when the DJ flips between them.
   const showTandas = view === "Builder" || view === "Tandas";
 
+  // TandasView swaps its whole subtree on `mode` (build vs manage), so the
+  // builder's library tree only stays mounted while the mode holds. Derive the
+  // mode from the last Tandas-family tab the DJ used — NOT from the live `view`.
+  // Otherwise stepping away to Library/Settings flips it to "manage", unmounts
+  // the builder tree, and loses its folder expand/collapse state on return (the
+  // Library tab keeps its own tree mounted, so it already survives — this keeps
+  // the builder symmetric with it).
+  const [tandasMode, setTandasMode] = useState(view === "Builder" ? "build" : "manage");
+  React.useEffect(() => {
+    if (view === "Builder") setTandasMode("build");
+    else if (view === "Tandas") setTandasMode("manage");
+  }, [view]);
+
   // All views stay mounted (hidden via display) so playback keeps running while
   // the DJ browses tandas/playlists. The transport bar is a sibling of the views
   // so it sits at the bottom on every tab.
@@ -182,7 +203,7 @@ function AppBody({ t, setTweak }) {
         <LibraryView />
       </div>
       <div className="tp-view" style={{ display: showTandas ? undefined : "none" }}>
-        <TandasView mode={view === "Builder" ? "build" : "manage"} onNavigate={setView}
+        <TandasView mode={tandasMode} onNavigate={setView}
           builderWidth={t.builderWidth}
           onBuilderWidthChange={(v) => setTweak("builderWidth", v)}
           tandaLayout={t.tandaLayout}

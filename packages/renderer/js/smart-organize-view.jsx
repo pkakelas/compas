@@ -20,6 +20,22 @@ function soStyleLabel(g) {
 const SO_FIELD_LABEL = { orq: "Orchestra", singer: "Singer", year: "Year", genre: "Style" };
 const soIsEmpty = (v) => v == null || v === "";
 
+// Permanently-skipped suggestions. We key on the song id *and* the proposed
+// values so the dismissal is for this exact suggestion: if Smart Organize later
+// derives a different proposal for the same song (e.g. after a catalogue
+// update), it surfaces again rather than staying hidden forever.
+const SO_DISMISS_KEY = "compas.dismissedProposals";
+function soSig(p) {
+  return [p.id, p.proposed.orq, p.proposed.singer, p.proposed.year, p.proposed.genre].join("|");
+}
+function soDismissedSet() {
+  try { return new Set(JSON.parse(localStorage.getItem(SO_DISMISS_KEY) || "[]")); }
+  catch (_e) { return new Set(); }
+}
+function soPersistDismissed(set) {
+  try { localStorage.setItem(SO_DISMISS_KEY, JSON.stringify([...set])); } catch (_e) { /* ignore */ }
+}
+
 // Format a present value for display (callers handle the empty case).
 function soFmt(field, v) {
   if (field === "genre") return soStyleLabel(v);
@@ -100,7 +116,7 @@ function SoDiff({ field, from, to, edited, onEdit }) {
   );
 }
 
-function SoRow({ p, checked, onToggle, rowEdits, onFieldEdit }) {
+function SoRow({ p, checked, onToggle, rowEdits, onFieldEdit, onDismiss }) {
   const e = rowEdits || {};
   return (
     // A div (not a <label>) so the inline field editors don't toggle the row.
@@ -126,6 +142,11 @@ function SoRow({ p, checked, onToggle, rowEdits, onFieldEdit }) {
         </div>
         {p.note && <div className="so-row-note"><I.tag s={11} /> {p.note}</div>}
       </div>
+      <button type="button" className="so-skip"
+        title="Skip this suggestion — don't show it again"
+        onClick={(ev) => { ev.stopPropagation(); onDismiss(p); }}>
+        <I.eyeOff s={14} />
+      </button>
     </div>
   );
 }
@@ -146,7 +167,7 @@ function soFieldCounts(list) {
     .map((f) => ({ field: f, label: SO_FIELD_LABEL[f].toLowerCase(), count: c[f] }));
 }
 
-function SoTier({ def, list, cap, onShowMore, selected, edits, onFieldEdit, onToggleTier, onToggleOne }) {
+function SoTier({ def, list, cap, onShowMore, selected, edits, onFieldEdit, onToggleTier, onToggleOne, onDismissOne }) {
   if (!list.length) return null;
   const shown = list.slice(0, cap);
   const selCount = list.reduce((n, p) => n + (selected.has(p.id) ? 1 : 0), 0);
@@ -182,7 +203,7 @@ function SoTier({ def, list, cap, onShowMore, selected, edits, onFieldEdit, onTo
       <div className="so-tier-rows">
         {shown.map((p) => (
           <SoRow key={p.id} p={p} checked={selected.has(p.id)} onToggle={onToggleOne}
-            rowEdits={edits[p.id]} onFieldEdit={onFieldEdit} />
+            rowEdits={edits[p.id]} onFieldEdit={onFieldEdit} onDismiss={onDismissOne} />
         ))}
       </div>
       {list.length > cap && (
@@ -218,7 +239,8 @@ function SmartOrganizeModal({ onClose, onApplied }) {
       try {
         const res = await Store.previewSmartOrganize();
         if (!alive) return;
-        const props = (res && res.proposals) || [];
+        const dismissed = soDismissedSet();
+        const props = ((res && res.proposals) || []).filter((p) => !dismissed.has(soSig(p)));
         // Pre-select everything except the "needs a look" tier.
         setSelected(new Set(props.filter((p) => p.tier !== "review").map((p) => p.id)));
         setProposals(props);
@@ -263,6 +285,17 @@ function SmartOrganizeModal({ onClose, onApplied }) {
   const toggleOne = (id) => setSelected((s) => {
     const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n;
   });
+  // Permanently skip this exact suggestion: remember it, drop it from the list,
+  // and clear any selection/edits for the row. It won't come back on future scans
+  // unless a different proposal is later derived for the song.
+  const dismissOne = (p) => {
+    const set = soDismissedSet();
+    set.add(soSig(p));
+    soPersistDismissed(set);
+    setProposals((list) => list.filter((x) => x.id !== p.id));
+    setSelected((s) => { const n = new Set(s); n.delete(p.id); return n; });
+    setEdits((e) => { if (!(p.id in e)) return e; const n = { ...e }; delete n[p.id]; return n; });
+  };
   // Editing a field overrides the proposed value and ticks the row (a correction
   // means "apply this, with my value") — handy in the "worth a check" tab.
   const onFieldEdit = (id, field, value) => {
@@ -398,6 +431,7 @@ function SmartOrganizeModal({ onClose, onApplied }) {
               onFieldEdit={onFieldEdit}
               onToggleTier={toggleTier}
               onToggleOne={toggleOne}
+              onDismissOne={dismissOne}
             />
           )}
         </div>

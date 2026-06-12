@@ -10,6 +10,7 @@ const I = {
   prev:  (p) => <svg viewBox="0 0 24 24" width={p.s||18} height={p.s||18} fill="currentColor"><path d="M7 6v12M19 6.5v11l-9-5.5z"/></svg>,
   next:  (p) => <svg viewBox="0 0 24 24" width={p.s||18} height={p.s||18} fill="currentColor"><path d="M17 6v12M5 6.5v11l9-5.5z"/></svg>,
   fwd:   (p) => <svg viewBox="0 0 24 24" width={p.s||17} height={p.s||17} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 6.5v11l8-5.5zM14 6.5v11l8-5.5z"/></svg>,
+  skip:  (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="currentColor"><path d="M6 5.5v13l9-6.5z"/><rect x="16.4" y="5.5" width="2.6" height="13" rx="1"/></svg>,
   scissor:(p)=> <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="7" r="2.4"/><circle cx="6" cy="17" r="2.4"/><path d="M8 8.5L20 17M8 15.5L20 7"/></svg>,
   spark: (p) => <svg viewBox="0 0 24 24" width={p.s||15} height={p.s||15} fill="currentColor"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6zM18.5 14l.8 2.7 2.7.8-2.7.8-.8 2.7-.8-2.7-2.7-.8 2.7-.8z"/></svg>,
   wave:  (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M3 12h2l2-6 3 14 3-11 2 5h6"/></svg>,
@@ -38,6 +39,7 @@ const I = {
   moon:  (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M20 14.5A8 8 0 119.5 4a6.5 6.5 0 1010.5 10.5z"/></svg>,
   grid:  (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/></svg>,
   rows:  (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="5" width="16" height="5.5" rx="1.6"/><rect x="4" y="13.5" width="16" height="5.5" rx="1.6"/></svg>,
+  eyeOff:(p)=> <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9.9 5.2A9.6 9.6 0 0112 5c5 0 9 4 10 7a13 13 0 01-2.2 3.3M6.3 6.3C3.9 7.6 2.5 9.6 2 12c1 3 5 7 10 7a9.7 9.7 0 004.2-.9"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/><path d="M3 3l18 18"/></svg>,
 };
 
 /* deterministic pseudo-random so waveforms are stable across renders/exports */
@@ -332,4 +334,23 @@ function useSongNameOnly() {
   return on;
 }
 
-Object.assign(window, { I, Waveform, EQ, Marquee, PreviewGlyph, previewTitle, clickKeys, GENRE_LABEL, GenreTag, useToast, Toast, ConfirmModal, useConfirm, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, STYLE_LABELS, isCoreStyle, genreLabel, genreClass, cleanSongTitle, useSongNameOnly });
+// Reactive read of the "collapse folders by default" preference. Seeded from
+// localStorage and kept live via the same `tweakchange` event setTweak emits,
+// so folder trees can re-seed their open state the moment the DJ flips it.
+function useCollapseFoldersByDefault() {
+  const [on, setOn] = useState(() => {
+    try { return localStorage.getItem("compas.collapseFoldersByDefault") === "1"; } catch (e) { return false; }
+  });
+  useEffect(() => {
+    const onTweak = (e) => {
+      if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, "collapseFoldersByDefault")) {
+        setOn(!!e.detail.collapseFoldersByDefault);
+      }
+    };
+    window.addEventListener("tweakchange", onTweak);
+    return () => window.removeEventListener("tweakchange", onTweak);
+  }, []);
+  return on;
+}
+
+Object.assign(window, { I, Waveform, EQ, Marquee, PreviewGlyph, previewTitle, clickKeys, GENRE_LABEL, GenreTag, useToast, Toast, ConfirmModal, useConfirm, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, STYLE_LABELS, isCoreStyle, genreLabel, genreClass, cleanSongTitle, useSongNameOnly, useCollapseFoldersByDefault });

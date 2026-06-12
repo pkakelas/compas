@@ -743,7 +743,7 @@ function sanitizeFilters(filters, songs, includeCortinas = true) {
   return next || filters;
 }
 
-const PICK_LIST_CAP = 80;
+const PICK_LIST_CAP = 1000;
 const PICK_SEARCH_MIN = 8; // hide in-panel search for short lists (style, etc.)
 
 function normalizePickOptions(options) {
@@ -1141,13 +1141,28 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
   const { tree, songs } = useStore();
   const scrollRef = useRef(null);
   const [sort, setSort] = useState("title");
-  const [openSet, setOpenSet] = useState(() => new Set(tree.map((n) => n.path)));
+  // When the DJ has opted into "collapse folders by default", a fresh tree
+  // starts with every folder closed; otherwise the top-level folders open.
+  const collapseDefault = useCollapseFoldersByDefault();
+  const [openSet, setOpenSet] = useState(() => collapseDefault ? new Set() : new Set(tree.map((n) => n.path)));
   const filterOptions = useMemo(() => buildFilterOptions(songs, filters, includeCortinas), [songs, filters, includeCortinas]);
   const setFiltersSafe = (next) => setFilters(sanitizeFilters(next, songs, includeCortinas));
 
+  // Seed the open state once the tree has loaded (it arrives async). With
+  // collapse-by-default on we leave it closed; otherwise open the top level.
   useEffect(() => {
+    if (collapseDefault) return;
     if (tree.length) setOpenSet((s) => (s.size ? s : new Set(tree.map((n) => n.path))));
-  }, [tree]);
+  }, [tree, collapseDefault]);
+
+  // The views stay mounted as the DJ navigates, so flipping the setting won't
+  // remount this browser — re-seed the open state the moment it changes (skip
+  // the initial mount, already handled by the seeds above).
+  const collapseInit = useRef(true);
+  useEffect(() => {
+    if (collapseInit.current) { collapseInit.current = false; return; }
+    setOpenSet(collapseDefault ? new Set() : new Set(tree.map((n) => n.path)));
+  }, [collapseDefault]);
 
   const searching = query.active;
 
@@ -1674,11 +1689,16 @@ function tandaSearchActive(filters) {
   return !!(_norm(filters.text || "").trim() || filters.orq || filters.singer || filters.type || filters.year || filters.mood);
 }
 
-// Filter + rank tandas. Empty query returns the list unchanged (original order);
-// a text query sorts best match first, dropdown-only filters keep DJ order.
+// Alphabetical comparator for the tandas listing, keyed off the same label the
+// cards show (the DJ's name, or the orchestra summary when still unnamed).
+const byTandaLabel = (a, b) =>
+  tandaLabel(a).localeCompare(tandaLabel(b), undefined, { sensitivity: "base", numeric: true });
+
+// Filter + rank tandas. The listing is always sorted alphabetically by name;
+// a text query overrides that to rank best match first.
 function searchTandas(tandas, filters = EMPTY_TANDA_SEARCH) {
   const list = tandas || [];
-  if (!tandaSearchActive(filters)) return list.slice();
+  if (!tandaSearchActive(filters)) return list.slice().sort(byTandaLabel);
   const words = _norm(filters.text || "").trim().split(/\s+/).filter(Boolean);
   const hits = [];
   for (const t of list) {
@@ -1695,6 +1715,7 @@ function searchTandas(tandas, filters = EMPTY_TANDA_SEARCH) {
     if (ok) hits.push({ t, score });
   }
   if (words.length) hits.sort((a, b) => b.score - a.score);
+  else hits.sort((a, b) => byTandaLabel(a.t, b.t));
   return hits.map((h) => h.t);
 }
 

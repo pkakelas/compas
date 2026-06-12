@@ -115,6 +115,14 @@ class WindowManager implements AppModule {
   async enable({app}: ModuleContext): Promise<void> {
     await app.whenReady();
 
+    // Windows ties the taskbar icon (and shortcut grouping) to the
+    // AppUserModelID. Without setting it explicitly, the running app's taskbar
+    // button falls back to the generic Electron icon instead of ours. Match the
+    // appId in electron-builder.mjs so dev and packaged builds agree.
+    if (process.platform === 'win32') {
+      app.setAppUserModelId('com.compas.player');
+    }
+
     // Give the macOS Dock (and the Cmd+Tab app switcher) our headphones icon.
     // Packaged builds already get it from buildResources/icon.icns, but a dev
     // run launches the stock Electron binary, which otherwise shows Electron's

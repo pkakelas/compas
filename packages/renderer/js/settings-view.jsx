@@ -270,6 +270,10 @@ function LibraryDisplayCard({ t, setTweak }) {
         desc="Hide the orchestra, singer and year that are sometimes baked into a song’s title, leaving just the song name — everywhere songs appear: library, tandas, playlists and the live queue. The orchestra and singer still show on the line below.">
         <SetSwitch checked={!!t.songNameOnly} onChange={(v) => setTweak("songNameOnly", v)} />
       </SetRow>
+      <SetRow label="Collapse folders by default"
+        desc="Start with every folder closed when you open the Library or the Tanda builder, so you can expand only the ones you need. Otherwise the top-level folders open automatically.">
+        <SetSwitch checked={!!t.collapseFoldersByDefault} onChange={(v) => setTweak("collapseFoldersByDefault", v)} />
+      </SetRow>
       {t.songNameOnly && (
         <div className="tp-set-note">
           Strips, on display only, the kinds of clutter that creep into title tags:

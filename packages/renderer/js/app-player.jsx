@@ -104,6 +104,20 @@ function itemSongs(item) {
   if (!item) return [];
   return item.type === "tanda" ? ((item.data && item.data.songs) || []) : [item.data];
 }
+// Songs a DJ marks "skip" stay in the tanda but are passed over during live
+// playback. These find the next song that should actually play.
+function nextLiveSong(songs, from) {
+  for (let i = Math.max(0, from); i < songs.length; i++) if (!songs[i].skip) return i;
+  return -1;
+}
+// First song index a queue item should start on (skipping over skipped tracks).
+// Non-tanda items always play, so they start at 0. A tanda whose songs are all
+// skipped returns -1 — the whole item is then passed over.
+function firstLiveSong(item) {
+  if (!item) return -1;
+  if (item.type !== "tanda") return 0;
+  return nextLiveSong((item.data && item.data.songs) || [], 0);
+}
 
 // Does the single-song item at `index` play the cortina role? Yes if and only if
 // it sits directly between two tandas (the item immediately before AND after it
@@ -275,7 +289,7 @@ function LibraryPanel({ tandas, cortinas, playlists, onAddTanda, onAddSong, onAd
 /* ============================ QUEUE (right) ============================ */
 
 const LIVE_QUEUE_MIN_W = 360;
-const LIVE_QUEUE_MAX_W = 760;
+const LIVE_QUEUE_MAX_W = 900;
 
 /* Draggable divider between the library and the queue — mirrors the Tandas
  * builder's BuilderResizer. The queue is pinned right, so dragging left widens
@@ -309,41 +323,58 @@ function QueueResizer({ width, min, max, onResize, onCommit }) {
   );
 }
 
-function QSong({ n, title, dur, state, playing, onPlay }) {
+function QSong({ n, title, dur, state, playing, skip, onPlay, onSkip }) {
+  const isNow = state === "now";
   return (
-    <div className={"tp-songrow" + (state === "now" ? " is-now" : "") + (state === "done" ? " is-done" : "") + (onPlay ? " is-clickable" : "")}
+    <div className={"tp-songrow" + (isNow ? " is-now" : "") + (state === "done" ? " is-done" : "") + (skip ? " is-skip" : "") + (onPlay ? " is-clickable" : "")}
       onClick={onPlay ? (e) => { e.stopPropagation(); onPlay(); } : undefined}
       {...(onPlay ? clickKeys(onPlay) : {})}
       title={onPlay ? "Play this song" : undefined}>
-      <span className="n">{state === "now" && playing ? <EQ /> : <><span className="qn">{n}</span><I.play s={12} /></>}</span>
+      <span className="n">{isNow && playing ? <EQ /> : <><span className="qn">{n}</span><I.play s={12} /></>}</span>
       <span className="tt"><div className="tp-song-title">{title}</div></span>
       <span className="tp-song-dur">{dur}</span>
+      {onSkip && (
+        <button className={"tp-song-skip" + (skip ? " is-on" : "")} disabled={isNow}
+          onClick={(e) => { e.stopPropagation(); if (!isNow) onSkip(); }}
+          title={isNow ? "Can’t skip the song that’s playing" : skip ? "Play this song" : "Skip this song"}>
+          <I.skip s={13} />
+        </button>
+      )}
     </div>
   );
 }
 
-function QueueTanda({ item, ix, now, playing, nowIx, onPlay, onPlaySong, onRemove, drag }) {
+function QueueTanda({ item, ix, now, playing, nowIx, onPlay, onPlaySong, onSkipSong, onRemove, drag }) {
   const t = item.data;
   const m = tandaMeta(t);
   const songNameOnly = useSongNameOnly();
+  const [collapsed, setCollapsed] = useState(false);
   const { className: dragCls = "", ...handlers } = drag;
   return (
-    <div className={"tp-tandacard tp-qrow" + (now ? " is-now" : "") + " " + dragCls} {...handlers}
+    <div className={"tp-tandacard tp-qrow" + (now ? " is-now" : "") + (collapsed ? " is-collapsed" : "") + " " + dragCls} {...handlers}
       onClick={onPlay}>
       <div className="tp-tanda-head">
         {!now && <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>}
-        <span className="ix">{now ? "NOW" : String(ix).padStart(2, "0")}</span>
+        <button className={"tp-tanda-caret" + (collapsed ? "" : " is-open")} title={collapsed ? "Show songs" : "Hide songs"}
+          aria-expanded={!collapsed} onClick={(e) => { e.stopPropagation(); setCollapsed((c) => !c); }}>
+          <I.chev s={13} />
+        </button>
+        {now && <span className="ix">NOW</span>}
         <span className="tp-now-orq" style={{ flex: 1 }}>{t.name || m.orq}</span>
         <GenreTag genre={m.genre} small />
         {m.year && <span className="tp-tag is-plain sm" title={m.era}>{m.year}</span>}
         {!now && <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove"><I.x s={14} /></button>}
       </div>
-      {t.songs.map((s, i) => (
-        <QSong key={s.id} n={i + 1} title={songNameOnly ? cleanSongTitle(s) : s.title} dur={s.dur || "—"}
-          state={now ? (i < nowIx ? "done" : i === nowIx ? "now" : "up") : "up"}
-          playing={playing}
-          onPlay={() => onPlaySong(i)} />
-      ))}
+      {collapsed
+        ? <div className="tp-tanda-collapsed" onClick={(e) => { e.stopPropagation(); setCollapsed(false); }}>
+            {t.songs.length} {t.songs.length === 1 ? "song" : "songs"}<span className="tp-dotsep">·</span><span className="tp-mono">{m.total}</span>
+          </div>
+        : t.songs.map((s, i) => (
+            <QSong key={s.id} n={i + 1} title={songNameOnly ? cleanSongTitle(s) : s.title} dur={s.dur || "—"}
+              state={now ? (i < nowIx ? "done" : i === nowIx ? "now" : "up") : "up"}
+              playing={playing} skip={!!s.skip}
+              onPlay={() => onPlaySong(i)} onSkip={() => onSkipSong(i)} />
+          ))}
     </div>
   );
 }
@@ -407,7 +438,7 @@ function defaultPlaylistName() {
   return `Set · ${d.toLocaleString("en-US", { month: "short" })} ${d.getDate()}`;
 }
 
-function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, onPlaySongAt, onRemove, onReorder, onInsertSong, onSavePlaylist, onClearQueue }) {
+function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, onPlaySongAt, onSkipSong, onRemove, onReorder, onInsertSong, onSavePlaylist, onClearQueue }) {
   const dragKey = useRef(null);              // set while reordering an existing queue item
   const [overKey, setOverKey] = useState(null);
   const [overEnd, setOverEnd] = useState(false);
@@ -416,6 +447,7 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
   const [savingNow, setSavingNow] = useState(false);
   const saveInputRef = useRef(null);
   const scrollRef = useRef(null);
+  const autoScroll = useRef({ raf: 0, dir: 0, speed: 0 });
   const { toast, flash, dismiss } = useToast();
   const { ask, modal } = useConfirm();
   const tandaCount = queue.filter(i => i.type === "tanda").length;
@@ -474,7 +506,39 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
       .catch(() => { setSavingNow(false); flash("Couldn’t save playlist"); });
   };
 
-  const clearDrag = () => { dragKey.current = null; setOverKey(null); setOverEnd(false); };
+  // Edge auto-scroll while dragging: native HTML5 drag doesn't scroll the list,
+  // so without this you can't drag an item further than one screenful (e.g. a
+  // tanda from the bottom up past several earlier tandas). When the cursor nears
+  // the top/bottom edge of the scroll box we scroll it via a RAF loop, faster the
+  // closer the cursor is to the edge.
+  const stopAutoScroll = () => {
+    if (autoScroll.current.raf) cancelAnimationFrame(autoScroll.current.raf);
+    autoScroll.current.raf = 0;
+    autoScroll.current.dir = 0;
+  };
+  const stepAutoScroll = () => {
+    const box = scrollRef.current, a = autoScroll.current;
+    if (!box || !a.dir) { a.raf = 0; return; }
+    box.scrollTop += a.dir * a.speed;
+    a.raf = requestAnimationFrame(stepAutoScroll);
+  };
+  const updateAutoScroll = (clientY) => {
+    const box = scrollRef.current;
+    if (!box) return;
+    const r = box.getBoundingClientRect();
+    const EDGE = 64, MAX = 20, a = autoScroll.current;
+    if (clientY < r.top + EDGE && box.scrollTop > 0) {
+      a.dir = -1; a.speed = Math.ceil((r.top + EDGE - clientY) / EDGE * MAX);
+    } else if (clientY > r.bottom - EDGE && box.scrollTop + box.clientHeight < box.scrollHeight) {
+      a.dir = 1; a.speed = Math.ceil((clientY - (r.bottom - EDGE)) / EDGE * MAX);
+    } else {
+      stopAutoScroll(); return;
+    }
+    if (!a.raf) a.raf = requestAnimationFrame(stepAutoScroll);
+  };
+  useEffect(() => stopAutoScroll, []);
+
+  const clearDrag = () => { stopAutoScroll(); dragKey.current = null; setOverKey(null); setOverEnd(false); };
 
   // A drop is either an internal reorder (dragKey set, no transfer data) or a
   // song dragged in from the library tree (transfer data "song:<id>"). beforeKey
@@ -505,7 +569,7 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
   // Whole-list drop zone: appends. Item rows stop propagation so an on-item drop
   // inserts in place instead of bubbling here.
   const listDrop = {
-    onDragOver: (e) => { e.preventDefault(); if (e.target === e.currentTarget && !overEnd) setOverEnd(true); },
+    onDragOver: (e) => { e.preventDefault(); updateAutoScroll(e.clientY); if (e.target === e.currentTarget && !overEnd) setOverEnd(true); },
     onDrop: (e) => handleDrop(e, null),
     onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) clearDrag(); },
   };
@@ -566,7 +630,7 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
           // (between tandas, or flagged cortina material); otherwise it's a song.
           const role = item.type === "tanda" ? "tanda" : (actsAsCortina(queue, i) ? "cortina" : "song");
           const row = role === "tanda"
-            ? <QueueTanda key={item.key} item={item} ix={tIx} now={isNow} playing={playing} nowIx={isNow ? nowIx : 0} onPlay={() => onPlay(item.key)} onPlaySong={(ix) => onPlaySongAt(item.key, ix)} onRemove={() => onRemove(item.key)} drag={dp} />
+            ? <QueueTanda key={item.key} item={item} ix={tIx} now={isNow} playing={playing} nowIx={isNow ? nowIx : 0} onPlay={() => onPlay(item.key)} onPlaySong={(ix) => onPlaySongAt(item.key, ix)} onSkipSong={(ix) => onSkipSong(item.key, ix)} onRemove={() => onRemove(item.key)} drag={dp} />
             : role === "cortina"
               ? <QueueCortina key={item.key} item={item} now={isNow} playing={playing} onPlay={() => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />
               : <QueueSong key={item.key} item={item} now={isNow} playing={playing} onPlay={() => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />;
@@ -872,9 +936,10 @@ function usePlayerEngine(mainDeviceId, playback) {
     if (preview) return false;
     const item = queue.find((i) => i.key === nowKey);
     if (!item) return false;
-    if (item.type === "tanda" && nowIx < ((item.data.songs || []).length - 1)) return true;
+    if (item.type === "tanda" && nextLiveSong(item.data.songs || [], nowIx + 1) >= 0) return true;
     const idx = queue.findIndex((i) => i.key === nowKey);
-    return idx >= 0 && idx < queue.length - 1;
+    for (let j = idx + 1; j < queue.length; j++) if (firstLiveSong(queue[j]) >= 0) return true;
+    return false;
   }
 
   function advance() {
@@ -884,14 +949,16 @@ function usePlayerEngine(mainDeviceId, playback) {
     if (preview) { setPreview(null); setPlaying(false); return; }
     const item = queue.find((i) => i.key === nowKey);
     if (!item) { setPlaying(false); return; }
-    if (item.type === "tanda" && nowIx < ((item.data.songs || []).length - 1)) {
-      setNowIx(nowIx + 1);
-      return;
+    if (item.type === "tanda") {
+      const nx = nextLiveSong(item.data.songs || [], nowIx + 1);
+      if (nx >= 0) { setNowIx(nx); return; }
     }
     const idx = queue.findIndex((i) => i.key === nowKey);
-    const next = idx >= 0 ? queue[idx + 1] : null;
-    if (next) { setNowKey(next.key); setNowIx(0); }
-    else { setPlaying(false); }
+    for (let j = idx + 1; j < queue.length; j++) {
+      const li = firstLiveSong(queue[j]);
+      if (li >= 0) { setNowKey(queue[j].key); setNowIx(li); return; }
+    }
+    setPlaying(false);
   }
 
   // Crossfade the current sound out, then jump to `targetKey` and start it. When
@@ -1078,7 +1145,19 @@ function usePlayerEngine(mainDeviceId, playback) {
   const playItem = (key) => {
     if (preview) setPreview(null);
     if (!preview && key === nowKey) { setPlaying((p) => !p); return; }
-    setNowKey(key); setNowIx(0); setPlaying(true);
+    const item = queue.find((i) => i.key === key);
+    setNowKey(key); setNowIx(Math.max(0, firstLiveSong(item))); setPlaying(true);
+  };
+  // Toggle a tanda song's "skip" flag — skipped songs stay listed but are passed
+  // over during live playback. The song currently on air can't be skipped (it's
+  // already playing); let it finish or use the transport Next.
+  const toggleSkip = (key, ix) => {
+    if (!preview && key === nowKey && ix === nowIx) return;
+    setQueue((q) => q.map((it) => {
+      if (it.key !== key || it.type !== "tanda") return it;
+      const songs = (it.data.songs || []).map((s, i) => i === ix ? { ...s, skip: !s.skip } : s);
+      return { ...it, data: { ...it.data, songs } };
+    }));
   };
   // Jump straight to a specific song inside a queued item (e.g. tapping the 3rd
   // song of a tanda). Clicking the song that's already playing toggles play/pause.
@@ -1166,7 +1245,7 @@ function usePlayerEngine(mainDeviceId, playback) {
     previewId: preview ? preview.id : null,
     clearPreview: () => { setPreview(null); setPlaying(false); },
     addTanda, addCortina, addPlaylist, insertSong, remove, reorder, clearQueue,
-    playItem, playItemAt, playPause, prev, next, seek, fadeToTanda,
+    playItem, playItemAt, toggleSkip, playPause, prev, next, seek, fadeToTanda,
     previewSong, loadPlaylist, saveQueueAsPlaylist,
   };
 }
@@ -1531,8 +1610,8 @@ function LivePlayer({ queueWidth, onQueueWidthChange }) {
   const [draggingId, setDraggingId] = useState(null);
 
   // Live queue width while dragging the divider; seeded from the persisted tweak.
-  const [qW, setQW] = useState(queueWidth || 452);
-  useEffect(() => { setQW(queueWidth || 452); }, [queueWidth]);
+  const [qW, setQW] = useState(queueWidth || 600);
+  useEffect(() => { setQW(queueWidth || 600); }, [queueWidth]);
   const commitQW = (w) => { if (onQueueWidthChange) onQueueWidthChange(w); };
   // Cortina material is flagged per song (song.isCortina), independent of genre.
   const cortinas = useMemo(() => (songs || []).filter((s) => s.isCortina), [songs]);
@@ -1555,7 +1634,7 @@ function LivePlayer({ queueWidth, onQueueWidthChange }) {
         makeDrag={makeDrag} draggingId={draggingId} preview={preview} flash={p.flash} />
       <QueueResizer width={qW} min={LIVE_QUEUE_MIN_W} max={LIVE_QUEUE_MAX_W}
         onResize={setQW} onCommit={commitQW} />
-      <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} playing={p.playing} pos={p.pos} width={qW} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onSavePlaylist={p.saveQueueAsPlaylist} onClearQueue={p.clearQueue} />
+      <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} playing={p.playing} pos={p.pos} width={qW} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onSkipSong={p.toggleSkip} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onSavePlaylist={p.saveQueueAsPlaylist} onClearQueue={p.clearQueue} />
     </div>
   );
 }
