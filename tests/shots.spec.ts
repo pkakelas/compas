@@ -155,7 +155,8 @@ test('capture all views in both themes', async () => {
   await page.waitForTimeout(400);
   await shoot('library');
 
-  await gotoView(page, 'Builder');
+  await gotoView(page, 'Tandas');
+  await page.getByRole('tab', {name: 'Build'}).click();
   await page.waitForTimeout(700);
   await dismissPopups();
   await page.locator('.tv-folder-row:not(.root)').nth(0).click().catch(() => {});
@@ -168,6 +169,7 @@ test('capture all views in both themes', async () => {
   await shoot('builder');
 
   await gotoView(page, 'Tandas');
+  await page.getByRole('tab', {name: 'My tandas'}).click();
   await page.waitForTimeout(700);
   await dismissPopups();
   await shoot('tandas');
@@ -188,6 +190,7 @@ test('capture all views in both themes', async () => {
 
   // confirm modal + toast (delete a tanda)
   await gotoView(page, 'Tandas');
+  await page.getByRole('tab', {name: 'My tandas'}).click();
   await page.waitForTimeout(500);
   await page.locator('.tv-tcbtn.del:visible').first().click();
   await page.waitForTimeout(400);

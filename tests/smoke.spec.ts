@@ -13,6 +13,12 @@ test.beforeAll(async () => {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
   });
   page.on('pageerror', err => consoleErrors.push(`pageerror: ${err.message}`));
+
+  // The first-run onboarding tour mounts a full-screen scrim that intercepts
+  // nav clicks; skip it before the navigation tests run (same as shots.spec).
+  await page.waitForTimeout(800);
+  const obSkip = page.locator('.tp-ob-skip');
+  if (await obSkip.isVisible().catch(() => false)) await obSkip.click();
 });
 
 test.afterAll(async () => {
@@ -30,8 +36,8 @@ test('app launches with a visible window and correct title', async () => {
   expect(await page.evaluate(() => typeof (window as any).compas)).toBe('object');
 });
 
-test('all six nav views are reachable and render', async () => {
-  for (const label of ['Library', 'Builder', 'Tandas', 'Playlists', 'Live', 'Settings']) {
+test('all five nav views are reachable and render', async () => {
+  for (const label of ['Library', 'Tandas', 'Playlists', 'Live', 'Settings']) {
     await gotoView(page, label);
     // Something rendered in the main content region beyond the chrome.
     await expect(page.locator('#root')).toBeVisible();
@@ -47,8 +53,8 @@ test('Live view shows the queue and transport', async () => {
 });
 
 test('nav is keyboard-accessible (tablist semantics, Enter + arrows)', async () => {
-  const tabs = page.locator('[role="tablist"] [role="tab"]');
-  await expect(tabs).toHaveCount(6);
+  const tabs = page.locator('.tp-navset [role="tab"]');
+  await expect(tabs).toHaveCount(5);
 
   // Enter activates a focused tab (native <button> behaviour).
   await page.getByRole('tab', {name: 'Library'}).focus();

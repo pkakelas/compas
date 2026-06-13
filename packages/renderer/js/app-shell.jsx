@@ -169,24 +169,6 @@ function AppBody({ t, setTweak }) {
   // playlist only reaches the live queue via the explicit Import action there.
   const playPlaylist = (pl) => player.playPlaylist(pl.items);
 
-  // The builder and the saved-tandas collection are two top-level tabs now, but
-  // they share one mounted TandasView so the builder's in-progress state never
-  // gets thrown away when the DJ flips between them.
-  const showTandas = view === "Builder" || view === "Tandas";
-
-  // TandasView swaps its whole subtree on `mode` (build vs manage), so the
-  // builder's library tree only stays mounted while the mode holds. Derive the
-  // mode from the last Tandas-family tab the DJ used — NOT from the live `view`.
-  // Otherwise stepping away to Library/Settings flips it to "manage", unmounts
-  // the builder tree, and loses its folder expand/collapse state on return (the
-  // Library tab keeps its own tree mounted, so it already survives — this keeps
-  // the builder symmetric with it).
-  const [tandasMode, setTandasMode] = useState(view === "Builder" ? "build" : "manage");
-  React.useEffect(() => {
-    if (view === "Builder") setTandasMode("build");
-    else if (view === "Tandas") setTandasMode("manage");
-  }, [view]);
-
   // All views stay mounted (hidden via display) so playback keeps running while
   // the DJ browses tandas/playlists. The transport bar is a sibling of the views
   // so it sits at the bottom on every tab.
@@ -202,9 +184,8 @@ function AppBody({ t, setTweak }) {
       <div className="tp-view" style={{ display: view === "Library" ? undefined : "none" }}>
         <LibraryView />
       </div>
-      <div className="tp-view" style={{ display: showTandas ? undefined : "none" }}>
-        <TandasView mode={tandasMode} onNavigate={setView}
-          builderWidth={t.builderWidth}
+      <div className="tp-view" style={{ display: view === "Tandas" ? undefined : "none" }}>
+        <TandasView builderWidth={t.builderWidth}
           onBuilderWidthChange={(v) => setTweak("builderWidth", v)}
           tandaLayout={t.tandaLayout}
           onTandaLayoutChange={(v) => setTweak("tandaLayout", v)} />

@@ -1067,12 +1067,10 @@ function SongSearchBar({ filters, onChange, options, sort, setSort, searching, c
         </div>
         <div className="tv-search-actions">
           {onToggleCortinas ? (
-            <button type="button" className="tv-cortina-toggle" data-on={includeCortinas ? "1" : "0"}
+            <button type="button" className="tv-cortina-toggle tp-tip" data-on={includeCortinas ? "1" : "0"}
               role="switch" aria-checked={!!includeCortinas} onClick={() => onToggleCortinas(!includeCortinas)}
-              title={includeCortinas
-                ? "Cortinas are shown in the filter lists"
-                : "Cortinas are hidden from the filter lists"}>
-              <I.curtain s={14} /> Include cortinas
+              data-hint="When on, cortinas' orchestras, singers, styles and years are offered in the filter dropdowns above. When off, the lists only show your dance music. (Cortinas still appear when you browse or search the library.)">
+              <I.curtain s={14} /> Cortinas in filters
             </button>
           ) : null}
           {showCollapse ? (

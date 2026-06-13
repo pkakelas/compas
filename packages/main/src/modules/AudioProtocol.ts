@@ -27,6 +27,17 @@ function contentTypeFor(filePath: string): string {
   return MIME_BY_EXT[extname(filePath).toLowerCase()] || 'audio/mpeg';
 }
 
+// The renderer document and `compas-audio://` are different origins, so the
+// graphic equalizer — which taps the playing <audio> element through a Web
+// Audio MediaElementSource — would receive a *tainted* (silent) stream unless
+// the response opts into CORS. We send a permissive ACAO and expose the range
+// headers the media stack reads; the renderer pairs this with
+// `crossOrigin = "anonymous"` on the element so the captured audio is audible.
+const CORS_HEADERS: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
+};
+
 // Parse a single-range HTTP `Range` header (e.g. `bytes=1000-` or `bytes=0-1023`).
 // Returns null when the header is absent or not a form we serve, so the caller
 // falls back to a full 200 response.
@@ -106,6 +117,7 @@ export class AudioProtocolModule implements AppModule {
             'Content-Type': contentType,
             'Content-Length': String(size),
             'Accept-Ranges': 'bytes',
+            ...CORS_HEADERS,
           },
         });
       }
@@ -120,6 +132,7 @@ export class AudioProtocolModule implements AppModule {
             'Content-Range': `bytes ${start}-${end}/${size}`,
             'Content-Length': String(end - start + 1),
             'Accept-Ranges': 'bytes',
+            ...CORS_HEADERS,
           },
         });
       }
@@ -131,6 +144,7 @@ export class AudioProtocolModule implements AppModule {
           'Content-Type': contentType,
           'Content-Length': String(size),
           'Accept-Ranges': 'bytes',
+          ...CORS_HEADERS,
         },
       });
     });

@@ -328,15 +328,33 @@ button.tp-nav {
 /* ---- queue ---- */
 .tp-tandacard {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
-  overflow: hidden;
+  overflow: hidden; position: relative;
 }
 .tp-tandacard.is-now { border-color: var(--accent-line); box-shadow: 0 1px 0 var(--accent-line); }
+/* Two-line queue card: title + genre pill on top, the rest of the details on a
+   quiet second line, duration in a scannable right column. The header is the
+   whole hit target for collapsing; a folded tanda is just this header. */
 .tp-tanda-head {
-  display: flex; align-items: center; gap: 10px; padding: 13px 16px 12px;
-  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  cursor: pointer;
+}
+.tp-tandacard:not(.is-collapsed) .tp-tanda-head { border-bottom: 1px solid var(--line); }
+.tp-tanda-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tp-tanda-line1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tp-tanda-name {
+  flex: 0 1 auto; min-width: 0; font-weight: 600; font-size: 14.5px; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tp-tanda-line2 {
+  display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tp-tanda-dur {
+  flex: 0 0 auto; font-size: 12.5px; color: var(--ink-2); align-self: center;
 }
 .tp-tanda-head .ix {
-  font-family: var(--mono); font-size: 11px; letter-spacing: .04em; color: var(--accent); font-weight: 600;
+  flex: 0 0 auto; font-family: var(--mono); font-size: 11px; letter-spacing: .04em;
+  color: var(--accent); font-weight: 600;
 }
 .tp-tanda-caret {
   flex: 0 0 auto; width: 22px; height: 22px; margin: -2px -2px -2px -4px; border-radius: 6px;
@@ -345,13 +363,8 @@ button.tp-nav {
 }
 .tp-tanda-caret:hover { background: var(--surface-2); color: var(--ink); }
 .tp-tanda-caret.is-open { transform: rotate(90deg); color: var(--accent); }
-.tp-tandacard.is-collapsed .tp-tanda-head { border-bottom: none; }
-.tp-tanda-collapsed {
-  padding: 9px 16px 11px 47px; font-size: 12.5px; color: var(--ink-3s); cursor: pointer;
-}
-.tp-tanda-collapsed:hover { color: var(--ink-2); }
 .tp-songrow {
-  display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+  display: flex; align-items: center; gap: 12px; padding: 9px 16px;
   border-top: 1px solid var(--line);
 }
 .tp-songrow:first-child { border-top: none; }
@@ -496,7 +509,7 @@ button.tp-nav {
 .tp-libcard-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
 .tp-libcard-top { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .tp-libcard-orq { font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); white-space: nowrap; }
-.tp-libcard-songs { font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+.tp-libcard-songs { font-size: 13px; color: var(--ink-2); line-height: 1.5; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tp-libsong { white-space: nowrap; }
 .tp-libcard-meta { font-size: 12px; color: var(--ink-3s); }
 
@@ -567,16 +580,27 @@ button.tp-nav {
 
 /* the two queue-header pills (save-as-playlist + clear queue) share one look */
 .tp-qhead-btns { display: flex; align-items: center; gap: 8px; }
-.tp-savepl, .tp-clearq {
+.tp-savepl, .tp-clearq, .tp-lockq {
   display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
   border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface);
   font: 600 12.5px var(--sans); color: var(--ink-2); cursor: pointer; white-space: nowrap;
   transition: color .12s, border-color .12s, background .12s;
 }
-.tp-savepl:hover:not(:disabled), .tp-clearq:hover:not(:disabled) {
+.tp-savepl:hover:not(:disabled), .tp-clearq:hover:not(:disabled), .tp-lockq:hover {
   color: var(--accent-deep); border-color: var(--accent-line); background: var(--accent-soft);
 }
 .tp-savepl:disabled, .tp-clearq:disabled { opacity: .45; cursor: default; }
+/* Lock toggle: when engaged it stays visibly "armed" so a DJ can tell at a
+   glance that clicks won't interrupt the floor. */
+.tp-lockq.is-on {
+  color: var(--accent-deep); border-color: var(--accent-line); background: var(--accent-soft);
+}
+.tp-lockq.is-on:hover { color: var(--ink-1); border-color: var(--accent); }
+/* The tanda card body no longer starts playback (only its song rows do), so
+   it shouldn't advertise a pointer. Locked single rows fall back to default too. */
+.tp-tandacard.tp-qrow { cursor: default; }
+.tp-qrow.is-locked { cursor: default; }
+.tp-cortina.tp-qrow.is-locked:hover { background: var(--dark); }
 
 /* inline namer that slides under the header when saving */
 .tp-qsave {
@@ -624,11 +648,11 @@ button.tp-nav {
 .tp-cortina > *:not(.curtain) { position: relative; z-index: 1; }
 
 /* gap marker: two tandas back-to-back with no cortina between them */
-.tp-nocort { display: flex; align-items: center; gap: 10px; margin: -2px 2px; }
+.tp-nocort { display: flex; align-items: center; gap: 8px; margin: -2px 2px; opacity: .55; }
 .tp-nocort-line { flex: 1; height: 1px; border-top: 1px dashed var(--line-2); }
 .tp-nocort-tag {
   flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
-  font: 600 11px var(--sans); letter-spacing: .03em; color: var(--ink-3s);
+  font: 500 10px var(--sans); letter-spacing: .02em; color: var(--ink-3s);
 }
 
 /* ---- NOW BAR (bottom) ---- */
@@ -729,6 +753,64 @@ button.tp-nav {
   width: 14px; height: 14px; border: 1px solid var(--accent); border-radius: 50%; background: var(--surface);
 }
 
+/* ---- GRAPHIC EQ (transport popover) ---- */
+.tp-eqctl { position: relative; display: inline-flex; align-items: center; }
+.tp-eq-btn.on { color: var(--accent); }
+.tp-eq-pop {
+  position: absolute; bottom: calc(100% + 22px); right: 0; z-index: 40; width: 252px;
+  padding: 14px 16px 12px;
+  /* flatten the bottom-right corner so the border runs straight under the tip
+     — a rounded corner there leaves a visible gap where the arrow joins */
+  border-radius: 14px 14px 6px 14px;
+  background: var(--surface); border: 1px solid var(--line-2);
+  box-shadow: 0 16px 40px -12px var(--shadow-ink);
+}
+/* tip points down at the centre of the 26px-wide EQ button (13px from the
+   right edge, minus half the 11px tip) */
+.tp-eq-pop::after {
+  content: ""; position: absolute; bottom: -6px; right: 7px; width: 11px; height: 11px;
+  background: var(--surface);
+  border-right: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2);
+  transform: rotate(45deg);
+}
+.tp-eq-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.tp-eq-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.tp-eq-switch input { cursor: pointer; }
+.tp-eq-reset { border: 0; background: transparent; color: var(--ink-2); font-size: 12px; cursor: pointer; padding: 3px 6px; border-radius: 7px; }
+.tp-eq-reset:hover { color: var(--ink); background: var(--surface-2); }
+.tp-eq-bands { display: flex; justify-content: space-between; gap: 4px; }
+.tp-eq-bands.dim { opacity: .5; }
+.tp-eq-band { display: flex; flex-direction: column; align-items: center; gap: 7px; flex: 1; }
+.tp-eq-range {
+  -webkit-appearance: none; appearance: none;
+  writing-mode: vertical-lr; direction: rtl;   /* vertical: max at top, min at bottom */
+  /* Box is as wide as the thumb so the thumb centres on the rail; the visible
+     rail is a 5px-wide strip painted as a centred background, with a brighter
+     detent tick at the centre (0 dB). */
+  width: 15px; height: 96px; margin: 0; padding: 0; cursor: pointer;
+  background:
+    linear-gradient(var(--line-2), var(--line-2)) center / 5px 2px no-repeat,
+    linear-gradient(var(--surface-3), var(--surface-3)) center / 5px 100% no-repeat;
+  background-color: transparent;
+}
+.tp-eq-range::-webkit-slider-runnable-track { width: 15px; background: transparent; }
+.tp-eq-range::-moz-range-track { width: 5px; border-radius: 99px; background: transparent; }
+.tp-eq-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--surface);
+  box-shadow: 0 1px 4px var(--shadow-ink);
+}
+.tp-eq-range::-moz-range-thumb {
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--surface); box-shadow: 0 1px 4px var(--shadow-ink);
+}
+.tp-eq-range:disabled { cursor: default; }
+.tp-eq-range:disabled::-webkit-slider-thumb { background: var(--ink-2); }
+.tp-eq-range:disabled::-moz-range-thumb { background: var(--ink-2); }
+.tp-eq-db { font-size: 10px; font-variant-numeric: tabular-nums; color: var(--ink-2); min-height: 12px; }
+.tp-eq-fl { font-size: 10px; font-weight: 600; color: var(--ink-2); }
+
 /* ---- CUE / MONITOR BAR (sits above the floor's NowBar; mirrors its column
    rhythm so the two read as a stacked pair: matched meta width, icon, gaps,
    and a right-aligned control cluster ending in the volume — directly above
@@ -797,7 +879,7 @@ button.tp-nav {
 /* When the subheader trails the pill toggle it needs more air than it does
    under a plain text title, and a hair of left padding to settle under the
    first tab's label rather than hugging the pill's outer edge. */
-.tv-subtabs + .tv-sub { margin-top: 10px; padding-left: 2px; }
+.tv-sectabs + .tv-sub { margin-top: 12px; }
 .tv-head-r { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
 
 /* segmented build / manage */
@@ -1056,8 +1138,29 @@ button.tp-nav {
 .tv-collapse svg { transform: rotate(90deg); flex: 0 0 auto; }
 .tv-count { font: 12px var(--mono); color: var(--ink-3s); white-space: nowrap; }
 
-/* "Include cortinas" pill — off by default, so cortinas stay out of the filter
-   lists. Reads like a toggle: muted when off, accented when on. */
+/* Reusable hover tooltip. Native `title` tooltips are unreliable in Electron
+   (Chromium often never shows them), so any element that needs a hover hint
+   gets class "tp-tip" + a data-hint attribute and we render it ourselves.
+   Anchored to the right edge since most current uses sit at a toolbar's end;
+   appears after a short hover delay and on keyboard focus. */
+.tp-tip { position: relative; }
+.tp-tip::after {
+  content: attr(data-hint);
+  position: absolute; top: calc(100% + 7px); right: 0; z-index: 60;
+  width: max-content; max-width: 270px;
+  padding: 8px 10px; border-radius: 9px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line-2);
+  font: 500 11.5px/1.45 var(--sans); text-align: left; white-space: normal;
+  box-shadow: 0 8px 24px var(--shadow-ink-soft), 0 2px 6px var(--shadow-ink-soft);
+  opacity: 0; transform: translateY(-3px); pointer-events: none;
+  transition: opacity .12s, transform .12s; transition-delay: 0s;
+}
+.tp-tip:hover::after, .tp-tip:focus-visible::after {
+  opacity: 1; transform: translateY(0); transition-delay: 1s;
+}
+
+/* "Cortinas in filters" pill — off by default, so cortinas stay out of the
+   filter dropdowns. Reads like a toggle: muted when off, accented when on. */
 .tv-cortina-toggle {
   display: inline-flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap;
   font: 600 11.5px var(--sans); color: var(--ink-3s);
@@ -1548,18 +1651,22 @@ button.tp-nav {
 /* Labeled variant for Settings — same segmented pill, but the buttons size to
    their text + icon instead of being square icon-only tiles. */
 .tv-viewtoggle.labeled .tv-vt { width: auto; gap: 6px; padding: 0 11px; font: inherit; font-weight: 600; font-size: 12px; }
-/* Manage view sub-tabs (My tandas / Suggestions) — segmented pill control,
-   matching the grid/list toggle so the header reads as one cohesive unit. */
-.tv-subtabs { display: inline-flex; gap: 3px; padding: 3px; border-radius: 12px;
-  background: var(--surface-2); border: 1px solid var(--line-2); }
-.tv-subtab { display: inline-flex; align-items: center; gap: 7px; padding: 8px 15px; border: none; border-radius: 9px;
-  background: transparent; color: var(--ink-2); cursor: pointer; font: 600 14px var(--sans); letter-spacing: -.01em;
-  white-space: nowrap; transition: background .14s, color .14s, box-shadow .14s; }
-.tv-subtab:hover:not(.on) { color: var(--ink); }
-.tv-subtab.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px var(--shadow-ink-soft); }
-.tv-subtab .ct { font: 600 11px var(--mono); padding: 1px 7px; border-radius: 999px; line-height: 1.55;
-  background: var(--bg); color: var(--ink-3s); transition: background .14s, color .14s; }
-.tv-subtab.on .ct { background: var(--accent-soft); color: var(--accent-deep); }
+/* Section tabs (Build · My tandas · Suggestions) — light underline navigation.
+   Kept deliberately plainer than the segmented pills used for controls so it
+   reads as the primary way to move within the Tandas workspace, not a toggle. */
+.tv-sectabs { display: inline-flex; align-items: flex-end; gap: 26px; }
+.tv-sectab { display: inline-flex; align-items: center; gap: 8px; padding: 0 0 9px; border: none;
+  background: transparent; color: var(--ink-3s); cursor: pointer; font: 700 16px var(--sans); letter-spacing: -.02em;
+  white-space: nowrap; border-bottom: 2px solid transparent; transition: color .14s, border-color .14s; }
+.tv-sectab:hover:not(.on) { color: var(--ink-2); }
+.tv-sectab.on { color: var(--ink); border-bottom-color: var(--accent); }
+/* Leading glyph tracks the label: muted on the inactive tabs, full ink when
+   active — so the icon supports the word rather than competing with it. */
+.tv-sectab svg { opacity: .7; }
+.tv-sectab.on svg { opacity: 1; }
+.tv-sectab .ct { font: 600 11px var(--mono); padding: 1px 7px; border-radius: 999px; line-height: 1.55;
+  background: var(--surface-2); color: var(--ink-2); transition: background .14s, color .14s; }
+.tv-sectab.on .ct { background: var(--accent-soft); color: var(--accent-deep); }
 
 /* ---- list view: full-width rows so long song titles read in full ---- */
 .tv-list { display: flex; flex-direction: column; gap: 10px; }
@@ -2423,7 +2530,8 @@ button.tp-nav {
   /* segmented controls + pills tighten */
   .tp-tab { padding: 7px 12px; }
   .tv-seg button { padding: 8px 13px; }
-  .tv-subtab { padding: 8px 11px; font-size: 13px; }
+  .tv-sectabs { gap: 18px; }
+  .tv-sectab { font-size: 15px; }
   .tp-search { min-width: 140px; }
 
   /* side panels may take half the window, no more */
@@ -2461,7 +2569,7 @@ button.tp-nav {
   .tv-grid { grid-template-columns: 1fr; }
   .tv-song-edit-grid { grid-template-columns: 1fr; }
   .tp-set-card { padding: 16px 14px; }
-  .tp-tabs, .tv-subtabs { flex-wrap: wrap; }
+  .tp-tabs, .tv-sectabs { flex-wrap: wrap; }
 
   /* queue header: the save/clear pills drop below the title when cramped */
   .tp-qhead { flex-wrap: wrap; row-gap: 8px; }

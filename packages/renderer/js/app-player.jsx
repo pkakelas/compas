@@ -88,6 +88,62 @@ function howlNode(howl) {
   return howl && howl._sounds && howl._sounds[0] ? howl._sounds[0]._node : null;
 }
 
+/* ---------- graphic equalizer ---------- */
+// A 5-band EQ inserted into playback via the Web Audio API. Howler runs in
+// html5 mode, so each track is a plain <audio> element; we tap it with a
+// MediaElementSource and route it through a chain of BiquadFilters. Two
+// consequences fall out of that tap, handled below:
+//   1. Output device routing must move from the element's setSinkId to the
+//      AudioContext's, since a captured element plays through the context.
+//   2. The compas-audio:// stream is a different origin, so the element needs
+//      crossOrigin = "anonymous" (paired with the protocol's CORS headers) or
+//      the captured audio is tainted and the EQ outputs silence.
+// Bands span the tango range: a warm low shelf, three mids where bandoneón and
+// violin sit, and an "air" shelf on top. Gains are in dB.
+const EQ_BANDS = [
+  {freq: 60, label: "60", type: "lowshelf"},
+  {freq: 250, label: "250", type: "peaking"},
+  {freq: 1000, label: "1k", type: "peaking"},
+  {freq: 4000, label: "4k", type: "peaking"},
+  {freq: 12000, label: "12k", type: "highshelf"},
+];
+const EQ_GAIN_MIN = -12;
+const EQ_GAIN_MAX = 12;
+const EQ_ON_KEY = "compas.eqEnabled";
+const EQ_BANDS_KEY = "compas.eqBands";
+
+function loadEqBands() {
+  try {
+    const v = JSON.parse(localStorage.getItem(EQ_BANDS_KEY));
+    if (Array.isArray(v) && v.length === EQ_BANDS.length) {
+      return v.map((g) => Math.min(EQ_GAIN_MAX, Math.max(EQ_GAIN_MIN, Math.round(Number(g) || 0))));
+    }
+  } catch (_e) { /* malformed — fall through to a flat curve */ }
+  return EQ_BANDS.map(() => 0);
+}
+
+// Lazily build the shared AudioContext + filter chain. Returns null if Web
+// Audio is unavailable, in which case the EQ is simply a no-op and audio plays
+// through Howler untouched.
+function buildEqChain() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  const ctx = new Ctx();
+  const filters = EQ_BANDS.map((b) => {
+    const f = ctx.createBiquadFilter();
+    f.type = b.type;
+    f.frequency.value = b.freq;
+    if (b.type === "peaking") f.Q.value = 1;
+    f.gain.value = 0;
+    return f;
+  });
+  for (let i = 0; i < filters.length - 1; i++) filters[i].connect(filters[i + 1]);
+  filters[filters.length - 1].connect(ctx.destination);
+  // `sources` tracks which <audio> nodes we've already captured — a
+  // MediaElementSource can be created only once per element.
+  return {ctx, filters, sources: new WeakSet()};
+}
+
 /* ---------- queue helpers ---------- */
 // A queue item is either a tanda (data.songs[]) or a single song (data IS the
 // song). A single song is rendered/behaves as a *cortina* only when it plays
@@ -344,37 +400,55 @@ function QSong({ n, title, dur, state, playing, skip, onPlay, onSkip }) {
   );
 }
 
-function QueueTanda({ item, ix, now, playing, nowIx, onPlay, onPlaySong, onSkipSong, onRemove, drag }) {
+function QueueTanda({ item, ix, now, playing, nowIx, onPlaySong, onSkipSong, onRemove, drag }) {
   const t = item.data;
   const m = tandaMeta(t);
+  // Skipped songs are passed over during live playback, so the header counts
+  // only the songs that will actually play — toggling a song's skip updates it.
+  const playCount = t.songs.filter((s) => !s.skip).length;
   const songNameOnly = useSongNameOnly();
+  // Tandas show their songs by default; collapsing to the one-line header is a
+  // manual toggle (the caret / header) the DJ controls — nothing folds or
+  // expands on its own.
   const [collapsed, setCollapsed] = useState(false);
   const { className: dragCls = "", ...handlers } = drag;
+  // The tanda card itself never starts playback — clicking the title or header
+  // would too easily cut off the current song mid-set. Only a song row plays
+  // (and only when not locked). See QSong / the lock toggle in QueuePanel.
   return (
-    <div className={"tp-tandacard tp-qrow" + (now ? " is-now" : "") + (collapsed ? " is-collapsed" : "") + " " + dragCls} {...handlers}
-      onClick={onPlay}>
-      <div className="tp-tanda-head">
+    <div className={"tp-tandacard tp-qrow" + (now ? " is-now" : "") + (collapsed ? " is-collapsed" : "") + " " + dragCls}
+      {...handlers}>
+      {/* Two-line summary that carries every detail: name + genre pill on top,
+          singer · song count · year on a quiet second line, total duration in a
+          scannable right column. Collapsed shows just this header; the whole
+          header toggles the song list. */}
+      <div className="tp-tanda-head" onClick={(e) => { e.stopPropagation(); setCollapsed((c) => !c); }}>
         {!now && <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>}
         <button className={"tp-tanda-caret" + (collapsed ? "" : " is-open")} title={collapsed ? "Show songs" : "Hide songs"}
           aria-expanded={!collapsed} onClick={(e) => { e.stopPropagation(); setCollapsed((c) => !c); }}>
           <I.chev s={13} />
         </button>
-        {now && <span className="ix">NOW</span>}
-        <span className="tp-now-orq" style={{ flex: 1 }}>{t.name || m.orq}</span>
-        <GenreTag genre={m.genre} small />
-        {m.year && <span className="tp-tag is-plain sm" title={m.era}>{m.year}</span>}
+        <div className="tp-tanda-id">
+          <div className="tp-tanda-line1">
+            {now && <span className="ix">NOW</span>}
+            <span className="tp-tanda-name">{t.name || m.orq}</span>
+            <GenreTag genre={m.genre} small />
+          </div>
+          <div className="tp-tanda-line2">
+            {m.singer && <>{m.singer}<span className="tp-dotsep">·</span></>}
+            {playCount} {playCount === 1 ? "song" : "songs"}
+            {m.year && <><span className="tp-dotsep">·</span><span title={m.era || undefined}>{m.year}</span></>}
+          </div>
+        </div>
+        <span className="tp-tanda-dur tp-mono">{m.total}</span>
         {!now && <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove"><I.x s={14} /></button>}
       </div>
-      {collapsed
-        ? <div className="tp-tanda-collapsed" onClick={(e) => { e.stopPropagation(); setCollapsed(false); }}>
-            {t.songs.length} {t.songs.length === 1 ? "song" : "songs"}<span className="tp-dotsep">·</span><span className="tp-mono">{m.total}</span>
-          </div>
-        : t.songs.map((s, i) => (
-            <QSong key={s.id} n={i + 1} title={songNameOnly ? cleanSongTitle(s) : s.title} dur={s.dur || "—"}
-              state={now ? (i < nowIx ? "done" : i === nowIx ? "now" : "up") : "up"}
-              playing={playing} skip={!!s.skip}
-              onPlay={() => onPlaySong(i)} onSkip={() => onSkipSong(i)} />
-          ))}
+      {!collapsed && t.songs.map((s, i) => (
+        <QSong key={s.id} n={i + 1} title={songNameOnly ? cleanSongTitle(s) : s.title} dur={s.dur || "—"}
+          state={now ? (i < nowIx ? "done" : i === nowIx ? "now" : "up") : "up"}
+          playing={playing} skip={!!s.skip}
+          onPlay={onPlaySong ? () => onPlaySong(i) : undefined} onSkip={() => onSkipSong(i)} />
+      ))}
     </div>
   );
 }
@@ -383,8 +457,8 @@ function QueueCortina({ item, now, playing, onPlay, onRemove, drag }) {
   const c = item.data;
   const { className: dragCls = "", ...handlers } = drag;
   return (
-    <div className={"tp-cortina tp-qrow" + (now ? " is-now" : "") + " " + dragCls} {...handlers}
-      onClick={onPlay}>
+    <div className={"tp-cortina tp-qrow" + (now ? " is-now" : "") + (onPlay ? "" : " is-locked") + " " + dragCls} {...handlers}
+      onClick={onPlay} title={onPlay ? undefined : "Queue locked — unlock to play"}>
       <div className="curtain"></div>
       <span className="tp-grip dark" title="Drag to reorder"><I.grip s={15} /></span>
       <I.curtain s={17} />
@@ -406,8 +480,8 @@ function QueueSong({ item, now, playing, onPlay, onRemove, drag }) {
   const songNameOnly = useSongNameOnly();
   const { className: dragCls = "", ...handlers } = drag;
   return (
-    <div className={"tp-songcard tp-qrow" + (now ? " is-now" : "") + " " + dragCls} {...handlers}
-      onClick={onPlay}>
+    <div className={"tp-songcard tp-qrow" + (now ? " is-now" : "") + (onPlay ? "" : " is-locked") + " " + dragCls} {...handlers}
+      onClick={onPlay} title={onPlay ? undefined : "Queue locked — unlock to play"}>
       <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
       <span className="tp-songcard-glyph">{now && playing ? <EQ /> : <I.note s={15} />}</span>
       <div className="tp-flex1">
@@ -443,6 +517,9 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
   const [overKey, setOverKey] = useState(null);
   const [overEnd, setOverEnd] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
+  // When locked, clicking a song won't start playback — a safety latch for DJs
+  // who fear a stray click cutting off the song currently on the floor.
+  const [locked, setLocked] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [savingNow, setSavingNow] = useState(false);
   const saveInputRef = useRef(null);
@@ -588,6 +665,11 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
             <span className="tp-mono">set {setTotal}</span>
           </div>
           <div className="tp-qhead-btns">
+            <button className={"tp-lockq" + (locked ? " is-on" : "")} onClick={() => setLocked((v) => !v)}
+              title={locked ? "Queue locked — songs can’t be played by clicking. Click to unlock." : "Lock the queue so a stray click can’t interrupt the current song."}
+              aria-pressed={locked}>
+              {locked ? <I.unlock s={14} /> : <I.lock s={14} />} {locked ? "unlock" : "lock"}
+            </button>
             <button className="tp-savepl" onClick={openSave} disabled={!queue.length || saveOpen}
               title={queue.length ? "Save this set as a playlist" : "Add tandas to save a playlist"}>
               <I.plus s={14} /> Save as playlist
@@ -630,10 +712,10 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
           // (between tandas, or flagged cortina material); otherwise it's a song.
           const role = item.type === "tanda" ? "tanda" : (actsAsCortina(queue, i) ? "cortina" : "song");
           const row = role === "tanda"
-            ? <QueueTanda key={item.key} item={item} ix={tIx} now={isNow} playing={playing} nowIx={isNow ? nowIx : 0} onPlay={() => onPlay(item.key)} onPlaySong={(ix) => onPlaySongAt(item.key, ix)} onSkipSong={(ix) => onSkipSong(item.key, ix)} onRemove={() => onRemove(item.key)} drag={dp} />
+            ? <QueueTanda key={item.key} item={item} ix={tIx} now={isNow} playing={playing} nowIx={isNow ? nowIx : 0} onPlaySong={locked ? undefined : (ix) => onPlaySongAt(item.key, ix)} onSkipSong={(ix) => onSkipSong(item.key, ix)} onRemove={() => onRemove(item.key)} drag={dp} />
             : role === "cortina"
-              ? <QueueCortina key={item.key} item={item} now={isNow} playing={playing} onPlay={() => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />
-              : <QueueSong key={item.key} item={item} now={isNow} playing={playing} onPlay={() => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />;
+              ? <QueueCortina key={item.key} item={item} now={isNow} playing={playing} onPlay={locked ? undefined : () => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />
+              : <QueueSong key={item.key} item={item} now={isNow} playing={playing} onPlay={locked ? undefined : () => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />;
           return gap
             ? <React.Fragment key={item.key}><MissingCortinaHint />{row}</React.Fragment>
             : row;
@@ -673,7 +755,8 @@ function SeekBar({ pos, dur, onSeek, className = "tp-nb-bar" }) {
   );
 }
 
-function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPause, onPrev, onNext, onSeek, onFadeToTanda, onVolume, onToggleMute, cortinaSnippetEnabled, cortinaSnippetSec }) {
+function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPause, onPrev, onNext, onSeek, onFadeToTanda, onVolume, onToggleMute, cortinaSnippetEnabled, cortinaSnippetSec, eqEnabled, eqBands, onToggleEq, onEqBand, onResetEq }) {
+  const eqProps = { enabled: eqEnabled, bands: eqBands, onToggle: onToggleEq, onBand: onEqBand, onReset: onResetEq };
   const songNameOnly = useSongNameOnly();
   if (!now) {
     // Nothing is selected yet. If the queue already has items, the main Play
@@ -696,7 +779,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
           <button className="tp-tbtn nb" disabled><I.prev s={16} /></button>
           <button className="tp-tbtn nb play" onClick={hasQueue ? onPlayPause : undefined} disabled={!hasQueue}><I.play s={22} /></button>
           <button className="tp-tbtn nb" disabled><I.next s={16} /></button>
-          <VolumeControl volume={volume} muted={muted} onVolume={onVolume} onToggleMute={onToggleMute} />
+          <EqualizerControl {...eqProps} /><VolumeControl volume={volume} muted={muted} onVolume={onVolume} onToggleMute={onToggleMute} />
         </div>
       </div>
     );
@@ -748,7 +831,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
           <button className="tp-chip warn" style={{ marginLeft: 6 }} onClick={onFadeToTanda} disabled={!upcoming}>
             <I.fwd s={15} /> Fade to next tanda{upcoming ? <span className="tp-chip-tail"> · {tandaMeta(upcoming.data).orq}</span> : null}
           </button>
-          <VolumeControl volume={volume} muted={muted} onVolume={onVolume} onToggleMute={onToggleMute} />
+          <EqualizerControl {...eqProps} /><VolumeControl volume={volume} muted={muted} onVolume={onVolume} onToggleMute={onToggleMute} />
         </div>
       </div>
     );
@@ -794,7 +877,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
           {playing ? <I.pause s={22} /> : <I.play s={22} />}
         </button>
         <button className="tp-tbtn nb" onClick={onNext}><I.next s={16} /></button>
-        <VolumeControl volume={volume} muted={muted} onVolume={onVolume} onToggleMute={onToggleMute} />
+        <EqualizerControl {...eqProps} /><VolumeControl volume={volume} muted={muted} onVolume={onVolume} onToggleMute={onToggleMute} />
       </div>
     </div>
   );
@@ -832,6 +915,8 @@ function usePlayerEngine(mainDeviceId, playback) {
   const [dur, setDur] = useState(0);
   const [volume, setVolume] = useState(1);      // master output, 0..1
   const [muted, setMuted] = useState(false);
+  const [eqEnabled, setEqEnabledState] = useState(() => localStorage.getItem(EQ_ON_KEY) === "1");
+  const [eqBands, setEqBandsState] = useState(loadEqBands); // per-band gain in dB
   const [flash, setFlash] = useState(null);
   const [preview, setPreview] = useState(null);   // a standalone song played outside the queue
   const [error, setError] = useState(null);       // transient transport error (e.g. missing file)
@@ -839,6 +924,7 @@ function usePlayerEngine(mainDeviceId, playback) {
   const errTimer = useRef(null);
 
   const howlRef = useRef(null);
+  const eqRef = useRef(null);            // { ctx, filters[], sources } once built
   const tickRef = useRef(null);
   const advancingRef = useRef(false);    // guards double-advance (rAF fade vs onend)
   const snippetFiredRef = useRef(false); // cortina snippet: armed once per cortina
@@ -863,7 +949,56 @@ function usePlayerEngine(mainDeviceId, playback) {
 
   // Keep mutable copies for use inside Howl callbacks.
   const stateRef = useRef({});
-  stateRef.current = { queue, nowKey, nowIx, playing, preview, mainDeviceId, cortinaSnippetEnabled, cortinaSnippetSec, cortinaFadeSec, normalizeEnabled, targetLufs, trimSilenceEnabled, trimPadMs, trimEverywhere, songGapSec };
+  stateRef.current = { queue, nowKey, nowIx, playing, preview, mainDeviceId, cortinaSnippetEnabled, cortinaSnippetSec, cortinaFadeSec, normalizeEnabled, targetLufs, trimSilenceEnabled, trimPadMs, trimEverywhere, songGapSec, eqEnabled };
+
+  // ---- equalizer plumbing ----
+  // Route the EQ context's output to the chosen card. A captured element no
+  // longer honors its own setSinkId, so this is how device routing survives.
+  const eqRouteSink = (deviceId) => {
+    const eq = eqRef.current;
+    if (!eq || typeof eq.ctx.setSinkId !== "function") return;
+    try { eq.ctx.setSinkId(deviceId || "default").catch(() => {}); } catch (_e) { /* unsupported */ }
+  };
+  // Push the current band gains onto the filters (flat when the EQ is off, so a
+  // captured node keeps flowing transparently rather than cutting out).
+  const eqApplyGains = () => {
+    const eq = eqRef.current;
+    if (!eq) return;
+    const on = stateRef.current.eqEnabled;
+    eq.filters.forEach((f, i) => { f.gain.value = on ? (eqBands[i] || 0) : 0; });
+  };
+  // Capture an <audio> node into the EQ chain. Idempotent per node. Sets
+  // crossOrigin first (and re-fetches if the element already loaded without it)
+  // so the captured stream isn't tainted to silence; preserves play position.
+  const eqHookNode = (node) => {
+    if (!node) return;
+    let eq = eqRef.current;
+    if (!eq) { eq = buildEqChain(); eqRef.current = eq; if (!eq) return; }
+    if (eq.ctx.state === "suspended") eq.ctx.resume().catch(() => {});
+    if (node.crossOrigin !== "anonymous") {
+      const at = node.currentTime || 0;
+      const wasPlaying = !node.paused;
+      node.crossOrigin = "anonymous";
+      try {
+        node.load(); // re-fetch in CORS mode; the tainted no-cors load is discarded
+        const restore = () => {
+          node.removeEventListener("loadedmetadata", restore);
+          try { if (at > 0.05) node.currentTime = at; } catch (_e) { /* not seekable yet */ }
+          if (wasPlaying) node.play().catch(() => {});
+        };
+        node.addEventListener("loadedmetadata", restore);
+      } catch (_e) { /* load unsupported — leave as-is */ }
+    }
+    if (!eq.sources.has(node)) {
+      try {
+        const src = eq.ctx.createMediaElementSource(node);
+        src.connect(eq.filters[0]);
+        eq.sources.add(node);
+      } catch (_e) { /* already captured elsewhere — ignore */ }
+    }
+    eqApplyGains();
+    eqRouteSink(stateRef.current.mainDeviceId);
+  };
 
   const stopTick = () => { if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null; } };
   const startTick = () => {
@@ -1038,10 +1173,11 @@ function usePlayerEngine(mainDeviceId, playback) {
       // gate passes. In html5 mode the browser decodes the real stream itself.
       format: ["mp3"],
       volume: baseGain,
-      onload: () => { applyTrimMeta(); applySinkId(howlNode(howl), stateRef.current.mainDeviceId); },
+      onload: () => { applyTrimMeta(); applySinkId(howlNode(howl), stateRef.current.mainDeviceId); if (stateRef.current.eqEnabled) eqHookNode(howlNode(howl)); },
       onplay: () => {
         applyTrimMeta();
         applySinkId(howlNode(howl), stateRef.current.mainDeviceId);
+        if (stateRef.current.eqEnabled) eqHookNode(howlNode(howl));
         // Skip the leading silence once, at the very start of the song.
         if (!trimStartAppliedRef.current) {
           trimStartAppliedRef.current = true;
@@ -1064,8 +1200,9 @@ function usePlayerEngine(mainDeviceId, playback) {
     // eslint-disable-next-line
   }, [currentId]);
 
-  // Re-route the live engine when the DJ picks a different main output card.
-  useEffect(() => { applySinkId(howlNode(howlRef.current), mainDeviceId); }, [mainDeviceId]);
+  // Re-route the live engine when the DJ picks a different main output card. The
+  // EQ context (if built) owns output for any captured node, so move it too.
+  useEffect(() => { applySinkId(howlNode(howlRef.current), mainDeviceId); eqRouteSink(mainDeviceId); }, [mainDeviceId]); // eslint-disable-line
 
   // Sync play/pause intent to the current Howl.
   useEffect(() => {
@@ -1089,6 +1226,23 @@ function usePlayerEngine(mainDeviceId, playback) {
   // Master output volume. Howler's global volume scales every Howl (and rides on
   // top of per-song fades), so crossfades keep working relative to this level.
   useEffect(() => { Howler.volume(muted ? 0 : volume); }, [volume, muted]);
+
+  // Persist + apply band gains whenever the curve or the on/off state changes.
+  useEffect(() => {
+    try { localStorage.setItem(EQ_BANDS_KEY, JSON.stringify(eqBands)); } catch (_e) { /* storage unavailable */ }
+    eqApplyGains();
+    // eslint-disable-next-line
+  }, [eqBands, eqEnabled]);
+
+  // Turning the EQ on builds the chain (if needed) and captures the track that's
+  // already playing so it takes effect immediately. Turning it off just flattens
+  // the bands — a captured node keeps flowing through the transparent chain.
+  useEffect(() => {
+    localStorage.setItem(EQ_ON_KEY, eqEnabled ? "1" : "0");
+    if (eqEnabled) eqHookNode(howlNode(howlRef.current));
+    else eqApplyGains();
+    // eslint-disable-next-line
+  }, [eqEnabled]);
 
   useEffect(() => () => { stopTick(); clearGapTimer(); if (howlRef.current) howlRef.current.unload(); }, []);
 
@@ -1252,6 +1406,14 @@ function usePlayerEngine(mainDeviceId, playback) {
     error, dismissError: () => { clearTimeout(errTimer.current); setError(null); },
     volume, muted, setVolume: (v) => { setVolume(Math.min(1, Math.max(0, v))); if (v > 0) setMuted(false); },
     toggleMute: () => setMuted((m) => !m),
+    eqEnabled, eqBands,
+    setEqEnabled: (v) => setEqEnabledState(!!v),
+    setEqBand: (i, db) => setEqBandsState((prev) => {
+      const next = prev.slice();
+      next[i] = Math.min(EQ_GAIN_MAX, Math.max(EQ_GAIN_MIN, Math.round(Number(db) || 0)));
+      return next;
+    }),
+    resetEq: () => setEqBandsState(EQ_BANDS.map(() => 0)),
     previewId: preview ? preview.id : null,
     clearPreview: () => { setPreview(null); setPlaying(false); },
     addTanda, addCortina, addPlaylist, insertSong, remove, reorder, clearQueue,
@@ -1665,6 +1827,66 @@ function VolumeControl({ volume, muted, onVolume, onToggleMute }) {
   );
 }
 
+// Graphic-EQ control: a toggle button in the transport that opens a small panel
+// of per-band sliders. Lives beside the master volume control. The button glows
+// when the EQ is engaged; the panel's switch arms/disarms it.
+function EqualizerControl({ enabled, bands, onToggle, onBand, onReset }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  return (
+    <div className="tp-eqctl" ref={ref}>
+      <button
+        className={"tp-vol-btn tp-eq-btn" + (enabled ? " on" : "")}
+        onClick={() => setOpen((o) => !o)}
+        title="Equalizer"
+        aria-pressed={enabled}
+        aria-expanded={open}
+      >
+        <I.sliders s={16} />
+      </button>
+      {open && (
+        <div className="tp-eq-pop" role="dialog" aria-label="Equalizer">
+          <div className="tp-eq-head">
+            <label className="tp-eq-switch">
+              <input type="checkbox" checked={enabled} onChange={(e) => onToggle(e.target.checked)} />
+              <span>Equalizer</span>
+            </label>
+            <button className="tp-eq-reset" onClick={onReset} title="Flatten all bands">Reset</button>
+          </div>
+          <div className={"tp-eq-bands" + (enabled ? "" : " dim")}>
+            {EQ_BANDS.map((b, i) => {
+              const g = bands[i] || 0;
+              return (
+                <div className="tp-eq-band" key={b.freq}>
+                  <span className="tp-eq-db">{g > 0 ? "+" + g : g}</span>
+                  <input
+                    className="tp-eq-range"
+                    type="range"
+                    min={EQ_GAIN_MIN} max={EQ_GAIN_MAX} step="1"
+                    value={g}
+                    disabled={!enabled}
+                    onChange={(e) => onBand(i, Number(e.target.value))}
+                    aria-label={b.label + " Hz"}
+                  />
+                  <span className="tp-eq-fl">{b.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Headphone monitor strip — a second, visually distinct transport that sits
 // above the floor's NowBar. Only mounts while a track is cued, so it stays out
 // of the way until the DJ auditions something.
@@ -1724,6 +1946,8 @@ function PlayerBar() {
       <NowBar now={p.now} nowIx={p.nowIx} queue={p.queue} playing={p.playing} pos={p.pos} dur={p.dur}
         volume={p.volume} muted={p.muted}
         cortinaSnippetEnabled={p.cortinaSnippetEnabled} cortinaSnippetSec={p.cortinaSnippetSec}
+        eqEnabled={p.eqEnabled} eqBands={p.eqBands}
+        onToggleEq={p.setEqEnabled} onEqBand={p.setEqBand} onResetEq={p.resetEq}
         onPlayPause={p.playPause} onPrev={p.prev} onNext={p.next} onSeek={p.seek}
         onFadeToTanda={p.fadeToTanda} onVolume={p.setVolume} onToggleMute={p.toggleMute} />
     </React.Fragment>

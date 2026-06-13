@@ -197,15 +197,20 @@ function SuggestTandasTip({ suggestions, onDismiss, onBrowse }) {
 const BUILDER_MIN_W = 300;
 const BUILDER_MAX_W = 640;
 
-function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthChange, tandaLayout, onTandaLayoutChange }) {
+function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLayoutChange }) {
   const { imported, tandas, suggestions, totalSongs, totalFolders, roots } = useStore();
-  const goBuild = () => onNavigate && onNavigate("Builder");
-  const goManage = () => onNavigate && onNavigate("Tandas");
+  // The Tandas section is one workspace with three sub-tabs: the builder, the
+  // DJ's saved collection ("mine"), and library-matched suggestions. They share
+  // this mounted component, so the builder's in-progress songs — and its library
+  // tree's expand/collapse state — survive every flip between tabs. Land on the
+  // saved collection, the way clicking "Tandas" always has.
+  const [tab, setTab] = useState("mine");
+  const goBuild = () => setTab("build");
+  const goManage = () => setTab("mine");
   const [builder, setBuilder] = useState({ songs: [], name: "", tags: [], editingId: null });
   const [draggingId, setDraggingId] = useState(null);
   const { toast, flash, dismiss } = useToast();
   const { ask, modal } = useConfirm();
-  const imp = useFolderImport(flash);   // shared import flow
   const player = usePlayer();
   const preview = player.preview;
 
@@ -213,15 +218,13 @@ function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthCh
   const [dockW, setDockW] = useState(builderWidth || 380);
   useEffect(() => { setDockW(builderWidth || 380); }, [builderWidth]);
 
-  // Manage view sub-tabs: the DJ's saved tandas vs. library-matched suggestions.
-  const [manageTab, setManageTab] = useState("mine");
   const sugg = suggestions || [];
 
   // One-time intro to suggested tandas (like the Smart Organize tip). Its CTA
   // jumps straight to the Suggestions tab.
   const [suggestTipDismissed, setSuggestTipDismissed] = useState(() => localStorage.getItem(SUGGEST_TIP_KEY) === "1");
   const dismissSuggestTip = () => { localStorage.setItem(SUGGEST_TIP_KEY, "1"); setSuggestTipDismissed(true); };
-  const browseSuggestions = () => { setManageTab("suggestions"); dismissSuggestTip(); };
+  const browseSuggestions = () => { setTab("suggestions"); dismissSuggestTip(); };
 
   // Grid (tabs) vs. list (big rows) layout for the manage view. List gives each
   // song the full row width, so long titles (often with the orquesta prepended)
@@ -297,61 +300,60 @@ function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthCh
 
   const commitWidth = (w) => { if (onBuilderWidthChange) onBuilderWidthChange(w); };
 
-  // The view header sits over the library column only, so the builder dock can
-  // run the full height of the workspace (its left hairline reads as one clean
-  // seam instead of starting partway down beneath a full-width header).
+  // One light section-tab bar — Build · My tandas · Suggestions — heads the
+  // whole workspace, so every tanda task reads as one place. Underline tabs
+  // (not the heavy segmented pill) keep it reading as primary navigation.
+  const sectabs = (
+    <div className="tv-sectabs" role="tablist" aria-label="Tandas">
+      <button className={"tv-sectab" + (tab === "build" ? " on" : "")} role="tab" aria-selected={tab === "build"}
+        onClick={() => setTab("build")}>
+        Build {builder.songs.length > 0 && <span className="ct">{builder.songs.length}</span>}<I.scissors s={15} />
+      </button>
+      <button className={"tv-sectab" + (tab === "mine" ? " on" : "")} role="tab" aria-selected={tab === "mine"}
+        onClick={() => setTab("mine")}>
+        My tandas {tandas.length > 0 && <span className="ct">{tandas.length}</span>}
+      </button>
+      <button className={"tv-sectab" + (tab === "suggestions" ? " on" : "")} role="tab" aria-selected={tab === "suggestions"}
+        onClick={() => setTab("suggestions")}>
+        Suggestions {sugg.length > 0 && <span className="ct">{sugg.length}</span>}
+      </button>
+    </div>
+  );
+
+  const subtitle = (
+    <div className="tv-sub">
+      {tab === "build" ? (
+        <><b>{totalSongs}</b> songs across <b>{totalFolders}</b> folders
+          {roots && roots.length > 1 && <> in <b>{roots.length}</b> libraries</>}</>
+      ) : tab === "mine"
+        ? "Tandas you've saved to your collection"
+        : "Built from songs already in your library — every track is one you own"}
+    </div>
+  );
+
+  // In Build the header sits over the library column only, so the builder bench
+  // runs the panel's full height (one clean seam — no half-height background
+  // band). In the manage tabs it spans the full width and carries the layout
+  // toggle on the right.
   const header = (
     <div className="tv-head">
-      <div>
-        {mode === "build" ? (
-          <>
-            <div className="tv-title">Tanda builder</div>
-            <div className="tv-sub">
-              <b>{totalSongs}</b> songs across <b>{totalFolders}</b> folders
-              {roots && roots.length > 1 && <> in <b>{roots.length}</b> libraries</>}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="tv-subtabs" role="tablist">
-              <button className={"tv-subtab" + (manageTab === "mine" ? " on" : "")} role="tab" aria-selected={manageTab === "mine"}
-                onClick={() => setManageTab("mine")}>
-                My tandas {tandas.length > 0 && <span className="ct">{tandas.length}</span>}
-              </button>
-              <button className={"tv-subtab" + (manageTab === "suggestions" ? " on" : "")} role="tab" aria-selected={manageTab === "suggestions"}
-                onClick={() => setManageTab("suggestions")}>
-                Suggestions {sugg.length > 0 && <span className="ct">{sugg.length}</span>}
-              </button>
-            </div>
-            <div className="tv-sub">
-              {manageTab === "mine"
-                ? "Tandas you've saved to your collection"
-                : "Built from songs already in your library — every track is one you own"}
-            </div>
-          </>
-        )}
-      </div>
-      <div className="tv-head-r">
-        {mode === "build" && (
-          <button className="tp-btn" onClick={imp.begin} disabled={imp.scanning} title="Import another folder into your library">
-            <I.upload s={16} /> {imp.scanning ? "Scanning…" : "Add folder"}
-          </button>
-        )}
-        {mode !== "build" && (
+      <div>{sectabs}{subtitle}</div>
+      {tab !== "build" && (
+        <div className="tv-head-r">
           <div className="tv-viewtoggle" role="group" aria-label="Tanda layout">
             <button className={"tv-vt" + (tandaView === "grid" ? " on" : "")} onClick={() => setTandaView("grid")}
               title="Grid view" aria-pressed={tandaView === "grid"}><I.grid s={15} /></button>
             <button className={"tv-vt" + (tandaView === "list" ? " on" : "")} onClick={() => setTandaView("list")}
               title="List view" aria-pressed={tandaView === "list"}><I.rows s={15} /></button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 
   return (
     <div className="tv">
-      {mode === "build" ? (
+      {tab === "build" ? (
         <div className="tv-body">
           <div className="tv-main">
             {header}
@@ -364,13 +366,12 @@ function TandasView({ mode = "build", onNavigate, builderWidth, onBuilderWidthCh
       ) : (
         <>
           {header}
-          <ManageGrid tab={manageTab} tandas={tandas} suggestions={sugg} onEdit={editTanda} onDelete={deleteTanda} onNew={newTanda} onPlay={playTanda}
+          <ManageGrid tab={tab} tandas={tandas} suggestions={sugg} onEdit={editTanda} onDelete={deleteTanda} onNew={newTanda} onPlay={playTanda}
             onSaveSuggestion={saveSuggestion} onDismissSuggestion={dismissSuggestion} onBrowseSuggestions={browseSuggestions} preview={preview} view={tandaView} />
         </>
       )}
 
-      {imp.modal}
-      {mode !== "build" && !suggestTipDismissed && sugg.length > 0 && (
+      {tab !== "build" && !suggestTipDismissed && sugg.length > 0 && (
         <SuggestTandasTip suggestions={sugg} onDismiss={dismissSuggestTip} onBrowse={browseSuggestions} />
       )}
 

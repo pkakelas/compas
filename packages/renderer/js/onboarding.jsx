@@ -204,7 +204,7 @@ const ONBOARDING_STEPS = [
     title: "Build tandas",
     body: "Group songs into tandas in the builder — drag tracks onto the bench, reorder them, and save the set ready for the night.",
     demo: DemoTanda,
-    how: () => <>Open the <b>Tandas</b> tab and drag songs onto the bench.</>,
+    how: () => <>Open the <Where trail={["Tandas", "Build"]} /> tab and drag songs onto the bench.</>,
   },
   {
     icon: "spark", eyebrow: "Tandas",
