@@ -967,28 +967,38 @@ function usePlayerEngine(mainDeviceId, playback) {
     const on = stateRef.current.eqEnabled;
     eq.filters.forEach((f, i) => { f.gain.value = on ? (eqBands[i] || 0) : 0; });
   };
-  // Capture an <audio> node into the EQ chain. Idempotent per node. Sets
-  // crossOrigin first (and re-fetches if the element already loaded without it)
-  // so the captured stream isn't tainted to silence; preserves play position.
+  // Mark an <audio> node CORS-clean before/at load so the EQ can capture it
+  // without tainting the stream to silence. Set early (while the element is
+  // still loading) this is seamless; on an element that already loaded without
+  // it, fall back to a re-fetch that preserves play position.
+  const eqMarkCors = (node) => {
+    if (!node || node.crossOrigin === "anonymous") return;
+    // readyState 0 = HAVE_NOTHING: the fetch hasn't resolved metadata yet, so
+    // simply tagging it makes the in-flight (or next) load CORS-clean — no
+    // reload, no hitch. A loaded element must be re-fetched to shed the taint.
+    if (node.readyState === 0) { node.crossOrigin = "anonymous"; return; }
+    const at = node.currentTime || 0;
+    const wasPlaying = !node.paused;
+    node.crossOrigin = "anonymous";
+    try {
+      node.load(); // re-fetch in CORS mode; the tainted no-cors load is discarded
+      const restore = () => {
+        node.removeEventListener("loadedmetadata", restore);
+        try { if (at > 0.05) node.currentTime = at; } catch (_e) { /* not seekable yet */ }
+        if (wasPlaying) node.play().catch(() => {});
+      };
+      node.addEventListener("loadedmetadata", restore);
+    } catch (_e) { /* load unsupported — leave as-is */ }
+  };
+  // Capture an <audio> node into the EQ chain. Idempotent per node. The node is
+  // marked CORS-clean at load time (see eqMarkCors) so the common path here is
+  // a pure connect with no re-fetch; eqMarkCors is a defensive fallback.
   const eqHookNode = (node) => {
     if (!node) return;
     let eq = eqRef.current;
     if (!eq) { eq = buildEqChain(); eqRef.current = eq; if (!eq) return; }
     if (eq.ctx.state === "suspended") eq.ctx.resume().catch(() => {});
-    if (node.crossOrigin !== "anonymous") {
-      const at = node.currentTime || 0;
-      const wasPlaying = !node.paused;
-      node.crossOrigin = "anonymous";
-      try {
-        node.load(); // re-fetch in CORS mode; the tainted no-cors load is discarded
-        const restore = () => {
-          node.removeEventListener("loadedmetadata", restore);
-          try { if (at > 0.05) node.currentTime = at; } catch (_e) { /* not seekable yet */ }
-          if (wasPlaying) node.play().catch(() => {});
-        };
-        node.addEventListener("loadedmetadata", restore);
-      } catch (_e) { /* load unsupported — leave as-is */ }
-    }
+    eqMarkCors(node);
     if (!eq.sources.has(node)) {
       try {
         const src = eq.ctx.createMediaElementSource(node);
@@ -1193,6 +1203,12 @@ function usePlayerEngine(mainDeviceId, playback) {
       onplayerror: () => { howl.once("unlock", () => howl.play()); },
     });
     howlRef.current = howl;
+    // Mark the element CORS-clean up front, while it's still loading and silent.
+    // The audio protocol always sends permissive CORS headers, so this is free
+    // for normal playback — but it means enabling the EQ later never has to
+    // re-fetch a tainted, already-playing element (which caused an audible hitch
+    // the first time the EQ was switched on).
+    eqMarkCors(howlNode(howl));
     applySinkId(howlNode(howl), stateRef.current.mainDeviceId);
     if (stateRef.current.playing) howl.play();
 
