@@ -183,6 +183,13 @@ function installUpdate() {
   return ipcRenderer.invoke('update:install');
 }
 
+/** Hold/release a display-sleep blocker so the screen stays on while music
+ *  plays. Pass the live play/pause state; the main process keeps a single
+ *  blocker for the playing period and releases it on pause/stop. */
+function setKeepAwake(keepAwake: boolean) {
+  return ipcRenderer.invoke('power:keepAwake', keepAwake);
+}
+
 /** Subscribe to "a new version has downloaded" events. The callback receives
  *  `{version, releaseNotes}`. Returns an unsubscribe function. */
 function onUpdateDownloaded(cb: (info: unknown) => void) {
@@ -233,4 +240,5 @@ export {
   getUpdateStatus,
   installUpdate,
   onUpdateDownloaded,
+  setKeepAwake,
 };

@@ -1076,6 +1076,16 @@ function usePlayerEngine(mainDeviceId, playback) {
     // eslint-disable-next-line
   }, [playing]);
 
+  // Keep the OS display awake while playing. Without this the screen sleeps
+  // after the system idle timeout during a long unattended set; the window
+  // then becomes occluded and the playback tick gets throttled, making the
+  // engine flicker (rapid stop/start) until input wakes the display.
+  useEffect(() => {
+    if (window.compas && window.compas.setKeepAwake) {
+      try { window.compas.setKeepAwake(playing); } catch (_e) { /* bridge unavailable */ }
+    }
+  }, [playing]);
+
   // Master output volume. Howler's global volume scales every Howl (and rides on
   // top of per-song fades), so crossfades keep working relative to this level.
   useEffect(() => { Howler.volume(muted ? 0 : volume); }, [volume, muted]);

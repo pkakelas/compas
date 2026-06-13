@@ -164,6 +164,14 @@ class WindowManager implements AppModule {
         contextIsolation: true,
         sandbox: false, // Sandbox disabled so the preload can use Node.js APIs (ipcRenderer, etc.)
         webviewTag: false, // The webview tag is not recommended. Consider alternatives like an iframe or Electron's BrowserView. @see https://www.electronjs.org/docs/latest/api/webview-tag#warning
+        // Keep the renderer running at full speed even when the window is
+        // occluded (e.g. the OS turns the display off after the idle timeout).
+        // Chromium otherwise throttles timers/animations to ~1Hz on a hidden
+        // page, which starves the playback tick that drives crossfades and
+        // song advance — the audio engine then desyncs and "flickers" (rapid
+        // stop/start) during a live set until input wakes the display. A DJ
+        // tool must never throttle mid-set.
+        backgroundThrottling: false,
         preload: this.#preload.path,
       },
     });

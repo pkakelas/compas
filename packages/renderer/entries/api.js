@@ -51,6 +51,9 @@ window.compas = {
   getUpdateStatus: preload.getUpdateStatus,
   installUpdate: preload.installUpdate,
   onUpdateDownloaded: preload.onUpdateDownloaded,
+  // Hold the display awake while playing so the screen never sleeps mid-set
+  // (and the renderer never gets occluded + throttled).
+  setKeepAwake: preload.setKeepAwake,
   // URL the audio engine can stream a song from (range requests supported).
   audioUrl: (id) => `${AUDIO_SCHEME}://song/${id}`,
 };

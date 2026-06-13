@@ -11,6 +11,7 @@ import {databaseModule} from './modules/Database.js';
 import {ipcModule} from './modules/Ipc.js';
 import {audioProtocolModule, registerAudioScheme} from './modules/AudioProtocol.js';
 import {mediaDevicePermissionsModule} from './modules/MediaDevicePermissions.js';
+import {powerSaveBlockerModule} from './modules/PowerSaveBlocker.js';
 
 // The custom audio scheme must be registered as privileged before app ready.
 registerAudioScheme();
@@ -21,6 +22,7 @@ export async function initApp(initConfig: AppInitConfig) {
     .init(databaseModule())
     .init(audioProtocolModule())
     .init(mediaDevicePermissionsModule())
+    .init(powerSaveBlockerModule())
     .init(ipcModule())
     .init(createWindowManagerModule({initConfig, openDevTools: import.meta.env.DEV}))
     .init(disallowMultipleAppInstance())
