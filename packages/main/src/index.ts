@@ -12,6 +12,7 @@ import {ipcModule} from './modules/Ipc.js';
 import {audioProtocolModule, registerAudioScheme} from './modules/AudioProtocol.js';
 import {mediaDevicePermissionsModule} from './modules/MediaDevicePermissions.js';
 import {powerSaveBlockerModule} from './modules/PowerSaveBlocker.js';
+import {antiThrottlingModule} from './modules/AntiThrottling.js';
 
 // The custom audio scheme must be registered as privileged before app ready.
 registerAudioScheme();
@@ -19,6 +20,7 @@ registerAudioScheme();
 
 export async function initApp(initConfig: AppInitConfig) {
   const moduleRunner = createModuleRunner()
+    .init(antiThrottlingModule())
     .init(databaseModule())
     .init(audioProtocolModule())
     .init(mediaDevicePermissionsModule())

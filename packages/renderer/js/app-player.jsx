@@ -1235,7 +1235,16 @@ function usePlayerEngine(mainDeviceId, playback) {
   // engine flicker (rapid stop/start) until input wakes the display.
   useEffect(() => {
     if (window.compas && window.compas.setKeepAwake) {
-      try { window.compas.setKeepAwake(playing); } catch (_e) { /* bridge unavailable */ }
+      try {
+        // Resolves to { display, system } — the live isStarted() state of both
+        // power blockers. Log it so a "did keep-awake actually engage?" question
+        // is answerable from devtools during a real set, not a guess.
+        Promise.resolve(window.compas.setKeepAwake(playing)).then((status) => {
+          if (playing && status && (!status.display || !status.system)) {
+            console.warn("[power] keep-awake did not fully engage", status);
+          }
+        }).catch(() => {});
+      } catch (_e) { /* bridge unavailable */ }
     }
   }, [playing]);
 
