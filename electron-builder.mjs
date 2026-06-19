@@ -59,6 +59,20 @@ export default /** @type import('electron-builder').Configuration */
     extendInfo: {
       CFBundleDisplayName: 'Compás',
     },
+    // Code signing + notarization for distribution outside the Mac App Store.
+    // The Developer ID Application cert is supplied via CSC_LINK/CSC_KEY_PASSWORD
+    // (base64 .p12 + password) which electron-builder reads directly; locally,
+    // a cert in the login keychain is used automatically. Hardened runtime +
+    // entitlements are mandatory for notarization.
+    hardenedRuntime: true,
+    gatekeeperAssess: false,
+    entitlements: 'buildResources/entitlements.mac.plist',
+    entitlementsInherit: 'buildResources/entitlements.mac.plist',
+    // Notarize only when App Store Connect API key creds are present (CI
+    // release). electron-builder reads APPLE_API_KEY / APPLE_API_KEY_ID /
+    // APPLE_API_ISSUER itself; gating keeps local `compile:mac` building an
+    // unsigned, un-notarized app instead of failing.
+    notarize: process.env.APPLE_API_KEY_ID ? true : false,
   },
   win: {
     // Ship both 64-bit Intel/AMD and ARM Windows installers.
