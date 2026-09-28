@@ -3,6 +3,7 @@ import type {ModuleContext} from '../ModuleContext.js';
 import {BrowserWindow, dialog, ipcMain, shell} from 'electron';
 import {basename} from 'node:path';
 import {scanFolder, guessStyle, looksLikeCortinaFolder} from '../services/scan.js';
+import {clearAudioCache} from '../services/transcode.js';
 import {AnalysisManager, type AnalysisState} from '../services/loudness.js';
 import {LibraryWatcher} from '../services/watcher.js';
 import {writeSongTags} from '../services/tags.js';
@@ -245,6 +246,8 @@ export class IpcModule implements AppModule {
 
     ipcMain.handle('library:clear', (): Library => {
       clearLibrary();
+      // Cached AIFF→WAV conversions are keyed by song id, which restarts here.
+      void clearAudioCache();
       watcher.sync();
       return getLibrary();
     });

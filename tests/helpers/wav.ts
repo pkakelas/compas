@@ -1,4 +1,6 @@
+import {execFileSync} from 'node:child_process';
 import {writeFileSync, mkdirSync} from 'node:fs';
+import {createRequire} from 'node:module';
 import {join} from 'node:path';
 
 /**
@@ -37,6 +39,9 @@ export function writeWav(path: string, seconds = 1): void {
   writeFileSync(path, buf);
 }
 
+/** Titles of the lossless fixture tracks, so tests can find them by name. */
+export const AIFF_FLAC_TITLES = {flac: 'Milonguero Viejo', aiff: 'El Choclo'} as const;
+
 /**
  * Build a small tango library on disk under `root`, organised the way a DJ
  * would: one folder per style. Returns the per-style file counts so tests can
@@ -53,6 +58,69 @@ export function makeMusicFixture(root: string): {tango: number; vals: number; to
 
   tangoTitles.forEach(t => writeWav(join(tangoDir, `${t}.wav`)));
   valsTitles.forEach(t => writeWav(join(valsDir, `${t}.wav`)));
+  // One lossless track in each of the containers a DJ's rips come in: FLAC
+  // plays natively, AIFF only through the app's WAV conversion.
+  writeFlac(join(tangoDir, `${AIFF_FLAC_TITLES.flac}.flac`));
+  writeAiff(join(tangoDir, `${AIFF_FLAC_TITLES.aiff}.aiff`));
 
-  return {tango: tangoTitles.length, vals: valsTitles.length, total: tangoTitles.length + valsTitles.length};
+  const tango = tangoTitles.length + 2;
+  return {tango, vals: valsTitles.length, total: tango + valsTitles.length};
+}
+
+/** Encode a sample rate as the 80-bit IEEE 754 extended float AIFF requires. */
+function writeExtended80(buf: Buffer, offset: number, value: number): void {
+  // value = mantissa · 2^(exp − 16383 − 63); pick exp so the leading bit is set.
+  let e = 0;
+  while (2 ** (e + 1) <= value) e++;
+  buf.writeUInt16BE(16383 + e, offset);
+  buf.writeBigUInt64BE(BigInt(value) << BigInt(63 - e), offset + 2);
+}
+
+/**
+ * Write a minimal but VALID AIFF file (mono, 16-bit big-endian PCM, 8kHz) of
+ * `seconds` length — the same quiet sine tone as `writeWav`, in the container
+ * Chromium can't demux (so the app has to convert it before playing).
+ */
+export function writeAiff(path: string, seconds = 1): void {
+  const sampleRate = 8000;
+  const numSamples = Math.floor(sampleRate * seconds);
+  const dataSize = numSamples * 2; // 16-bit mono
+  // FORM(12) + COMM(8+18) + SSND(8+8) + data
+  const buf = Buffer.alloc(12 + 26 + 16 + dataSize);
+
+  buf.write('FORM', 0);
+  buf.writeUInt32BE(buf.length - 8, 4);
+  buf.write('AIFF', 8);
+  // COMM chunk
+  buf.write('COMM', 12);
+  buf.writeUInt32BE(18, 16);
+  buf.writeUInt16BE(1, 20); // mono
+  buf.writeUInt32BE(numSamples, 22); // sample frames
+  buf.writeUInt16BE(16, 26); // bits per sample
+  writeExtended80(buf, 28, sampleRate);
+  // SSND chunk
+  buf.write('SSND', 38);
+  buf.writeUInt32BE(8 + dataSize, 42);
+  buf.writeUInt32BE(0, 46); // offset
+  buf.writeUInt32BE(0, 50); // block size
+
+  for (let i = 0; i < numSamples; i++) {
+    const sample = Math.round(Math.sin((2 * Math.PI * 220 * i) / sampleRate) * 3000);
+    buf.writeInt16BE(sample, 54 + i * 2);
+  }
+  writeFileSync(path, buf);
+}
+
+/**
+ * Write a FLAC file (mono, 8kHz sine) of `seconds` length using the ffmpeg
+ * binary the app bundles, so the fixture is exactly what real encoders produce.
+ */
+export function writeFlac(path: string, seconds = 1): void {
+  const require = createRequire(new URL('../../packages/main/package.json', import.meta.url));
+  const ffmpeg = require('ffmpeg-static') as string;
+  execFileSync(ffmpeg, [
+    '-v', 'error', '-y',
+    '-f', 'lavfi', '-i', `sine=frequency=220:sample_rate=8000:duration=${seconds}`,
+    '-c:a', 'flac', path,
+  ]);
 }

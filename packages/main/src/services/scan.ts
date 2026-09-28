@@ -13,6 +13,7 @@ const AUDIO_EXTENSIONS = new Set([
   '.opus',
   '.aiff',
   '.aif',
+  '.aifc',
   '.wma',
 ]);
 

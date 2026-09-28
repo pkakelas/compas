@@ -40,7 +40,20 @@ export async function launchApp(): Promise<LaunchedApp> {
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
+  await skipTour(page);
   return {app, page, userDataDir};
+}
+
+/**
+ * Dismiss the first-run feature tour if it's up. A fresh user-data dir always
+ * triggers it, and its scrim swallows every click until it's skipped.
+ */
+export async function skipTour(page: Page): Promise<void> {
+  const skip = page.locator('.tp-ob-scrim .tp-ob-skip');
+  if (await skip.isVisible({timeout: 2_000}).catch(() => false)) {
+    await skip.click();
+    await page.locator('.tp-ob-scrim').waitFor({state: 'detached'}).catch(() => {});
+  }
 }
 
 /**

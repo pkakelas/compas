@@ -6,6 +6,7 @@ import {stat} from 'node:fs/promises';
 import {Readable} from 'node:stream';
 import {extname} from 'node:path';
 import {getSongPath} from './Database.js';
+import {needsTranscode, resolvePlayable} from '../services/transcode.js';
 
 export const AUDIO_SCHEME = 'compas-audio';
 
@@ -21,6 +22,7 @@ const MIME_BY_EXT: Record<string, string> = {
   '.wav': 'audio/wav',
   '.aiff': 'audio/aiff',
   '.aif': 'audio/aiff',
+  '.aifc': 'audio/aiff',
 };
 
 function contentTypeFor(filePath: string): string {
@@ -96,16 +98,37 @@ export class AudioProtocolModule implements AppModule {
         return new Response('Not found', {status: 404});
       }
 
+      // Check the library file itself first, so a song that vanished from disk
+      // reports 404 (the renderer offers to drop it) rather than a conversion
+      // error.
+      const source = await stat(filePath).catch(() => null);
+      if (!source || !source.isFile()) {
+        return new Response('Not found', {status: 404});
+      }
+
+      // Formats Chromium can't demux (AIFF) are served from a cached WAV
+      // conversion instead of the original; everything else streams as-is.
+      let servePath = filePath;
+      let contentType = contentTypeFor(filePath);
+      if (needsTranscode(filePath)) {
+        try {
+          const playable = await resolvePlayable(songId, filePath);
+          servePath = playable.path;
+          contentType = playable.contentType ?? contentTypeFor(playable.path);
+        } catch (err) {
+          console.error(`[audio] could not convert ${filePath}:`, err);
+          return new Response('Could not convert audio', {status: 500});
+        }
+      }
+
       let size: number;
       try {
-        const info = await stat(filePath);
+        const info = await stat(servePath);
         if (!info.isFile()) return new Response('Not found', {status: 404});
         size = info.size;
       } catch {
         return new Response('Not found', {status: 404});
       }
-
-      const contentType = contentTypeFor(filePath);
       const range = parseRange(request.headers.get('range'), size);
 
       // A bare HEAD/metadata probe still needs the headers that advertise range
@@ -124,7 +147,7 @@ export class AudioProtocolModule implements AppModule {
 
       if (range) {
         const {start, end} = range;
-        const stream = createReadStream(filePath, {start, end});
+        const stream = createReadStream(servePath, {start, end});
         return new Response(Readable.toWeb(stream) as unknown as ReadableStream, {
           status: 206,
           headers: {
@@ -137,7 +160,7 @@ export class AudioProtocolModule implements AppModule {
         });
       }
 
-      const stream = createReadStream(filePath);
+      const stream = createReadStream(servePath);
       return new Response(Readable.toWeb(stream) as unknown as ReadableStream, {
         status: 200,
         headers: {
