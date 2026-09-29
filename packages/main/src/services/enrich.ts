@@ -42,6 +42,7 @@ type Derived = {
   songTitle: string; // best guess at the bare song title (for catalog lookup)
   songTitleAlt: string | null; // alternate (glued "-Singer" removed)
   mainArtistRaw: string | null;
+  artistWasCombined: boolean; // the artist tag also carried the singer(s)
   voices: string[];
   instrumental: boolean;
   year: number | null;
@@ -57,6 +58,26 @@ const GLUED_SINGER = /^(.+?)-\s*([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóú�
 function junkArtist(s: string): boolean {
   // The literal word "Instrumental" in the artist tag is a marker, not a name.
   return /^instrumental$/i.test(s.trim());
+}
+
+// An artist tag crediting orchestra and singer together, split on a spaced
+// dash or a slash: "Carlos Di Sarli - Oscar Serpa", "Troilo / Fiorentino".
+const COMBINED_ARTIST_SEP = /\s+[-–—]\s+|\s*\/\s*/;
+
+/**
+ * Split an "Orchestra - Singer" artist tag. Only splits when the leading part is
+ * a known orchestra (so a hyphenated name or "X - Topic" is left alone); the
+ * rest is the singer credit, which may itself name several voices or mark the
+ * recording instrumental. Returns null when the tag isn't such a credit.
+ */
+function splitCombinedArtist(raw: string): {orq: string; credit: string} | null {
+  const parts = raw.split(COMBINED_ARTIST_SEP).map(p => p.trim());
+  if (parts.length < 2 || parts.some(p => !p)) return null;
+  const [orq, ...rest] = parts;
+  const credit = rest.join(', ');
+  if (/^(topic|dir\b)/i.test(credit)) return null;
+  if (!matchCanonicalArtist(orq) && classifyArtist(orq) !== 'orchestra') return null;
+  return {orq, credit};
 }
 
 /** Trim leading/trailing dashes and whitespace left behind after stripping the
@@ -78,6 +99,17 @@ export function derive(song: EnrichInput): Derived {
       : null;
   let instrumental = !!(song.orq && junkArtist(song.orq));
   let voices: string[] = [];
+
+  // An artist tag that also credits the singer: keep just the orchestra (so the
+  // catalog lookup keys on its surname, not the singer's) and take the voices.
+  let artistWasCombined = false;
+  const combined = mainArtistRaw ? splitCombinedArtist(mainArtistRaw) : null;
+  if (combined) {
+    mainArtistRaw = combined.orq;
+    artistWasCombined = true;
+    if (isInstrumentalCredit(combined.credit)) instrumental = true;
+    else voices = splitVoices(combined.credit);
+  }
 
   // Work on the title with the leading track number removed.
   let t = (song.title || '').trim().replace(/^\d{1,2}[\s.\-]+/, '');
@@ -143,7 +175,7 @@ export function derive(song: EnrichInput): Derived {
   const folderStyle = dancedStyleFromFolder(song.folderPath);
   const dancedStyle = folderStyle === 'cortina' ? 'cortina' : (markerStyle ?? folderStyle);
 
-  return {songTitle, songTitleAlt, mainArtistRaw, voices, instrumental, year, dancedStyle};
+  return {songTitle, songTitleAlt, mainArtistRaw, artistWasCombined, voices, instrumental, year, dancedStyle};
 }
 
 export type ProposalField = 'orq' | 'singer' | 'year' | 'genre';
@@ -253,6 +285,8 @@ export function resolveSong(song: EnrichInput): Proposal | null {
     const dict = matchCanonicalArtist(d.mainArtistRaw);
     if (dict) {
       proposed.orq = dict; // confident orchestra (incl. one recovered from the title)
+    } else if (d.artistWasCombined) {
+      proposed.orq = displayArtist(d.mainArtistRaw as string); // singer split off
     } else if (junkArtist(current.orq) || isIgnoredArtist(current.orq)) {
       // The orchestra field holds a non-artist value (the literal word
       // "Instrumental", or a junk value from known-artists.json) and we couldn't
