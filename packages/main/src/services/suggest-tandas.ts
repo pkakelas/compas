@@ -103,11 +103,42 @@ function refIdOf(t: RefTanda): string {
   return (h >>> 0).toString(36);
 }
 
-/** Choose the best library candidate for a reference song, or null. */
-function pickSong(
-  ref: RefSong,
-  index: Map<string, LibSong[]>,
-  used: Set<string>,
+/** What a library lookup needs to know about a song: a title (plus optional
+ *  alternate spellings), its orchestra, and a year to break ties. */
+export type SongQuery = {title: string; alts?: string[]; orq: string; year?: number | null};
+
+/** Title+orchestra → library songs. Build once per lookup batch (see
+ *  buildLibraryIndex); shared with the playlist importer. */
+export type LibraryIndex = Map<string, LibSong[]>;
+
+/**
+ * Index every library song under each of its plausible (title, orchestra)
+ * keys so a reference song can be resolved with a single Map lookup.
+ */
+export function buildLibraryIndex(library: Library): LibraryIndex {
+  const index: LibraryIndex = new Map();
+  for (const s of library.songs) {
+    const surname = libOrqSurname(s);
+    if (!surname) continue; // no orchestra to match on
+    for (const cand of libTitleCandidates(s.title)) {
+      const tk = strictTitleKey(cand);
+      if (!tk) continue;
+      const k = `${tk}|${surname}`;
+      const arr = index.get(k);
+      if (arr) arr.push(s);
+      else index.set(k, [s]);
+    }
+  }
+  return index;
+}
+
+/** Choose the best library candidate for a reference song, or null. `used`
+ *  holds song ids already taken by the current tanda so a title that repeats
+ *  can't resolve to the same recording twice. */
+export function findLibrarySong(
+  index: LibraryIndex,
+  ref: SongQuery,
+  used: Set<string> = new Set(),
 ): LibSong | null {
   const keys = [ref.title, ...(ref.alts ?? [])].map(t => libKey(t, ref.orq));
   const seen = new Set<string>();
@@ -122,16 +153,14 @@ function pickSong(
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
   // Several recordings of this title by this orchestra: disambiguate by year.
-  if (ref.year != null) {
-    const exact = candidates.find(s => s.year === ref.year);
+  const year = ref.year;
+  if (year != null) {
+    const exact = candidates.find(s => s.year === year);
     if (exact) return exact;
     // Nearest year wins — the DJ still owns a genuine take of this song.
     return candidates
       .slice()
-      .sort(
-        (a, b) =>
-          Math.abs((a.year ?? 0) - ref.year!) - Math.abs((b.year ?? 0) - ref.year!),
-      )[0];
+      .sort((a, b) => Math.abs((a.year ?? 0) - year) - Math.abs((b.year ?? 0) - year))[0];
   }
   return candidates[0];
 }
@@ -141,19 +170,7 @@ function pickSong(
  * `saved` is used to drop suggestions that duplicate a tanda the DJ already kept.
  */
 export function suggestTandas(library: Library, saved: Tanda[] = []): SuggestedTanda[] {
-  const index = new Map<string, LibSong[]>();
-  for (const s of library.songs) {
-    const surname = libOrqSurname(s);
-    if (!surname) continue; // no orchestra to match on
-    for (const cand of libTitleCandidates(s.title)) {
-      const tk = strictTitleKey(cand);
-      if (!tk) continue;
-      const k = `${tk}|${surname}`;
-      const arr = index.get(k);
-      if (arr) arr.push(s);
-      else index.set(k, [s]);
-    }
-  }
+  const index = buildLibraryIndex(library);
 
   // Song-id signature → saved tanda id, so a suggestion the DJ already kept is
   // shown as "Saved" rather than removed.
@@ -169,7 +186,7 @@ export function suggestTandas(library: Library, saved: Tanda[] = []): SuggestedT
     const matched: LibSong[] = [];
     let ok = true;
     for (const song of ref.songs) {
-      const hit = pickSong(song, index, used);
+      const hit = findLibrarySong(index, song, used);
       if (!hit) {
         ok = false;
         break;

@@ -82,6 +82,8 @@ export type Tanda = {
   name: string | null;
   songs: Song[];
   tags: TandaTag[];
+  // False for a tanda that exists only inside an imported playlist.
+  inCollection: boolean;
 };
 
 /** A playlist item is either a saved tanda or a single cortina song. */
@@ -207,6 +209,10 @@ function migrate(d: Database.Database): void {
   // Loudness/silence analysis columns. Raw measurements only — the player
   // derives the playback gain (from a target LUFS setting) and the trim offsets
   // (from a pad setting) on the fly, so changing those never needs a re-analysis.
+  // Tandas created by a playlist import live only inside that playlist until
+  // the DJ keeps one: they stay out of "My tandas" and are removed once no
+  // playlist uses them.
+  addColumns(d, 'tandas', [['in_collection', 'INTEGER NOT NULL DEFAULT 1']]);
   addColumns(d, 'songs', [
     ['loudness_lufs', 'REAL'],
     ['loudness_peak', 'REAL'],
@@ -582,6 +588,7 @@ export function listTandas(): Tanda[] {
     id: number;
     name: string | null;
     created_at: number;
+    in_collection: number;
   }[];
   const songStmt = d.prepare(`
     SELECT s.* FROM tanda_songs ts
@@ -597,7 +604,26 @@ export function listTandas(): Tanda[] {
     name: t.name,
     songs: (songStmt.all(t.id) as SongRow[]).map(rowToSong),
     tags: tagStmt.all(t.id) as TandaTag[],
+    inCollection: t.in_collection !== 0,
   }));
+}
+
+/** The DJ's own tandas ("My tandas"), without playlist-only ones. */
+export function listCollectionTandas(): Tanda[] {
+  return listTandas().filter(t => t.inCollection);
+}
+
+/** Keep a playlist-only tanda in "My tandas". */
+export function keepTanda(id: string): void {
+  getDb().prepare('UPDATE tandas SET in_collection = 1 WHERE id = ?').run(Number(id));
+}
+
+/** Drop playlist-only tandas that no playlist references any more. */
+function pruneOrphanTandas(d: Database.Database): void {
+  d.prepare(
+    `DELETE FROM tandas WHERE in_collection = 0 AND id NOT IN
+       (SELECT ref_id FROM playlist_items WHERE kind = 'tanda')`,
+  ).run();
 }
 
 export type SaveTandaInput = {
@@ -605,6 +631,8 @@ export type SaveTandaInput = {
   name?: string | null;
   songIds: string[];
   tags?: TandaTag[];
+  // Only read when creating: false makes a playlist-only tanda.
+  inCollection?: boolean;
 };
 
 /** Trim, drop blanks, and de-dupe tags by (cat, case-insensitive label). */
@@ -638,8 +666,8 @@ export function saveTanda(input: SaveTandaInput): Tanda {
       d.prepare('DELETE FROM tanda_tags WHERE tanda_id = ?').run(tandaId);
     } else {
       const info = d
-        .prepare('INSERT INTO tandas (name, created_at) VALUES (?, ?)')
-        .run(name, Date.now());
+        .prepare('INSERT INTO tandas (name, created_at, in_collection) VALUES (?, ?, ?)')
+        .run(name, Date.now(), input.inCollection === false ? 0 : 1);
       tandaId = Number(info.lastInsertRowid);
     }
     const link = d.prepare(
@@ -725,6 +753,7 @@ export function savePlaylist(input: SavePlaylistInput): Playlist {
       const refId = Number(it.refId);
       if (Number.isFinite(refId)) link.run(playlistId, i, it.type, refId);
     });
+    pruneOrphanTandas(d);
     return playlistId;
   });
 
@@ -735,6 +764,15 @@ export function savePlaylist(input: SavePlaylistInput): Playlist {
 export function deletePlaylist(id: string): void {
   const d = getDb();
   d.prepare('DELETE FROM playlists WHERE id = ?').run(Number(id));
+  pruneOrphanTandas(d);
+}
+
+/** Absolute path of every library song, keyed by song id. Used by the
+ *  playlist exporter (write paths) and importer (resolve paths). */
+export function listSongPaths(): Map<string, string> {
+  const d = getDb();
+  const rows = d.prepare('SELECT id, path FROM songs').all() as {id: number; path: string}[];
+  return new Map(rows.map(r => [String(r.id), r.path]));
 }
 
 export function getSongPath(id: string): string | null {

@@ -307,41 +307,110 @@ function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
  * commit with the chosen per-folder styles. Used by the Library, the Tanda
  * builder/manager and the first-run screen so the import experience is
  * identical everywhere and lives in exactly one place. */
+/* The choices the import review would submit untouched: every folder gets its
+ * own style guess (else the import default), and the cortina flag cascades
+ * from a cortina-named folder to everything inside it. */
+function defaultImportChoices(root) {
+  const types = {};
+  const cortinas = {};
+  const walk = (n, parentCortina) => {
+    types[n.path] = n.guess || IMPORT_DEFAULT_STYLE || "mixed";
+    const c = !!(n.cortina || parentCortina);
+    cortinas[n.path] = c;
+    (n.children || []).forEach((k) => walk(k, c));
+  };
+  walk(root, false);
+  return { types, cortinas };
+}
+
 function useFolderImport(flash) {
   const [tree, setTree] = useState(null);
   const [scanning, setScanning] = useState(false);
 
-  const begin = async () => {
+  const say = (msg) => { if (flash) flash(msg); };
+
+  // Second step for an import started from a playlist file: with its folders
+  // now in the library, resolve the playlist itself. The confirmation modal is
+  // rendered by the app shell (see PlaylistImportHost), so it survives this
+  // screen going away.
+  const continueWithPlaylist = (playlist) => {
+    if (playlist) Store.beginPlaylistImport(playlist.path);
+  };
+
+  // `source` (optional): a dropped path skips the OS picker; "playlist" opens
+  // the playlist picker instead of the folder picker.
+  const begin = async (source) => {
     if (tree || scanning) return;
     setScanning(true);
     let node;
-    try { node = await Store.previewImport(); }
-    catch (e) { setScanning(false); if (flash) flash("Import failed. Please try again."); return; }
+    try { node = await Store.previewImport(typeof source === "string" ? source : undefined); }
+    catch (e) { setScanning(false); say("Import failed. Please try again."); return; }
     setScanning(false);
     if (!node) return;                                   // cancelled
-    if (!node.count) { if (flash) flash("No audio files were found in that folder."); Store.cancelImport(); return; }
+    if (node.playlist && !node.count) {
+      // No new folders to bring in: the songs are already in the library, or
+      // the playlist came from another computer and its paths don't exist
+      // here. Either way the playlist step still matches by filename and
+      // title, and says so itself when nothing is found.
+      Store.cancelImport();
+      continueWithPlaylist(node.playlist);
+      return;
+    }
+    if (!node.count) { say("No audio files were found in that folder."); Store.cancelImport(); return; }
+    if (node.playlist) {
+      // Importing a playlist: skip the folder-types step. Its folders come in
+      // with the same defaults the review would show (each folder's own style
+      // guess, else Mixed; cortina folders flagged), and styles can be set
+      // later from the Library. The DJ only sees the playlist confirmation.
+      setScanning(true);
+      const { types, cortinas } = defaultImportChoices(node);
+      let lib = null;
+      try { lib = await Store.commitImport(types, cortinas); } catch (_e) { lib = null; }
+      setScanning(false);
+      if (lib) continueWithPlaylist(node.playlist);
+      else say("Import failed. Please try again.");
+      return;
+    }
     setTree(node);
   };
   const cancel = () => { setTree(null); Store.cancelImport(); };
   const confirm = async (payload) => {
     const { types, cortinas } = payload || {};
     const before = (Store.get().totalSongs) || 0;
+    const playlist = tree && tree.playlist;
     setTree(null);
     const lib = await Store.commitImport(types, cortinas);
-    if (lib && flash) {
+    if (lib && !playlist) {
       const added = (lib.totalSongs || 0) - before;
-      flash(added > 0
+      say(added > 0
         ? `Added ${added} song${added === 1 ? "" : "s"} from a new folder`
         : "That folder is already in your library");
     }
+    if (lib && playlist) continueWithPlaylist(playlist);
   };
+
+  const beginPlaylist = () => begin("playlist");
 
   const modal = tree
     ? <ImportTreeModal mode="import" roots={[tree]} onCancel={cancel} onConfirm={confirm} />
     : null;
-  return { begin, scanning, modal };
+  return { begin, beginPlaylist, scanning, modal };
+}
+
+/* Renders the pending playlist-import confirmation (Store.playlistImport)
+ * wherever the app shell mounts it; `onDone` runs after a successful import
+ * (the shell uses it to jump to the Playlists view). */
+function PlaylistImportHost({ onDone }) {
+  const { playlistImport } = useStore();
+  if (!playlistImport) return null;
+  const confirm = async (name) => {
+    const saved = await Store.importPlaylistCommit(name);
+    if (saved && onDone) onDone(saved);
+  };
+  return <PlImportModal preview={playlistImport} onConfirm={confirm} onCancel={() => Store.cancelPlaylistImport()} />;
 }
 
 window.ImportTreeModal = ImportTreeModal;
 window.buildRetypeTree = buildRetypeTree;
 window.useFolderImport = useFolderImport;
+window.PlaylistImportHost = PlaylistImportHost;

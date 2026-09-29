@@ -5,7 +5,18 @@ const { useState } = React;
 
 function ImportScreen() {
   const [hot, setHot] = useState(false);
-  const imp = useFolderImport();
+  // The first-run screen has no other feedback channel, so give the shared
+  // import flow a toast for "nothing found" and failure messages.
+  const { toast, flash, dismiss } = useToast();
+  const imp = useFolderImport(flash);
+
+  // A dropped folder, song or playlist file imports directly; anything else opens the folder picker.
+  const onDrop = (e) => {
+    e.preventDefault(); setHot(false);
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    const path = file && window.compas.pathForFile ? window.compas.pathForFile(file) : "";
+    imp.begin(path || undefined);
+  };
 
   if (imp.scanning) {
     return (
@@ -27,23 +38,26 @@ function ImportScreen() {
           onClick={imp.begin}
           onDragOver={(e) => { e.preventDefault(); setHot(true); }}
           onDragLeave={() => setHot(false)}
-          onDrop={(e) => { e.preventDefault(); setHot(false); imp.begin(); }}>
+          onDrop={onDrop}>
           <div className="tv-drop-ic"><I.folderOpen s={36} /></div>
-          <h2>Choose your music folder</h2>
-          <p>Compás reads it exactly as you’ve organised it — then you set what each
-            folder is (tango, vals, milonga, cortina…). Nothing is moved or copied.</p>
-          <button className="cta" onClick={(e) => { e.stopPropagation(); imp.begin(); }}>
-            <I.upload s={17} /> Choose a folder…
-          </button>
-          <div className="note">A native folder picker will open</div>
+          <h2>Add your music</h2>
+          <p>Nothing is moved or copied.</p>
+          <div className="tv-drop-actions">
+            <button className="cta" onClick={(e) => { e.stopPropagation(); imp.begin(); }}>
+              <I.folder s={17} /> Choose a folder
+            </button>
+            <button className="cta secondary" onClick={(e) => { e.stopPropagation(); imp.beginPlaylist(); }}>
+              <I.note s={17} /> Import a playlist
+            </button>
+          </div>
         </div>
         <div className="tv-assure">
-          <div><I.check s={15} /> Nothing is moved, renamed or copied</div>
-          <div><I.check s={15} /> Your folder tree is kept intact</div>
-          <div><I.check s={15} /> Set tango / vals / milonga / cortina per folder</div>
+          <div><I.check s={15} /> Your folders stay as they are</div>
+          <div><I.check s={15} /> Playlists from VLC, Apple Music and DJ apps work</div>
         </div>
       </div>
       {imp.modal}
+      <Toast toast={toast} onDismiss={dismiss} />
     </div>
   );
 }

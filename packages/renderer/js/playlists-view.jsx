@@ -14,7 +14,7 @@ function playlistMeta(items) {
   // A single-song item is counted as a cortina only when it plays that role
   // (between tandas, or flagged cortina material); other single songs are loose.
   let cortinas = 0;
-  list.forEach((it, i) => { if (it.type !== "tanda" && actsAsCortina(list, i)) cortinas += 1; });
+  list.forEach((it, i) => { if (it.type === "cortina" || (it.type !== "tanda" && actsAsCortina(list, i))) cortinas += 1; });
   return {
     tandas: list.filter((i) => i.type === "tanda").length,
     cortinas,
@@ -166,7 +166,7 @@ function PlEditorTanda({ it, ix, slot, onRemove, preview }) {
       <div className="tp-tanda-head">
         <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
         <span className="ix">{String(ix).padStart(2, "0")}</span>
-        <span className="tp-now-orq" style={{ flex: 1 }}>{t.name || m.orq}</span>
+        <span className="tp-now-orq pl-tname">{t.name || m.orq}</span>
         <GenreTag genre={m.genre} small />
         {m.year && <span className="tp-tag is-plain sm" title={m.era}>{m.year}</span>}
         <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove from playlist"><I.x s={14} /></button>
@@ -176,6 +176,12 @@ function PlEditorTanda({ it, ix, slot, onRemove, preview }) {
         return <PlEditorSong key={s.id + ":" + i} n={i + 1} title={songNameOnly ? cleanSongTitle(s) : s.title} dur={s.dur || "—"}
           playing={playing} onPlay={() => preview && preview.toggle(s)} preview={preview} />;
       })}
+      {t.inCollection === false && (
+        <button className="pl-keep" onClick={(e) => { e.stopPropagation(); Store.keepTanda(t.id); }}
+          title="Add this tanda to My tandas so you can reuse it in other playlists">
+          <I.plus s={13} /> Save to My tandas
+        </button>
+      )}
     </div>
   );
 }
@@ -222,7 +228,7 @@ function PlEditorSongItem({ it, slot, onRemove, preview }) {
   );
 }
 
-function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, onDelete }) {
+function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, onDelete, onExport }) {
   const items = open.items;
   const slot = usePLReorder(api.reorder);
   const meta = playlistMeta(items);
@@ -235,9 +241,17 @@ function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, on
           <button className="tp-btn pill sm pl-back" onClick={onBack} title="Back to playlists">
             <I.chev s={15} /> <span>Playlists</span>
           </button>
-          <span className={"pl-saved is-" + status}>
-            {status === "saving" ? "Saving…" : status === "saved" ? <><I.check s={13} /> Saved</> : "Not saved yet"}
-          </span>
+          <div className="pl-dhead-r">
+            <span className={"pl-saved is-" + status}>
+              {status === "saving" ? "Saving…" : status === "saved" ? <><I.check s={13} /> Saved</> : "Not saved yet"}
+            </span>
+            {items.length > 0 && status !== "idle" && (
+              <button className="tp-btn ghost sm pl-export" onClick={onExport}
+                title="Export this playlist to use it in VLC, Apple Music or a DJ app">
+                <I.download s={14} /> Export
+              </button>
+            )}
+          </div>
         </div>
         <input className="pl-name-input" value={open.name} placeholder="Name this playlist…"
           onChange={(e) => api.setName(e.target.value)} onBlur={api.flushName} />
@@ -287,7 +301,93 @@ function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, on
 }
 
 /* ============================ MANAGE GRID (landing) ============================ */
-function PlaylistCard({ pl, onOpen, onDelete, onPlay }) {
+/* ---------- import preview: what an M3U/M3U8 would become ---------- */
+// Shows the tandas + cortinas the importer inferred, which songs it couldn't
+// find, and lets the DJ rename before anything is written.
+function PlImportModal({ preview, onConfirm, onCancel }) {
+  const [name, setName] = useState(preview.name || "");
+  const [busy, setBusy] = useState(false);
+  const tandas = preview.items.filter((it) => it.type === "tanda");
+  const cortinas = preview.items.length - tandas.length;
+  const nothing = preview.items.length === 0;
+
+  const confirm = async () => {
+    if (nothing || busy) return;
+    setBusy(true);
+    try { await onConfirm(name); } finally { setBusy(false); }
+  };
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+      else if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") { e.preventDefault(); confirm(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  });
+
+  let tIx = 0;
+  return (
+    <div className="tp-modal-scrim" onMouseDown={onCancel}>
+      <div className="tp-modal pl-imp" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="tp-modal-icon accent"><I.upload s={20} /></div>
+        <div className="tp-modal-title">Import playlist</div>
+        <div className="tp-modal-msg">
+          {nothing
+            ? "None of these songs are in your library yet. Import the folder that holds them first, then try again."
+            : <><b>{tandas.length}</b> {tandas.length === 1 ? "tanda" : "tandas"}
+                {cortinas > 0 && <> and <b>{cortinas}</b> {cortinas === 1 ? "cortina" : "cortinas"}</>}</>}
+        </div>
+        {!nothing && (
+          <input className="pl-name-input pl-imp-name" value={name} placeholder="Name this playlist…"
+            onChange={(e) => setName(e.target.value)} autoFocus />
+        )}
+        {!nothing && (
+          <div className="pl-imp-list">
+            {preview.items.map((it, i) => it.type === "tanda" ? (
+              <div className="pl-imp-row" key={i}>
+                <span className="pl-imp-n">{++tIx}</span>
+                <span className="pl-imp-main">
+                  <span className="pl-imp-title">{it.tanda.name || "Tanda " + tIx}</span>
+                  <span className="pl-imp-songs">
+                    {it.tanda.songs.map((s) => s.title).join(" · ")}
+                  </span>
+                  {(it.tanda.existingTandaId || it.tanda.missing.length > 0) && (
+                    <span className="pl-imp-sub">
+                      {it.tanda.existingTandaId && "Already in My tandas"}
+                      {it.tanda.existingTandaId && it.tanda.missing.length > 0 && " · "}
+                      {it.tanda.missing.length > 0 && <span className="pl-imp-miss">{it.tanda.missing.length} not found</span>}
+                    </span>
+                  )}
+                </span>
+                <span className="pl-imp-tags">{(it.tanda.tags || []).slice(0, 3).map((t) => <span key={t.cat + t.label} className="tp-tag sm is-other">{t.label}</span>)}</span>
+              </div>
+            ) : (
+              <div className="pl-imp-row is-cortina" key={i}>
+                <span className="pl-imp-n"><I.curtain s={12} /></span>
+                <span className="pl-imp-main"><span className="pl-imp-title">{it.song.title}</span><span className="pl-imp-sub">cortina</span></span>
+              </div>
+            ))}
+          </div>
+        )}
+        {preview.missing.length > 0 && (
+          <div className="tp-modal-note pl-imp-note">
+            <strong>{preview.missing.length} {preview.missing.length === 1 ? "song isn't" : "songs aren't"} in your library</strong>
+            {preview.missing.slice(0, 6).map((m, i) => <span key={i} className="pl-imp-missrow">{m}</span>)}
+            {preview.missing.length > 6 && <span className="pl-imp-missrow">…and {preview.missing.length - 6} more</span>}
+          </div>
+        )}
+        <div className="tp-modal-actions">
+          <button className="tp-modal-cancel" onClick={onCancel}>Cancel</button>
+          <button className="tp-modal-confirm accent" onClick={confirm} disabled={nothing || busy}>
+            <I.check s={14} /> {busy ? "Importing…" : "Import"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlaylistCard({ pl, onOpen, onDelete, onPlay, onExport }) {
   const meta = playlistMeta(pl.items);
   const preview = pl.items.slice(0, 6);
   const songNameOnly = useSongNameOnly();
@@ -305,7 +405,7 @@ function PlaylistCard({ pl, onOpen, onDelete, onPlay }) {
       </div>
       <div className="tv-tcard-songs">
         {preview.map((it, i) => {
-          const role = it.type === "tanda" ? "tanda" : (actsAsCortina(pl.items, i) ? "cortina" : "song");
+          const role = it.type === "tanda" ? "tanda" : (it.type === "cortina" || actsAsCortina(pl.items, i) ? "cortina" : "song");
           return (
             <div key={it.type + i} className={"tv-tcard-song pl-row-" + role}>
               <span className="n pl-typ" title={role === "tanda" ? "Tanda" : role === "cortina" ? "Cortina" : "Single song"}>
@@ -327,13 +427,15 @@ function PlaylistCard({ pl, onOpen, onDelete, onPlay }) {
         <div className="tv-tcard-total"><b>{meta.total}</b></div>
         <button className="tv-tcbtn pl-play" onClick={(e) => { e.stopPropagation(); onPlay(pl); }} disabled={!pl.items.length}><I.play s={13} /> Play</button>
         <button className="tv-tcbtn" onClick={(e) => { e.stopPropagation(); onOpen(pl); }}>Open</button>
+        <button className="tv-tcbtn del" onClick={(e) => { e.stopPropagation(); onExport(pl); }} disabled={!pl.items.length}
+          title="Export this playlist to use it in VLC, Apple Music or a DJ app"><I.download s={15} /></button>
         <button className="tv-tcbtn del" onClick={(e) => { e.stopPropagation(); onDelete(pl); }} title="Delete playlist"><I.trash s={15} /></button>
       </div>
     </div>
   );
 }
 
-function PlManageGrid({ playlists, onOpen, onDelete, onPlay, onNew }) {
+function PlManageGrid({ playlists, onOpen, onDelete, onPlay, onNew, onExport }) {
   if (!playlists.length) {
     return (
       <div className="tv-manage">
@@ -352,7 +454,7 @@ function PlManageGrid({ playlists, onOpen, onDelete, onPlay, onNew }) {
     <div className="tv-manage">
       <div className="tv-grid">
         {playlists.map((pl) => (
-          <PlaylistCard key={pl.id} pl={pl} onOpen={onOpen} onDelete={onDelete} onPlay={onPlay} />
+          <PlaylistCard key={pl.id} pl={pl} onOpen={onOpen} onDelete={onDelete} onPlay={onPlay} onExport={onExport} />
         ))}
         <button className="tv-newcard" onClick={onNew}>
           <span className="ic"><I.plus s={22} /></span>
@@ -457,6 +559,24 @@ function PlaylistsView({ onPlay, dockWidth, onDockWidthChange }) {
 
   const playAll = () => { if (open && open.items.length) onPlay({ items: open.items }); };
 
+  /* ---------- M3U exchange ---------- */
+  const exportPlaylist = async (id) => {
+    let path = null;
+    try { path = await window.compas.exportPlaylist(id); } catch (_e) { path = null; }
+    if (path) flash("Saved “" + path.split(/[\\/]/).pop() + "”");
+  };
+  const exportOpen = async () => {
+    // Flush a pending rename first so the file carries the current name.
+    clearTimeout(nameTimer.current);
+    persist(open.name, open.items);
+    await saveChain.current.catch(() => {});
+    if (idRef.current != null) exportPlaylist(idRef.current);
+  };
+  // Importing a playlist goes through the shared import flow: folders its
+  // songs live in are brought into the library first (if needed), then the
+  // playlist confirmation is shown by the app shell.
+  const imp = useFolderImport(flash);
+
   /* ---------- detail editor ---------- */
   if (open) {
     if (!imported) {
@@ -479,7 +599,7 @@ function PlaylistsView({ onPlay, dockWidth, onDockWidthChange }) {
           <PlDockResizer width={dockW} min={PL_DOCK_MIN_W} max={PL_DOCK_MAX_W}
             onResize={setDockW} onCommit={commitDockW} />
           <PlEditorDock open={open} status={status} api={api} preview={preview} width={dockW}
-            onBack={back} onPlayAll={playAll} onDelete={deleteOpen} />
+            onBack={back} onPlayAll={playAll} onDelete={deleteOpen} onExport={exportOpen} />
         </div>
         <Toast toast={toast} onDismiss={dismiss} />
         {modal}
@@ -496,17 +616,21 @@ function PlaylistsView({ onPlay, dockWidth, onDockWidthChange }) {
           <div className="tv-sub">Open a set to reorder, trim &amp; audition it</div>
         </div>
         <div className="tv-head-r">
+          <button className="tp-btn" onClick={imp.beginPlaylist} disabled={imp.scanning}
+            title="Import a playlist from VLC, Apple Music or a DJ app"><I.upload s={15} /> {imp.scanning ? "Reading…" : "Import a playlist"}</button>
           <button className="tp-btn" onClick={newPlaylist}><I.plus s={15} /> New playlist</button>
         </div>
       </div>
 
       <PlManageGrid playlists={playlists} onOpen={openPlaylist} onDelete={deletePlaylist}
-        onPlay={onPlay} onNew={newPlaylist} />
+        onPlay={onPlay} onNew={newPlaylist} onExport={(pl) => exportPlaylist(pl.id)} />
 
       <Toast toast={toast} onDismiss={dismiss} />
       {modal}
+      {imp.modal}
     </div>
   );
 }
 
 window.PlaylistsView = PlaylistsView;
+window.PlImportModal = PlImportModal;
