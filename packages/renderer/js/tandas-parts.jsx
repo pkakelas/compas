@@ -1,5 +1,5 @@
 // tandas-parts.jsx — unified library tree (folders + songs), manage grid + meta helpers
-const { useState, useMemo, useEffect, useRef } = React;
+const { useState, useMemo, useEffect, useRef, useCallback } = React;
 
 /* The conventional periodization of recorded tango. Shown as context next to a
  * year (never as a filter facet) so a DJ can place a recording at a glance.
@@ -287,7 +287,7 @@ function SongEditRow({ s, onClose }) {
  * `library` renders the read-only variant used by the Library view: it keeps
  * the listen affordance but drops the builder drag handle and the +/add button,
  * and adds a pencil to edit the song's metadata in place. */
-function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPlaying, onPreview, previewViaMonitor, library, editing: editingProp, onEdit, onCloseEdit, onContext, onSelect, selected }) {
+function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPlaying, onPreview, previewViaMonitor, library, editing: editingProp, onEdit, onCloseEdit, onContext, onSelect, selected, columns }) {
   const isCort = !!s.isCortina;
   // When the DJ opts into "song name only", strip the orchestra/singer/year
   // cruft baked into the title field and show just the bare song name. The
@@ -336,8 +336,12 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
   const rowTitle = library
     ? (isPreview && isPlaying ? "Pause" : "Play preview")
     : (inBuilder ? "Already in the tanda" : "Double-click to add to tanda · click to play preview");
+  // Flat song list (`columns`): the style gets its own tag, and on wide
+  // screens orchestra / singer each get a column instead of the sub-line.
+  const singerText = s.singer ? s.singer : (isInstrumental(s) ? <i className="tv-inst">Instrumental</i> : "");
+  const genreCell = <span className="gn">{s.genre ? <GenreTag genre={s.genre} small /> : null}</span>;
   const row = (
-    <div className={"tv-song clickable" + (isCort ? " cortina" : "") + (inBuilder ? " in-builder" : "") + (dragging ? " dragging" : "") + (isPreview ? " playing" : "") + (editing ? " editing" : "") + (selected ? " selected" : "")}
+    <div className={"tv-song clickable" + (columns ? " cols " + columns : "") + (isCort ? " cortina" : "") + (inBuilder ? " in-builder" : "") + (dragging ? " dragging" : "") + (isPreview ? " playing" : "") + (editing ? " editing" : "") + (selected ? " selected" : "")}
       draggable={!library} {...(library ? {} : dragHandlers)}
       onMouseDown={library && onSelect ? (e) => { if (e.shiftKey) e.preventDefault(); } : undefined}
       onClick={handleClick}
@@ -348,12 +352,24 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
         title={isPreview && isPlaying ? "Pause" : previewViaMonitor ? "Pre-listen in headphones" : "Play preview"}>
         {isPreview && isPlaying ? <I.pause s={14} /> : (previewViaMonitor ? <I.headphones s={14} /> : <I.play s={14} />)}
       </button>
-      <div className="tt">
-        <div className="tv-song-title">
-          {displayTitle}{isCort && <CortinaBadge />}
-        </div>
-        <div className="tv-song-sub">{s.orq}{s.singer ? " · " + s.singer : (isInstrumental(s) ? <> · <i className="tv-inst">Instrumental</i></> : "")}</div>
-      </div>
+      {columns === "wide" ? (
+        <>
+          <div className="tv-song-title">{displayTitle}{isCort && <CortinaBadge />}</div>
+          <span className="or" title={s.orq || undefined}>{s.orq}</span>
+          <span className="sg" title={s.singer || undefined}>{singerText}</span>
+          {genreCell}
+        </>
+      ) : (
+        <>
+          <div className="tt">
+            <div className="tv-song-title">
+              {displayTitle}{isCort && <CortinaBadge />}
+            </div>
+            <div className="tv-song-sub">{s.orq}{singerText ? <> · {singerText}</> : ""}</div>
+          </div>
+          {columns ? genreCell : null}
+        </>
+      )}
       <span className="yr">{s.year}</span>
       <span className="du">{s.dur}</span>
       {!library ? (
@@ -651,6 +667,8 @@ const SORTS = [
   { key: "relevance", label: "Best match" },
   { key: "title", label: "Title A–Z" },
   { key: "orq", label: "Orchestra A–Z" },
+  { key: "singer", label: "Singer A–Z" },
+  { key: "genre", label: "Style" },
   { key: "year_desc", label: "Year (new→old)" },
   { key: "year_asc", label: "Year (old→new)" },
   { key: "dur_desc", label: "Longest first" },
@@ -660,6 +678,7 @@ const SORTS = [
 const GENRE_ORDER = { Tango: 0, Vals: 1, Milonga: 2, Cortina: 3 };
 
 function cmpStr(a, b) { return _norm(a).localeCompare(_norm(b)); }
+function genreRank(g) { return g ? (GENRE_ORDER[genreLabel(g)] ?? 99) : 100; }
 function songSecs(s) { return s.durationSec != null ? s.durationSec : secOf(s.dur); }
 
 // The comparator for a chosen sort. "relevance" keeps the search engine's
@@ -669,6 +688,8 @@ function songComparator(sort, hasQuery) {
   switch (sort) {
     case "title": return (a, b) => cmpStr(a.title, b.title);
     case "orq": return (a, b) => cmpStr(a.orq, b.orq) || cmpStr(a.title, b.title);
+    case "singer": return (a, b) => cmpStr(a.singer, b.singer) || cmpStr(a.title, b.title);
+    case "genre": return (a, b) => genreRank(a.genre) - genreRank(b.genre) || cmpStr(a.genre, b.genre) || cmpStr(a.title, b.title);
     case "year_desc": return (a, b) => (b.year || 0) - (a.year || 0) || cmpStr(a.title, b.title);
     case "year_asc": return (a, b) => (a.year || 0) - (b.year || 0) || cmpStr(a.title, b.title);
     case "dur_desc": return (a, b) => songSecs(b) - songSecs(a);
@@ -1025,7 +1046,7 @@ function BulkValuePicker({ field, options, count, onPick, onBack }) {
 
 /* Search + filter toolbar for the library tree. */
 function SongSearchBar({ filters, onChange, options, sort, setSort, searching, countLabel,
-  showCollapse, collapseOpen, onCollapse, includeCortinas, onToggleCortinas }) {
+  showCollapse, collapseOpen, onCollapse, includeCortinas, onToggleCortinas, layout, setLayout }) {
   const inputRef = useRef(null);
   const set = (key, val) => onChange({ ...filters, [key]: val });
   const clearText = () => { set("text", ""); inputRef.current && inputRef.current.focus(); };
@@ -1073,6 +1094,18 @@ function SongSearchBar({ filters, onChange, options, sort, setSort, searching, c
               <I.curtain s={14} /> Cortinas in filters
             </button>
           ) : null}
+          {setLayout ? (
+            <div className="tv-layout" role="radiogroup" aria-label="Library view">
+              <button type="button" role="radio" aria-checked={layout === "folders"} data-on={layout === "folders" ? "1" : "0"}
+                onClick={() => setLayout("folders")} title="Browse by folder">
+                <I.folder s={14} /> Folders
+              </button>
+              <button type="button" role="radio" aria-checked={layout === "list"} data-on={layout === "list" ? "1" : "0"}
+                onClick={() => setLayout("list")} title="One list of songs with orchestra, singer, style and year">
+                <I.note s={14} /> Songs
+              </button>
+            </div>
+          ) : null}
           {showCollapse ? (
             <button type="button" className="tv-collapse" onClick={onCollapse}>
               <I.chev s={12} /> {collapseOpen ? "Collapse" : "Expand"}
@@ -1093,8 +1126,12 @@ function SongSearchBar({ filters, onChange, options, sort, setSort, searching, c
 // Fixed row heights (px), enforced in CSS on .tv-vwin children so the windowing
 // arithmetic is exact. Rows are single-line, so heights never vary at runtime.
 const INDENT = 18;
-const ROW_H = { song: 60, folder: 40, root: 46, group: 46 };
+const ROW_H = { song: 60, folder: 40, root: 46, group: 46, listSong: 44, listHead: 32 };
+// Below this width the song list folds orchestra/singer back under the title
+// (like the folder view) instead of giving each its own column.
+const LIST_WIDE_MIN = 700;
 function rowHeight(r) {
+  if (r.h) return r.h;
   if (r.kind === "song") return ROW_H.song;
   if (r.kind === "group") return ROW_H.group;
   return r.depth === 0 ? ROW_H.root : ROW_H.folder;
@@ -1132,6 +1169,55 @@ function FolderRowFlat({ node, depth, isOpen, onToggle, onContext }) {
   );
 }
 
+/* Folder tree vs. flat song list. Persisted, and shared live between the
+ * Library, Builder and Live browsers (they all stay mounted), so switching in
+ * one switches them all. */
+const LAYOUT_KEY = "compas.libraryLayout";
+const LAYOUT_EVENT = "compas:library-layout";
+function useLibraryLayout() {
+  const [layout, setLayoutState] = useState(() => {
+    try { return localStorage.getItem(LAYOUT_KEY) === "list" ? "list" : "folders"; } catch (e) { return "folders"; }
+  });
+  useEffect(() => {
+    const on = (e) => setLayoutState(e.detail);
+    window.addEventListener(LAYOUT_EVENT, on);
+    return () => window.removeEventListener(LAYOUT_EVENT, on);
+  }, []);
+  const setLayout = useCallback((v) => {
+    try { localStorage.setItem(LAYOUT_KEY, v); } catch (e) { /* ignore */ }
+    window.dispatchEvent(new CustomEvent(LAYOUT_EVENT, { detail: v }));
+  }, []);
+  return [layout, setLayout];
+}
+
+// Column headers for the wide song list. Clicking one sorts by it (year
+// toggles direction); the active column is highlighted.
+const LIST_COLS = [
+  { key: "title", label: "Title", sort: "title" },
+  { key: "orq", label: "Orchestra", sort: "orq" },
+  { key: "singer", label: "Singer", sort: "singer" },
+  { key: "genre", label: "Style", sort: "genre" },
+  { key: "yr", label: "Year", sort: "year_asc" },
+  { key: "du", label: "Time", sort: "dur_desc" },
+];
+function SongListHead({ sort, setSort }) {
+  return (
+    <div className="tv-list-head">
+      <span />
+      {LIST_COLS.map((c) => {
+        const on = c.key === "yr" ? sort.startsWith("year_") : sort === c.sort;
+        const next = c.key === "yr" && sort === "year_asc" ? "year_desc" : c.sort;
+        return (
+          <button key={c.key} type="button" className={"c-" + c.key + (on ? " on" : "")} onClick={() => setSort(next)}>
+            {c.label}{c.key === "yr" && on ? (sort === "year_asc" ? " ↑" : " ↓") : ""}
+          </button>
+        );
+      })}
+      <span />
+    </div>
+  );
+}
+
 /* ============================ LIBRARY BROWSER ============================
  * Shared folder-tree song browser for Library, Builder, and Live: search,
  * dropdown filters, sort, and a windowed list for large libraries. */
@@ -1139,6 +1225,8 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
   const { tree, songs } = useStore();
   const scrollRef = useRef(null);
   const [sort, setSort] = useState("title");
+  const [layout, setLayout] = useLibraryLayout();
+  const isList = layout === "list";
   // When the DJ has opted into "collapse folders by default", a fresh tree
   // starts with every folder closed; otherwise the top-level folders open.
   const collapseDefault = useCollapseFoldersByDefault();
@@ -1175,11 +1263,40 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
     const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n;
   });
 
+  /* ---- viewport size, for windowing and the list's column breakpoint ---- */
+  const [scrollTop, setScrollTop] = useState(0);
+  const [vh, setVh] = useState(800);
+  const [vw, setVw] = useState(1000);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => setScrollTop(el.scrollTop);
+    const ro = new ResizeObserver(() => { setVh(el.clientHeight); setVw(el.clientWidth); });
+    ro.observe(el);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    setScrollTop(el.scrollTop); setVh(el.clientHeight); setVw(el.clientWidth);
+    return () => { el.removeEventListener("scroll", onScroll); ro.disconnect(); };
+  }, []);
+
+  // Wide lists give orchestra / singer / style / year their own columns; narrow
+  // ones (the Builder / Live side panels) keep the two-line title + credits row.
+  const listCols = isList ? (vw >= LIST_WIDE_MIN ? "wide" : "compact") : null;
+
   const model = useMemo(() => {
+    const cmp = songComparator(sort, searching);
+    if (isList) {
+      // Flat list: every song on its own row, no folders. Search ranks across
+      // the whole library; otherwise the chosen sort orders it.
+      const list = searchSongs(songs || [], query);
+      if (cmp) list.sort(cmp);
+      const h = listCols === "wide" ? ROW_H.listSong : ROW_H.song;
+      const rows = list.map((s) => ({ kind: "song", key: "s:" + s.id, song: s, depth: 0, h }));
+      return { rows, songCount: rows.length, groupCount: 0, openable: [], noun: "songs" };
+    }
     const rows = [];
     const openable = [];
     const pruned = searchTree(tree, query);
-    const cmp = songComparator(sort, searching);
     const walk = (nodes, depth) => {
       for (const node of nodes) {
         const kids = node.children || [];
@@ -1199,7 +1316,7 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
     const songCount = pruned.reduce((a, n) => a + countSongs(n), 0);
     const folderCount = rows.reduce((a, r) => a + (r.kind === "folder" ? 1 : 0), 0);
     return { rows, songCount, groupCount: folderCount, openable, noun: "folders" };
-  }, [tree, query, sort, openSet, searching]);
+  }, [tree, songs, query, sort, openSet, searching, isList, listCols]);
 
   const rows = model.rows;
 
@@ -1246,25 +1363,11 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
    * Rows are single-line and their heights are enforced by CSS (see ROW_H +
    * the .tv-vwin rules), so we can place them by arithmetic with no per-row
    * measurement — that keeps the math exact and avoids any layout feedback. */
-  const [scrollTop, setScrollTop] = useState(0);
-  const [vh, setVh] = useState(800);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onScroll = () => setScrollTop(el.scrollTop);
-    const ro = new ResizeObserver(() => setVh(el.clientHeight));
-    ro.observe(el);
-    el.addEventListener("scroll", onScroll, { passive: true });
-    setScrollTop(el.scrollTop); setVh(el.clientHeight);
-    return () => { el.removeEventListener("scroll", onScroll); ro.disconnect(); };
-  }, []);
-
   // Whenever the row set changes shape (mode / sort / query), jump back to top.
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
     setScrollTop(0);
-  }, [sort, query]);
+  }, [sort, query, layout]);
 
   const offsets = useMemo(() => {
     const arr = new Float64Array(rows.length + 1);
@@ -1273,10 +1376,14 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
   }, [rows]);
   const total = offsets[rows.length] || 0;
 
+  // The wide list's sticky column header sits above the rows inside the
+  // scroller, so row offsets start below it.
+  const showListHead = listCols === "wide" && rows.length > 0;
+  const top = Math.max(0, scrollTop - (showListHead ? ROW_H.listHead : 0));
   const OVERSCAN = 8;
   let start = 0, end = rows.length;
-  { let lo = 0, hi = rows.length; while (lo < hi) { const m = (lo + hi) >> 1; if (offsets[m + 1] <= scrollTop) lo = m + 1; else hi = m; } start = lo; }
-  { let lo = start, hi = rows.length; const bottom = scrollTop + vh; while (lo < hi) { const m = (lo + hi) >> 1; if (offsets[m] < bottom) lo = m + 1; else hi = m; } end = lo; }
+  { let lo = 0, hi = rows.length; while (lo < hi) { const m = (lo + hi) >> 1; if (offsets[m + 1] <= top) lo = m + 1; else hi = m; } start = lo; }
+  { let lo = start, hi = rows.length; const bottom = top + vh; while (lo < hi) { const m = (lo + hi) >> 1; if (offsets[m] < bottom) lo = m + 1; else hi = m; } end = lo; }
   start = Math.max(0, start - OVERSCAN);
   end = Math.min(rows.length, end + OVERSCAN);
   const slice = rows.slice(start, end);
@@ -1287,7 +1394,7 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
 
   const countLabel = model.songCount === 0
     ? (searching ? "No matches" : "")
-    : searching
+    : searching || isList
       ? `${model.songCount} song${model.songCount === 1 ? "" : "s"}`
       : `${model.songCount} song${model.songCount === 1 ? "" : "s"} · ${model.groupCount} ${model.noun}`;
 
@@ -1298,8 +1405,8 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
       </div>;
     }
     const s = r.song;
-    return <div className="tv-vrow" key={r.key} style={{ marginLeft: r.depth * INDENT }}>
-      <SongRow s={s} library={library}
+    return <div className="tv-vrow" key={r.key} style={r.depth ? { marginLeft: r.depth * INDENT } : undefined}>
+      <SongRow s={s} library={library} columns={listCols}
         editing={library && editingId === s.id} onEdit={library ? onSongEdit : undefined} onCloseEdit={onCloseEdit}
         onContext={library ? onSongContext : undefined}
         onSelect={library ? onSongSelect : undefined}
@@ -1318,20 +1425,24 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
       <div className="tv-tree-head">
         <SongSearchBar filters={filters} onChange={setFiltersSafe} options={filterOptions}
           sort={sort} setSort={setSort} searching={searching} countLabel={countLabel}
-          showCollapse={!searching && rows.length > 0} collapseOpen={anyOpen} onCollapse={toggleAll}
+          showCollapse={!isList && !searching && rows.length > 0} collapseOpen={anyOpen} onCollapse={toggleAll}
+          layout={layout} setLayout={setLayout}
           includeCortinas={includeCortinas} onToggleCortinas={onToggleCortinas} />
         {hint && <div className="tv-songs-hint">{hint}</div>}
       </div>
       <div className="tv-treewrap">
         <div className="tv-tree-scroll" ref={scrollRef}>
           {rows.length === 0 ? (
-            <div className="tp-empty">{searching ? "Nothing matches your search." : "No folders in your library yet."}</div>
+            <div className="tp-empty">{searching ? "Nothing matches your search." : isList ? "No songs in your library yet." : "No folders in your library yet."}</div>
           ) : (
-            <div className="tv-vtotal" style={{ height: total }}>
-              <div className="tv-vwin" style={{ transform: `translateY(${offsetY}px)` }}>
-                {slice.map((r) => renderRow(r))}
+            <>
+              {showListHead && <SongListHead sort={sort} setSort={setSort} />}
+              <div className="tv-vtotal" style={{ height: total }}>
+                <div className="tv-vwin" style={{ transform: `translateY(${offsetY}px)` }}>
+                  {slice.map((r) => renderRow(r))}
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
