@@ -1,4 +1,4 @@
-import {ipcRenderer, webFrame} from 'electron';
+import {ipcRenderer, webFrame, webUtils} from 'electron';
 
 // Apply the saved text size as early as possible — native page zoom rescales the
 // layout viewport, so the app's fixed-height layout still fills the window at any
@@ -94,8 +94,22 @@ function applySmartOrganize(
 }
 
 /** Pick a folder and scan it for preview (nothing is saved). Returns the folder tree, or null if cancelled. */
-function importScanPreview() {
-  return ipcRenderer.invoke('import:scanPreview');
+function importScanPreview(kind?: 'folder' | 'playlist') {
+  return ipcRenderer.invoke('import:scanPreview', {kind: kind || 'folder'});
+}
+
+/** Preview an import from a path the renderer already holds: a folder, a song (→ its folder) or an M3U/M3U8. */
+function importScanPreviewPath(path: string) {
+  return ipcRenderer.invoke('import:scanPreviewPath', path);
+}
+
+/** Absolute path of a File dropped onto the window (Electron hides File.path from the renderer). */
+function pathForFile(file: File): string {
+  try {
+    return webUtils.getPathForFile(file);
+  } catch {
+    return '';
+  }
 }
 
 /** Commit the previewed import with a per-folder style map and cortina-flag map. Returns the fresh library. */
@@ -131,6 +145,11 @@ function saveTanda(input: {
   return ipcRenderer.invoke('tandas:save', input);
 }
 
+/** Keep a playlist-only tanda (made by a playlist import) in "My tandas". */
+function keepTanda(id: string) {
+  return ipcRenderer.invoke('tandas:keep', id);
+}
+
 function deleteTanda(id: string) {
   return ipcRenderer.invoke('tandas:delete', id);
 }
@@ -149,6 +168,31 @@ function savePlaylist(input: {
 
 function deletePlaylist(id: string) {
   return ipcRenderer.invoke('playlists:delete', id);
+}
+
+/** Export a playlist as M3U8 via a save dialog. Resolves to the written path, or null if cancelled. */
+function exportPlaylist(id: string) {
+  return ipcRenderer.invoke('playlists:export', id);
+}
+
+/** Pick an M3U/M3U8 and preview the tandas + cortinas it would create (nothing written yet). */
+function importPlaylistPreview() {
+  return ipcRenderer.invoke('playlists:importPreview');
+}
+
+/** Preview a playlist import from a path already in hand (after a folder import started from that file). */
+function importPlaylistPreviewPath(path: string) {
+  return ipcRenderer.invoke('playlists:importPreviewPath', path);
+}
+
+/** Commit the previewed playlist import, optionally renaming it. Returns the new playlist. */
+function importPlaylistCommit(name?: string) {
+  return ipcRenderer.invoke('playlists:importCommit', {name});
+}
+
+/** Discard a pending playlist import preview. */
+function importPlaylistCancel() {
+  return ipcRenderer.invoke('playlists:importCancel');
 }
 
 /** Current background-analysis state + DB stats (for the initial banner). */
@@ -222,16 +266,24 @@ export {
   previewSmartOrganize,
   applySmartOrganize,
   importScanPreview,
+  importScanPreviewPath,
+  pathForFile,
   importCommit,
   importCancel,
   setSongGenres,
   listTandas,
   suggestTandas,
   saveTanda,
+  keepTanda,
   deleteTanda,
   listPlaylists,
   savePlaylist,
   deletePlaylist,
+  exportPlaylist,
+  importPlaylistPreview,
+  importPlaylistPreviewPath,
+  importPlaylistCommit,
+  importPlaylistCancel,
   analysisState,
   onAnalysisProgress,
   onLibraryChanged,

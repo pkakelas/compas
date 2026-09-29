@@ -1,14 +1,25 @@
 import type {AppModule} from '../AppModule.js';
 import type {ModuleContext} from '../ModuleContext.js';
 import {BrowserWindow, dialog, ipcMain, shell} from 'electron';
-import {basename} from 'node:path';
-import {scanFolder, guessStyle, looksLikeCortinaFolder} from '../services/scan.js';
+import {basename, dirname, extname, relative, sep} from 'node:path';
+import {readFile, stat, writeFile} from 'node:fs/promises';
+import {scanFolder, guessStyle, isAudioFile, looksLikeCortinaFolder} from '../services/scan.js';
+import {commonAncestor, displayFolderPath, playlistSourceFolders} from '../services/import-sources.js';
 import {clearAudioCache} from '../services/transcode.js';
 import {AnalysisManager, type AnalysisState} from '../services/loudness.js';
 import {LibraryWatcher} from '../services/watcher.js';
 import {writeSongTags} from '../services/tags.js';
 import {proposeLibrary, type EnrichInput} from '../services/enrich.js';
 import {suggestTandas} from '../services/suggest-tandas.js';
+import {
+  buildImportPreview,
+  decodeM3u,
+  exportFilename,
+  parseM3u,
+  resolveEntries,
+  writeM3u,
+  type ImportPreview,
+} from '../services/playlist-m3u.js';
 import {
   applySmartOrganize,
   type SmartOrganizeChange,
@@ -21,7 +32,11 @@ import {
   getSongPath,
   importSongs,
   listPendingAnalysis,
+  keepTanda,
+  listCollectionTandas,
+  listLibraryRoots,
   listPlaylists,
+  listSongPaths,
   listTandas,
   markAnalysisFailed,
   pruneMissingSongs,
@@ -35,6 +50,7 @@ import {
   setSongGenres,
   updateSong,
   type Library,
+  type Playlist,
   type SavePlaylistInput,
   type SaveTandaInput,
   type ScannedSong,
@@ -50,7 +66,15 @@ type ImportTreeNode = {
   guess: string | null;
   cortina: boolean; // folder name looks like a cortina folder (pre-checks the toggle)
   children: ImportTreeNode[];
+  // Set on the root when the import was started from a playlist file: the
+  // renderer continues into the playlist import once the folders are in.
+  playlist?: {path: string; name: string; found: number; total: number; inLibrary: number};
 };
+
+const PLAYLIST_EXTS = new Set(['.m3u', '.m3u8']);
+export function isPlaylistFile(file: string): boolean {
+  return PLAYLIST_EXTS.has(extname(file).toLowerCase());
+}
 
 /** Build the nested folder tree (with per-folder song counts + a style guess)
  *  from a flat list of scanned songs, for the import review UI. */
@@ -140,30 +164,74 @@ export class IpcModule implements AppModule {
     watcher.start();
 
     // --- Detailed import: scan a folder for preview (persist nothing yet), let
-    // the renderer assign a style per folder, then commit with those styles. ---
-    let importPreview: {root: string; songs: ScannedSong[]} | null = null;
+    // the renderer assign a style per folder, then commit with those styles.
+    // A preview may span several roots when it was started from a playlist
+    // file (one root per folder the playlist's songs live in); the tree shown
+    // to the DJ is then keyed from their common ancestor. ---
+    type PendingRoot = {root: string; songs: ScannedSong[]};
+    let importPreview: {displayRoot: string; roots: PendingRoot[]} | null = null;
 
-    ipcMain.handle('import:scanPreview', async (event): Promise<ImportTreeNode | null> => {
-      const win = BrowserWindow.fromWebContents(event.sender);
-      const opts: Electron.OpenDialogOptions = {
-        title: 'Choose a folder to import',
-        properties: ['openDirectory'],
-      };
-      const result = win
-        ? await dialog.showOpenDialog(win, opts)
-        : await dialog.showOpenDialog(opts);
-      if (result.canceled || result.filePaths.length === 0) return null;
-      const root = result.filePaths[0];
-      const {songs} = await scanFolder(root);
-      importPreview = {root, songs};
-      return buildImportTree(root, songs);
-    });
+    // Scan one folder, or the folders a playlist file points at, into a preview.
+    const previewPath = async (chosen: string): Promise<ImportTreeNode | null> => {
+      const info = await stat(chosen).catch(() => null);
+      if (!info) return null;
+      if (info.isDirectory()) {
+        const {songs} = await scanFolder(chosen);
+        importPreview = {displayRoot: chosen, roots: [{root: chosen, songs}]};
+        return buildImportTree(chosen, songs);
+      }
+      if (isAudioFile(chosen)) return previewPath(dirname(chosen)); // a dropped song → its folder
+      if (!isPlaylistFile(chosen)) return null;
+
+      const parsed = parseM3u(decodeM3u(await readFile(chosen)));
+      const src = playlistSourceFolders(parsed, dirname(chosen), listLibraryRoots());
+      const roots: PendingRoot[] = [];
+      for (const root of src.folders) roots.push({root, songs: (await scanFolder(root)).songs});
+      const displayRoot = commonAncestor(src.folders) || dirname(chosen);
+      importPreview = {displayRoot, roots};
+      const songs = roots.flatMap(r =>
+        r.songs.map(s => ({...s, folderPath: displayFolderPath(displayRoot, r.root, s.folderPath)})),
+      );
+      const tree = buildImportTree(displayRoot, songs);
+      const name = (parsed.name || '').trim() || basename(chosen, extname(chosen));
+      tree.playlist = {path: chosen, name, found: src.found, total: src.total, inLibrary: src.inLibrary};
+      return tree;
+    };
+
+    // `kind` picks the dialog: a folder (default) or a playlist file. Two plain
+    // choices in the UI beat one picker that quietly accepts both.
+    ipcMain.handle(
+      'import:scanPreview',
+      async (event, opts?: {kind?: 'folder' | 'playlist'}): Promise<ImportTreeNode | null> => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        const playlist = opts?.kind === 'playlist';
+        const dialogOpts: Electron.OpenDialogOptions = playlist
+          ? {
+              title: 'Choose a playlist',
+              properties: ['openFile'],
+              filters: [{name: 'Playlists', extensions: ['m3u8', 'm3u']}],
+            }
+          : {title: 'Choose your music folder', properties: ['openDirectory']};
+        const result = win
+          ? await dialog.showOpenDialog(win, dialogOpts)
+          : await dialog.showOpenDialog(dialogOpts);
+        if (result.canceled || result.filePaths.length === 0) return null;
+        return previewPath(result.filePaths[0]);
+      },
+    );
+
+    // Same preview from a path the renderer already has (a dropped folder,
+    // song or playlist file).
+    ipcMain.handle('import:scanPreviewPath', (_event, chosen: string) =>
+      typeof chosen === 'string' && chosen ? previewPath(chosen) : null,
+    );
 
     // Commit the previewed import. `types` maps a relative folder path to the
     // chosen style; a song with no entry for its folder is imported as 'mixed'.
     // `cortinas` maps a folder path to its cortina flag (the per-folder toggle):
     // an explicit entry overrides the folder-name heuristic, and `true` is also
     // persisted in folder_flags so future imports into that folder inherit it.
+    // Keys are relative to the tree's display root; each root maps them back.
     ipcMain.handle(
       'import:commit',
       (
@@ -173,14 +241,25 @@ export class IpcModule implements AppModule {
         if (!importPreview) return null;
         const types = (payload && payload.types) || {};
         const cortinas = (payload && payload.cortinas) || {};
-        const songs = importPreview.songs.map(s => ({
-          ...s,
-          genre: types[s.folderPath] || 'mixed',
-          isCortina: s.folderPath in cortinas ? cortinas[s.folderPath] : s.isCortina,
-        }));
-        // Persist the folder-level flags so re-imports / dropped-in clips inherit.
-        setFolderFlags(importPreview.root, cortinas);
-        importSongs(importPreview.root, songs);
+        for (const {root, songs: scanned} of importPreview.roots) {
+          const disp = (fp: string) => displayFolderPath(importPreview!.displayRoot, root, fp);
+          const songs = scanned.map(s => ({
+            ...s,
+            genre: types[disp(s.folderPath)] || 'mixed',
+            isCortina: disp(s.folderPath) in cortinas ? cortinas[disp(s.folderPath)] : s.isCortina,
+          }));
+          // Persist the folder-level flags (root-relative) so re-imports /
+          // dropped-in clips inherit.
+          const prefix = relative(importPreview.displayRoot, root).split(sep).filter(Boolean).join(' / ');
+          const rootFlags: Record<string, boolean> = {};
+          for (const [key, flag] of Object.entries(cortinas)) {
+            if (!prefix) rootFlags[key] = flag;
+            else if (key === prefix) rootFlags[''] = flag;
+            else if (key.startsWith(`${prefix} / `)) rootFlags[key.slice(prefix.length + 3)] = flag;
+          }
+          setFolderFlags(root, rootFlags);
+          importSongs(root, songs);
+        }
         importPreview = null;
         analysis.enqueuePending();
         watcher.sync();
@@ -336,15 +415,22 @@ export class IpcModule implements AppModule {
       },
     );
 
-    ipcMain.handle('tandas:list', () => listTandas());
+    // "My tandas": playlist-only tandas (from an import) are left out.
+    ipcMain.handle('tandas:list', () => listCollectionTandas());
 
     // Match the bundled curated tandas against the DJ's library and return the
     // ones they fully own — used to seed the (otherwise empty) Tandas page with
     // ready-to-play suggestions. Pure in-memory string matching, like the Smart
     // Organize preview.
-    ipcMain.handle('tandas:suggest', () => suggestTandas(getLibrary(), listTandas()));
+    ipcMain.handle('tandas:suggest', () => suggestTandas(getLibrary(), listCollectionTandas()));
 
     ipcMain.handle('tandas:save', (_event, input: SaveTandaInput) => saveTanda(input));
+
+    // Keep a playlist-only tanda (made by an import) in "My tandas".
+    ipcMain.handle('tandas:keep', (_event, id: string) => {
+      keepTanda(id);
+      return true;
+    });
 
     ipcMain.handle('tandas:delete', (_event, id: string) => {
       deleteTanda(id);
@@ -357,6 +443,92 @@ export class IpcModule implements AppModule {
 
     ipcMain.handle('playlists:delete', (_event, id: string) => {
       deletePlaylist(id);
+      return true;
+    });
+
+    // --- Playlist exchange with other players (M3U / M3U8). ---
+
+    // Write one playlist as an extended M3U8 the DJ picks a location for.
+    // Returns the written path, or null when the dialog was cancelled.
+    ipcMain.handle('playlists:export', async (event, id: string): Promise<string | null> => {
+      const playlist = listPlaylists().find(p => p.id === String(id));
+      if (!playlist) return null;
+      const win = BrowserWindow.fromWebContents(event.sender);
+      const opts: Electron.SaveDialogOptions = {
+        title: 'Export playlist',
+        defaultPath: exportFilename(playlist),
+        filters: [
+          {name: 'M3U8 playlist (UTF-8)', extensions: ['m3u8']},
+          {name: 'M3U playlist', extensions: ['m3u']},
+        ],
+      };
+      const result = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+      if (result.canceled || !result.filePath) return null;
+      const paths = listSongPaths();
+      await writeFile(result.filePath, writeM3u(playlist, sid => paths.get(sid) ?? null), 'utf8');
+      return result.filePath;
+    });
+
+    // Pick an M3U/M3U8, resolve its songs against the library and propose the
+    // tandas + cortinas it would create. Nothing is written until commit.
+    let playlistImport: ImportPreview | null = null;
+
+    const previewPlaylistFile = async (file: string): Promise<ImportPreview> => {
+      const parsed = parseM3u(decodeM3u(await readFile(file)));
+      const resolved = resolveEntries(parsed, dirname(file), getLibrary(), listSongPaths());
+      playlistImport = buildImportPreview(parsed, resolved, {
+        sourcePath: file,
+        existingTandas: listCollectionTandas(),
+        existingPlaylists: listPlaylists(),
+      });
+      return playlistImport;
+    };
+
+    ipcMain.handle('playlists:importPreview', async (event): Promise<ImportPreview | null> => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      const opts: Electron.OpenDialogOptions = {
+        title: 'Import playlist',
+        properties: ['openFile'],
+        filters: [
+          {name: 'Playlists', extensions: ['m3u8', 'm3u']},
+          {name: 'All files', extensions: ['*']},
+        ],
+      };
+      const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+      if (result.canceled || result.filePaths.length === 0) return null;
+      return previewPlaylistFile(result.filePaths[0]);
+    });
+
+    // Preview a playlist file the renderer already has a path for (the folder
+    // import's follow-up step, or a dropped file).
+    ipcMain.handle('playlists:importPreviewPath', (_event, file: string) =>
+      typeof file === 'string' && isPlaylistFile(file) ? previewPlaylistFile(file) : null,
+    );
+
+    // Create the previewed tandas (reusing saved ones with the same songs) and
+    // the playlist. `name` lets the DJ rename before committing.
+    ipcMain.handle('playlists:importCommit', (_event, payload?: {name?: string}): Playlist | null => {
+      if (!playlistImport) return null;
+      const preview = playlistImport;
+      playlistImport = null;
+      const items: SavePlaylistInput['items'] = [];
+      for (const it of preview.items) {
+        if (it.type === 'cortina') {
+          items.push({type: 'cortina', refId: it.song.id});
+          continue;
+        }
+        const t = it.tanda;
+        const tandaId =
+          t.existingTandaId ??
+          saveTanda({name: t.name, songIds: t.songs.map(s => s.id), tags: t.tags, inCollection: false}).id;
+        items.push({type: 'tanda', refId: tandaId});
+      }
+      const name = (payload?.name ?? preview.name).trim() || preview.name;
+      return savePlaylist({name, items});
+    });
+
+    ipcMain.handle('playlists:importCancel', () => {
+      playlistImport = null;
       return true;
     });
   }

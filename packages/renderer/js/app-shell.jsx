@@ -200,6 +200,7 @@ function AppBody({ t, setTweak }) {
 
       <PlayerBar />
 
+      <PlaylistImportHost onDone={() => setView("Playlists")} />
       {update && <UpdateModal update={update} onDismiss={dismissUpdate} />}
       {showOnboarding && <OnboardingWizard onClose={dismissOnboarding} />}
     </div>

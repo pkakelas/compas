@@ -43,6 +43,11 @@ let _state = {
   totalFolders: 0,
   roots: [],
   tandas: [],
+  // A pending playlist import (the preview awaiting confirmation). Lives here,
+  // not in a view, because a folder import started from a playlist file can
+  // unmount the screen that began it (the first-run screen goes away once songs
+  // land); the app shell renders the confirmation modal from this.
+  playlistImport: null,
   // Curated tandas the DJ fully owns, matched against their library in the main
   // process. Virtual (not in the DB): they seed the otherwise-empty Tandas page
   // and can be saved (kept) or dismissed. Recomputed whenever the library or the
@@ -235,8 +240,12 @@ const Store = {
   },
   // Detailed import — step 1: pick a folder and scan it for preview (nothing is
   // saved). Returns the folder tree, or null if cancelled.
-  async previewImport() {
+  // `source` is a path (a dropped folder / song / playlist file — the picker is
+  // skipped), "playlist" (open the playlist picker) or nothing (folder picker).
+  async previewImport(source) {
     if (!window.compas.importScanPreview) return null;
+    if (source === "playlist") return await window.compas.importScanPreview("playlist");
+    if (source && window.compas.importScanPreviewPath) return await window.compas.importScanPreviewPath(source);
     return await window.compas.importScanPreview();
   },
   // Detailed import — step 2: commit with a per-folder style map and cortina-flag
@@ -288,6 +297,15 @@ const Store = {
     _set({ tandas: tandas || [], playlists: playlists || [] });
     return saved;
   },
+  // Keep a tanda that came in with an imported playlist in "My tandas".
+  async keepTanda(id) {
+    await window.compas.keepTanda(id);
+    const [tandas, playlists] = await Promise.all([
+      window.compas.listTandas(),
+      window.compas.listPlaylists(),
+    ]);
+    _set({ tandas: tandas || [], playlists: playlists || [] });
+  },
   async deleteTanda(id) {
     await window.compas.deleteTanda(id);
     // Deleting a tanda can change playlists that referenced it — refresh both.
@@ -331,6 +349,31 @@ const Store = {
   },
   setPlaylistsLocal(playlists) {
     _set({ playlists });
+  },
+  // Resolve a playlist file against the (now imported) library and hold its
+  // preview for the app-shell modal. Returns the preview, or null.
+  async beginPlaylistImport(path) {
+    if (!path || !window.compas.importPlaylistPreviewPath) return null;
+    let preview = null;
+    try { preview = await window.compas.importPlaylistPreviewPath(path); } catch (_e) { preview = null; }
+    _set({ playlistImport: preview || null });
+    return preview;
+  },
+  cancelPlaylistImport() {
+    _set({ playlistImport: null });
+    if (window.compas.importPlaylistCancel) { try { window.compas.importPlaylistCancel(); } catch (_e) { /* ignore */ } }
+  },
+  // Commit a previewed M3U import. It may create tandas as well as the
+  // playlist, so refresh both. Returns the new playlist (or null).
+  async importPlaylistCommit(name) {
+    const saved = await window.compas.importPlaylistCommit(name);
+    _set({ playlistImport: null });
+    const [tandas, playlists] = await Promise.all([
+      window.compas.listTandas(),
+      window.compas.listPlaylists(),
+    ]);
+    _set({ tandas: tandas || [], playlists: playlists || [] });
+    return saved;
   },
   songById(id) {
     return _state.byId[id];
