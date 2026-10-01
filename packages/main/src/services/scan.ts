@@ -1,3 +1,4 @@
+import {existsSync} from 'node:fs';
 import {readdir} from 'node:fs/promises';
 import {basename, extname, join, relative, sep} from 'node:path';
 import {parseFile} from 'music-metadata';
@@ -118,16 +119,44 @@ function segmentsAreCortina(segments: string[]): boolean {
   return segments.some(looksLikeCortinaFolder);
 }
 
-function mapGenre(segments: string[], tag: string | undefined): string {
-  // The deepest folder name that names a style wins.
-  for (let i = segments.length - 1; i >= 0; i--) {
-    const g = guessStyle(segments[i]);
-    if (g) return g;
-  }
-  const t = (tag || '').toLowerCase();
-  if (t.includes('vals')) return 'vals';
+/**
+ * The style a file's own genre tag names ("Tango", "Vals criollo", "Tango
+ * Milonga", …), or null when the tag is missing or names nothing we recognise.
+ * Vals and milonga are checked first: tags like "Tango Vals" mean the vals.
+ */
+export function styleFromGenreTag(tags: string[] | null | undefined): string | null {
+  const t = (tags || []).join(' ').toLowerCase();
+  if (/vals|waltz/.test(t)) return 'vals';
   if (t.includes('milonga')) return 'milonga';
-  return 'tango';
+  if (t.includes('tango')) return 'tango';
+  const g = guessStyle(t);
+  return g === 'mixed' ? null : g;
+}
+
+/**
+ * Read just the genre tag of `file` and map it to a style (null when the tag
+ * names none, or the file can't be parsed — as in scanFile). Returns undefined
+ * when the file isn't there, so callers can tell "no usable tag" from "try
+ * again later" (e.g. an unplugged drive).
+ */
+export async function readTagStyle(file: string): Promise<string | null | undefined> {
+  try {
+    const meta = await parseFile(file, {duration: false, skipCovers: true});
+    return styleFromGenreTag(meta.common.genre);
+  } catch {
+    return existsSync(file) ? null : undefined;
+  }
+}
+
+function mapGenre(segments: string[], tagStyle: string | null): string {
+  // The deepest folder name that names a style wins — except "mixed", which
+  // says nothing about any one song, so the song's own tag outranks it.
+  let folderStyle: string | null = null;
+  for (let i = segments.length - 1; i >= 0 && !folderStyle; i--) {
+    folderStyle = guessStyle(segments[i]);
+  }
+  if (folderStyle && folderStyle !== 'mixed') return folderStyle;
+  return tagStyle ?? folderStyle ?? 'tango';
 }
 
 export type ScanResult = {root: string; songs: ScannedSong[]};
@@ -148,7 +177,7 @@ export async function scanFile(root: string, file: string): Promise<ScannedSong>
   let album: string | null = null;
   let year: number | null = null;
   let durationSec: number | null = null;
-  let genreTag: string | undefined;
+  let tagStyle: string | null = null;
 
   try {
     const meta = await parseFile(file, {duration: true});
@@ -157,7 +186,7 @@ export async function scanFile(root: string, file: string): Promise<ScannedSong>
     if (c.artist) artist = c.artist;
     if (c.album) album = c.album;
     if (typeof c.year === 'number') year = c.year;
-    if (Array.isArray(c.genre) && c.genre.length) genreTag = c.genre[0];
+    tagStyle = styleFromGenreTag(c.genre);
     if (typeof meta.format.duration === 'number') durationSec = meta.format.duration;
   } catch {
     // Unreadable/corrupt tags — keep the file with filename-derived defaults.
@@ -175,7 +204,8 @@ export async function scanFile(root: string, file: string): Promise<ScannedSong>
     album,
     year,
     durationSec,
-    genre: mapGenre(segments, genreTag),
+    genre: mapGenre(segments, tagStyle),
+    tagStyle,
     isCortina: segmentsAreCortina(segments),
     folder,
     folderPath,

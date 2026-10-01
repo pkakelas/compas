@@ -114,13 +114,15 @@ export function writeAiff(path: string, seconds = 1): void {
 /**
  * Write a FLAC file (mono, 8kHz sine) of `seconds` length using the ffmpeg
  * binary the app bundles, so the fixture is exactly what real encoders produce.
+ * `genre`, when given, is written as the file's genre tag.
  */
-export function writeFlac(path: string, seconds = 1): void {
+export function writeFlac(path: string, seconds = 1, genre?: string): void {
   const require = createRequire(new URL('../../packages/main/package.json', import.meta.url));
   const ffmpeg = require('ffmpeg-static') as string;
   execFileSync(ffmpeg, [
     '-v', 'error', '-y',
     '-f', 'lavfi', '-i', `sine=frequency=220:sample_rate=8000:duration=${seconds}`,
+    ...(genre ? ['-metadata', `genre=${genre}`] : []),
     '-c:a', 'flac', path,
   ]);
 }

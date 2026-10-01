@@ -2,8 +2,15 @@ import type {AppModule} from '../AppModule.js';
 import type {ModuleContext} from '../ModuleContext.js';
 import {BrowserWindow, dialog, ipcMain, shell} from 'electron';
 import {basename, dirname, extname, relative, sep} from 'node:path';
+import {existsSync} from 'node:fs';
 import {readFile, stat, writeFile} from 'node:fs/promises';
-import {scanFolder, guessStyle, isAudioFile, looksLikeCortinaFolder} from '../services/scan.js';
+import {
+  scanFolder,
+  guessStyle,
+  isAudioFile,
+  looksLikeCortinaFolder,
+  readTagStyle,
+} from '../services/scan.js';
 import {commonAncestor, displayFolderPath, playlistSourceFolders} from '../services/import-sources.js';
 import {clearAudioCache} from '../services/transcode.js';
 import {AnalysisManager, type AnalysisState} from '../services/loudness.js';
@@ -23,6 +30,7 @@ import {
 import {
   applySmartOrganize,
   type SmartOrganizeChange,
+  applyTagStyles,
   clearLibrary,
   deletePlaylist,
   deleteSongsByIds,
@@ -35,6 +43,7 @@ import {
   keepTanda,
   listCollectionTandas,
   listLibraryRoots,
+  listMixedWithUncheckedTag,
   listPlaylists,
   listSongPaths,
   listTandas,
@@ -121,6 +130,24 @@ function buildImportTree(root: string, songs: ScannedSong[]): ImportTreeNode {
   return rootNode;
 }
 
+/**
+ * Give songs left 'mixed' by an older import the style their own genre tag
+ * names. Songs whose root or file is missing (e.g. an unplugged drive) are
+ * skipped and retried on a later launch. Resolves to how many songs changed
+ * style.
+ */
+async function backfillTagStyles(): Promise<number> {
+  const results: {id: number; style: string | null}[] = [];
+  const rootIsThere = new Map<string, boolean>();
+  for (const {id, path, root} of listMixedWithUncheckedTag()) {
+    if (!rootIsThere.has(root)) rootIsThere.set(root, existsSync(root));
+    if (!rootIsThere.get(root)) continue;
+    const style = await readTagStyle(path);
+    if (style !== undefined) results.push({id, style});
+  }
+  return results.length ? applyTagStyles(results) : 0;
+}
+
 export class IpcModule implements AppModule {
   async enable({app}: ModuleContext): Promise<void> {
     await app.whenReady();
@@ -162,6 +189,14 @@ export class IpcModule implements AppModule {
       onSongsAdded: () => analysis.enqueuePending(),
     });
     watcher.start();
+
+    // Libraries imported before the genre tag was honoured: fix them up in the
+    // background and refresh every window once done.
+    void backfillTagStyles()
+      .then(changed => {
+        if (changed > 0) broadcastLibrary(getLibrary());
+      })
+      .catch(console.error);
 
     // --- Detailed import: scan a folder for preview (persist nothing yet), let
     // the renderer assign a style per folder, then commit with those styles.
@@ -226,8 +261,10 @@ export class IpcModule implements AppModule {
       typeof chosen === 'string' && chosen ? previewPath(chosen) : null,
     );
 
-    // Commit the previewed import. `types` maps a relative folder path to the
-    // chosen style; a song with no entry for its folder is imported as 'mixed'.
+    // Commit the previewed import. `types` maps a relative folder path to its
+    // style: the DJ's choice (which may be 'mixed') or the one its name gives.
+    // A song whose folder has no entry takes the style its own genre tag names,
+    // and is 'mixed' only without one.
     // `cortinas` maps a folder path to its cortina flag (the per-folder toggle):
     // an explicit entry overrides the folder-name heuristic, and `true` is also
     // persisted in folder_flags so future imports into that folder inherit it.
@@ -245,7 +282,7 @@ export class IpcModule implements AppModule {
           const disp = (fp: string) => displayFolderPath(importPreview!.displayRoot, root, fp);
           const songs = scanned.map(s => ({
             ...s,
-            genre: types[disp(s.folderPath)] || 'mixed',
+            genre: types[disp(s.folderPath)] || s.tagStyle || 'mixed',
             isCortina: disp(s.folderPath) in cortinas ? cortinas[disp(s.folderPath)] : s.isCortina,
           }));
           // Persist the folder-level flags (root-relative) so re-imports /

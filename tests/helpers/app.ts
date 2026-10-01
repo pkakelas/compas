@@ -24,9 +24,12 @@ export type LaunchedApp = {
  * We launch the production-style path (renderer loaded from disk, no Vite dev
  * server) by NOT setting MODE=development / VITE_DEV_SERVER_URL. PLAYWRIGHT_TEST
  * makes the entry point crash-fast on unhandled errors.
+ *
+ * Pass the `userDataDir` of an earlier launch to reopen that same library.
  */
-export async function launchApp(): Promise<LaunchedApp> {
-  const userDataDir = mkdtempSync(join(tmpdir(), 'compas-e2e-'));
+export async function launchApp(
+  userDataDir = mkdtempSync(join(tmpdir(), 'compas-e2e-')),
+): Promise<LaunchedApp> {
   const app = await electron.launch({
     args: ['.', `--user-data-dir=${userDataDir}`],
     cwd: repoRoot,

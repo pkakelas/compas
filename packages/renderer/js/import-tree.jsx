@@ -4,8 +4,10 @@
 // Vals / Milonga / Kizomba / … / custom) per folder, plus a separate "Cortina"
 // flag (cortina is a usage flag, not a genre). Setting either cascades to all
 // subfolders; any subfolder can override. On import, folders left unset default
-// to Mixed — for libraries organized by orchestra rather than by style. Used in
-// two modes:
+// to Mixed — for libraries organized by orchestra rather than by style — and
+// each song in them takes the style its own genre tag names, if any. Mixed set
+// by the DJ is a choice like any other: it holds whatever the tags say.
+// Used in two modes:
 //   • "import": a freshly-scanned (not-yet-saved) folder → commit with a
 //     per-folder style map.
 //   • "retype": the existing library → update the styles of existing songs.
@@ -170,7 +172,7 @@ function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
     const walk = (n, inherited) => {
       const explicit = assignments[n.key] || null;
       const resolved = explicit || inherited || n.guess || importDefault;
-      map.set(n.key, { resolved, explicit: !!explicit, inherited: !explicit && !!(inherited || (resolved && resolved === n.guess) || (importDefault && resolved === importDefault)) });
+      map.set(n.key, { resolved, chosen: explicit || inherited || null, explicit: !!explicit, inherited: !explicit && !!(inherited || (resolved && resolved === n.guess) || (importDefault && resolved === importDefault)) });
       const childInherited = explicit || inherited; // guesses don't propagate
       (n.children || []).forEach((c) => walk(c, childInherited));
     };
@@ -216,7 +218,10 @@ function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
       const cortinas = {};
       let typed = 0;
       (roots || []).forEach((r) => visit(r, (n) => {
-        const res = (resolvedMap.get(n.key) || {}).resolved;
+        // Send a style only where the DJ chose one (here or on a parent) or
+        // the folder's name gives one. A folder with neither is left out, so
+        // its songs go by their own genre tag.
+        const res = (resolvedMap.get(n.key) || {}).chosen || folderNameStyle(n);
         if (res) { types[n.path] = res; typed++; }
         // Send the resolved cortina flag for every folder so it overrides the
         // scanner's folder-name guess with exactly what the DJ sees.
@@ -268,7 +273,7 @@ function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
           <div className="it-hint">
             <span className="it-hint-ic"><I.folderOpen s={15} /></span>
             <div>{isImport
-              ? <>Set the genre for each folder so your library is easy to search later. Use <b>Set style</b> on any folder that holds a single genre — e.g. a <b>Vals</b> or <b>Milonga</b> folder — and it applies to everything inside it. Any folder you leave unset stays <b>Mixed</b>. Toggle <b>Cortina</b> to mark a folder of floor-clearers (kept separate from genre).</>
+              ? <>Set the genre for each folder so your library is easy to search later. Use <b>Set style</b> on any folder that holds a single genre — e.g. a <b>Vals</b> or <b>Milonga</b> folder — and it applies to everything inside it. Any folder you leave unset stays <b>Mixed</b>: its songs take their style from their own genre tag where they have one (set <b>Mixed</b> yourself to ignore the tags). Toggle <b>Cortina</b> to mark a folder of floor-clearers (kept separate from genre).</>
               : <>Pick a style for each folder using the <b>Set style</b> button on the right, or toggle <b>Cortina</b> to mark a folder of floor-clearers.
                 Both apply to every folder inside — click a subfolder to override.</>}</div>
           </div>
@@ -285,8 +290,8 @@ function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
           <div className="so-foot-note">
             {isImport
               ? (explicitFolders > 0
-                  ? <><I.check s={13} /> {explicitFolders} folder{explicitFolders === 1 ? "" : "s"} with an explicit style — the rest import as Mixed.</>
-                  : <><I.check s={13} /> Everything imports as Mixed — set styles only if you want to.</>)
+                  ? <><I.check s={13} /> {explicitFolders} folder{explicitFolders === 1 ? "" : "s"} with an explicit style — the rest go by each song’s genre tag, or import as Mixed.</>
+                  : <><I.check s={13} /> Songs go by their genre tag, or import as Mixed — set styles only if you want to.</>)
               : <><I.check s={13} /> Saved in Compás only — your files aren’t modified.</>}
           </div>
           <div className="so-foot-actions">
@@ -307,14 +312,21 @@ function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
  * commit with the chosen per-folder styles. Used by the Library, the Tanda
  * builder/manager and the first-run screen so the import experience is
  * identical everywhere and lives in exactly one place. */
-/* The choices the import review would submit untouched: every folder gets its
- * own style guess (else the import default), and the cortina flag cascades
- * from a cortina-named folder to everything inside it. */
+/* The style a folder's own name gives it on import. "Mixed" doesn't count: it
+ * says nothing about any one song. */
+function folderNameStyle(n) {
+  return n.guess && n.guess !== "mixed" ? n.guess : null;
+}
+
+/* The choices the import review would submit untouched: every folder whose
+ * name gives a style gets it (the rest go by each song's genre tag), and the
+ * cortina flag cascades from a cortina-named folder to everything inside it. */
 function defaultImportChoices(root) {
   const types = {};
   const cortinas = {};
   const walk = (n, parentCortina) => {
-    types[n.path] = n.guess || IMPORT_DEFAULT_STYLE || "mixed";
+    const style = folderNameStyle(n);
+    if (style) types[n.path] = style;
     const c = !!(n.cortina || parentCortina);
     cortinas[n.path] = c;
     (n.children || []).forEach((k) => walk(k, c));

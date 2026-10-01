@@ -23,6 +23,10 @@ Build is required because tests load the renderer from `packages/renderer/dist`
 - **import.spec.ts** — stubs the native folder dialog, feeds a generated WAV
   fixture library, drives the import-review modal, and asserts the library
   populates through the real IPC → `scanFolder` → SQLite path.
+- **import-genre-tag.spec.ts** — imports FLACs carrying genre tags from a
+  folder with no style in its name and asserts each song takes its tag's style;
+  then rewinds the database to a pre-fix import and asserts the launch backfill
+  repairs it.
 - **playback.spec.ts** — builds a tanda from imported tracks, queues it in Live,
   hits play, and asserts Howler actually reports a playing sound.
 

@@ -120,19 +120,24 @@ function getDb(): Database.Database {
 /**
  * Add any missing columns to an existing table. SQLite has no
  * `ADD COLUMN IF NOT EXISTS`, so we diff against `PRAGMA table_info` first.
- * This lets us evolve the schema without a wipe-and-reimport.
+ * This lets us evolve the schema without a wipe-and-reimport. Returns the names
+ * of the columns it added.
  */
 function addColumns(
   d: Database.Database,
   table: string,
   columns: [name: string, def: string][],
-): void {
+): string[] {
   const existing = new Set(
     (d.prepare(`PRAGMA table_info(${table})`).all() as {name: string}[]).map(c => c.name),
   );
+  const added: string[] = [];
   for (const [name, def] of columns) {
-    if (!existing.has(name)) d.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${def}`);
+    if (existing.has(name)) continue;
+    d.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${def}`);
+    added.push(name);
   }
+  return added;
 }
 
 function migrate(d: Database.Database): void {
@@ -213,7 +218,7 @@ function migrate(d: Database.Database): void {
   // the DJ keeps one: they stay out of "My tandas" and are removed once no
   // playlist uses them.
   addColumns(d, 'tandas', [['in_collection', 'INTEGER NOT NULL DEFAULT 1']]);
-  addColumns(d, 'songs', [
+  const addedSongColumns = addColumns(d, 'songs', [
     ['loudness_lufs', 'REAL'],
     ['loudness_peak', 'REAL'],
     ['content_start_samples', 'INTEGER'],
@@ -234,7 +239,17 @@ function migrate(d: Database.Database): void {
     // legacy genre='cortina' rows onto the flag.
     ['is_cortina', 'INTEGER NOT NULL DEFAULT 0'],
     ['cortina_locked', 'INTEGER NOT NULL DEFAULT 0'],
+    // Whether the file's genre tag has been considered for this song's style.
+    // Imports used to ignore the tag and stamp 'mixed' on every song in a folder
+    // without a style; those rows stay 0 until the startup backfill (see
+    // listMixedWithUncheckedTag) has read their tag.
+    ['genre_tag_checked', 'INTEGER NOT NULL DEFAULT 0'],
   ]);
+  // Only the old 'mixed' rows are owed that backfill: a song the DJ later
+  // re-types to Mixed must not be flipped back by its tag.
+  if (addedSongColumns.includes('genre_tag_checked')) {
+    d.exec(`UPDATE songs SET genre_tag_checked = 1 WHERE genre <> 'mixed'`);
+  }
   // The background worker repeatedly asks "what's left?" — keep that cheap.
   d.exec(
     `CREATE INDEX IF NOT EXISTS idx_songs_analysis_status ON songs(analysis_status)`,
@@ -316,6 +331,9 @@ export type ScannedSong = {
   year: number | null;
   durationSec: number | null;
   genre: string;
+  // The style named by the file's own genre tag (null when it names none). The
+  // import uses it for songs whose folder carries no style of its own.
+  tagStyle?: string | null;
   // Set by the scanner when the song lives under a folder named like a cortina
   // folder. Orthogonal to genre.
   isCortina?: boolean;
@@ -336,8 +354,8 @@ export function importSongs(root: string, songs: ScannedSong[]): void {
   const now = Date.now();
 
   const upsertSong = d.prepare(`
-    INSERT INTO songs (path, title, artist, singer, album, year, duration_sec, genre, is_cortina, folder, folder_path, root, added_at)
-    VALUES (@path, @title, @artist, @singer, @album, @year, @durationSec, @genre, @isCortina, @folder, @folderPath, @root, @added_at)
+    INSERT INTO songs (path, title, artist, singer, album, year, duration_sec, genre, genre_tag_checked, is_cortina, folder, folder_path, root, added_at)
+    VALUES (@path, @title, @artist, @singer, @album, @year, @durationSec, @genre, 1, @isCortina, @folder, @folderPath, @root, @added_at)
     ON CONFLICT(path) DO UPDATE SET
       title = excluded.title,
       artist = CASE WHEN songs.orq_locked = 1 THEN songs.artist ELSE excluded.artist END,
@@ -990,6 +1008,36 @@ export function getSongMetaByPath(
     | {id: number; duration_sec: number | null}
     | undefined;
   return row ? {id: row.id, durationSec: row.duration_sec} : null;
+}
+
+/**
+ * Songs still 'mixed' from an import that never looked at their genre tag —
+ * the work list for the startup backfill.
+ */
+export function listMixedWithUncheckedTag(): {id: number; path: string; root: string}[] {
+  return getDb()
+    .prepare(`SELECT id, path, root FROM songs WHERE genre = 'mixed' AND genre_tag_checked = 0`)
+    .all() as {id: number; path: string; root: string}[];
+}
+
+/**
+ * Record the backfill's findings: each song's tag is now checked, and a song
+ * whose tag names a style takes it — unless the DJ re-typed it in the meantime.
+ * Returns how many songs changed style.
+ */
+export function applyTagStyles(results: {id: number; style: string | null}[]): number {
+  const d = getDb();
+  const setStyle = d.prepare(`UPDATE songs SET genre = ? WHERE id = ? AND genre = 'mixed'`);
+  const setChecked = d.prepare('UPDATE songs SET genre_tag_checked = 1 WHERE id = ?');
+  let changed = 0;
+  const tx = d.transaction(() => {
+    for (const r of results) {
+      if (r.style) changed += setStyle.run(r.style, r.id).changes;
+      setChecked.run(r.id);
+    }
+  });
+  tx();
+  return changed;
 }
 
 /**
