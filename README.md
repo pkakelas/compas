@@ -69,6 +69,15 @@ marketing site should link there — Vercel is great for the site, but large
 | Windows (Intel/AMD) | `Compas-{version}-win-x64.exe` |
 | Windows (ARM) | `Compas-{version}-win-arm64.exe` |
 
+**Microsoft Store packages** are built separately, by running the
+[Store package workflow](.github/workflows/store-package.yml) by hand. It
+attaches `Compas-{version}-win-x64.appx` and `Compas-{version}-win-arm64.appx`
+to the workflow run; upload both to the submission in Partner Center. It needs
+the repo variables `APPX_IDENTITY_NAME`, `APPX_PUBLISHER` and
+`APPX_PUBLISHER_DISPLAY_NAME` (values from Partner Center → Product identity),
+plus `APPX_DISPLAY_NAME` if the reserved app name is not "Compás". A Store
+install is updated by the Store, so the in-app updater is off there.
+
 **Download links on Vercel** — point buttons at GitHub:
 
 ```html

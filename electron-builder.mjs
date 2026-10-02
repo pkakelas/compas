@@ -19,6 +19,26 @@ const azureSignOptions = process.env.AZURE_CODE_SIGNING_ACCOUNT
     }
   : undefined;
 
+// Microsoft Store package, built only by the "Store package" workflow (which
+// asks for the appx target on the command line — it is deliberately not in
+// win.target, so releases never build it). The three identity values are copied
+// from Partner Center → Product identity; none are secret, so they come from
+// GitHub Actions repo *variables*. The package is left unsigned — the Store
+// signs it on ingestion.
+const appxOptions = process.env.APPX_IDENTITY_NAME
+  ? {
+      identityName: process.env.APPX_IDENTITY_NAME,
+      publisher: process.env.APPX_PUBLISHER,
+      publisherDisplayName: process.env.APPX_PUBLISHER_DISPLAY_NAME,
+      applicationId: 'Compas',
+      // Must match an app name reserved in Partner Center, or the upload is
+      // rejected. Override with APPX_DISPLAY_NAME if "Compás" isn't reserved.
+      displayName: process.env.APPX_DISPLAY_NAME || 'Compás',
+      // The tile images in buildResources/appx carry their own rounded plate.
+      backgroundColor: 'transparent',
+    }
+  : undefined;
+
 export default /** @type import('electron-builder').Configuration */
 ({
   appId: 'com.compas.player',
@@ -83,6 +103,7 @@ export default /** @type import('electron-builder').Configuration */
     // build is unsigned. See azureSignOptions definition at the top of the file.
     ...(azureSignOptions ? {azureSignOptions} : {}),
   },
+  ...(appxOptions ? {appx: appxOptions} : {}),
   nsis: {
     shortcutName: 'Compás',
     oneClick: false,

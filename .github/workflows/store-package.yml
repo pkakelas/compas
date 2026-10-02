@@ -1,0 +1,56 @@
+name: Store package
+
+# Builds the Microsoft Store packages (.appx) on demand and attaches them to the
+# workflow run. Kept out of the Release workflow on purpose: the packages are
+# uploaded by hand to Partner Center, never published to GitHub Releases, and a
+# packaging failure here must not break a release or its update metadata.
+on:
+  workflow_dispatch:
+
+jobs:
+  appx:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Package for the Store
+        shell: bash
+        env:
+          # Store identity from Partner Center → Product identity. Not secret,
+          # so these are repo variables. See appxOptions in electron-builder.mjs.
+          APPX_IDENTITY_NAME: ${{ vars.APPX_IDENTITY_NAME }}
+          APPX_PUBLISHER: ${{ vars.APPX_PUBLISHER }}
+          APPX_PUBLISHER_DISPLAY_NAME: ${{ vars.APPX_PUBLISHER_DISPLAY_NAME }}
+          APPX_DISPLAY_NAME: ${{ vars.APPX_DISPLAY_NAME }}
+        run: |
+          if [ -z "$APPX_IDENTITY_NAME" ] || [ -z "$APPX_PUBLISHER" ] || [ -z "$APPX_PUBLISHER_DISPLAY_NAME" ]; then
+            echo "::error::Set the APPX_IDENTITY_NAME, APPX_PUBLISHER and APPX_PUBLISHER_DISPLAY_NAME repo variables first."
+            exit 1
+          fi
+          pnpm exec electron-builder build --config electron-builder.mjs --win appx --x64 --arm64 --publish never
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-packages
+          path: dist/*.appx
+          if-no-files-found: error
