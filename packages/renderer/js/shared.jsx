@@ -7,8 +7,8 @@ const { useMemo, useState, useRef, useCallback, useEffect } = React;
 const I = {
   play:  (p) => <svg viewBox="0 0 24 24" width={p.s||20} height={p.s||20} fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>,
   pause: (p) => <svg viewBox="0 0 24 24" width={p.s||20} height={p.s||20} fill="currentColor"><rect x="7" y="5.5" width="3.4" height="13" rx="1"/><rect x="13.6" y="5.5" width="3.4" height="13" rx="1"/></svg>,
-  prev:  (p) => <svg viewBox="0 0 24 24" width={p.s||18} height={p.s||18} fill="currentColor"><path d="M7 6v12M19 6.5v11l-9-5.5z"/></svg>,
-  next:  (p) => <svg viewBox="0 0 24 24" width={p.s||18} height={p.s||18} fill="currentColor"><path d="M17 6v12M5 6.5v11l9-5.5z"/></svg>,
+  prev:  (p) => <svg viewBox="0 0 24 24" width={p.s||18} height={p.s||18} fill="currentColor"><rect x="5" y="6.5" width="2.6" height="11" rx="1"/><path d="M19 6.5v11l-9-5.5z"/></svg>,
+  next:  (p) => <svg viewBox="0 0 24 24" width={p.s||18} height={p.s||18} fill="currentColor"><path d="M5 6.5v11l9-5.5z"/><rect x="16.4" y="6.5" width="2.6" height="11" rx="1"/></svg>,
   fwd:   (p) => <svg viewBox="0 0 24 24" width={p.s||17} height={p.s||17} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 6.5v11l8-5.5zM14 6.5v11l8-5.5z"/></svg>,
   skip:  (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="currentColor"><path d="M6 5.5v13l9-6.5z"/><rect x="16.4" y="5.5" width="2.6" height="13" rx="1"/></svg>,
   scissor:(p)=> <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="7" r="2.4"/><circle cx="6" cy="17" r="2.4"/><path d="M8 8.5L20 17M8 15.5L20 7"/></svg>,
