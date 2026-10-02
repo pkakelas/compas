@@ -543,6 +543,7 @@ button.tp-nav {
 }
 .tp-tandax:hover { border-color: var(--line-2); box-shadow: 0 4px 16px -10px var(--shadow-ink); }
 .tp-tandax.is-open { border-color: var(--line-2); }
+.tp-tandax.is-dragging, .tp-libcard.is-dragging { opacity: .4; }
 .tp-tandax-head { display: flex; align-items: center; gap: 10px; padding: 13px 14px 13px 9px; }
 .tp-tandax-caret {
   flex: 0 0 auto; width: 24px; height: 24px; border-radius: 7px; border: none; background: transparent;

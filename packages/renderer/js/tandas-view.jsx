@@ -191,7 +191,7 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
   const goBuild = () => setTab("build");
   const goManage = () => setTab("mine");
   const [builder, setBuilder] = useState({ songs: [], name: "", tags: [], editingId: null });
-  const [draggingId, setDraggingId] = useState(null);
+  const { makeDrag, draggingId } = useLibraryDrag();
   const { toast, flash, dismiss } = useToast();
   const { ask, modal } = useConfirm();
   const player = usePlayer();
@@ -274,10 +274,6 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
   };
   const dismissSuggestion = (t) => Store.dismissSuggestion(t.refId);
 
-  const makeDrag = (s) => ({
-    onDragStart: (e) => { e.dataTransfer.setData("text/plain", "song:" + s.id); e.dataTransfer.effectAllowed = "copy"; setDraggingId(s.id); },
-    onDragEnd: () => setDraggingId(null),
-  });
 
   if (!imported) return <div className="tv"><ImportScreen /></div>;
 

@@ -127,6 +127,13 @@ test('rows reorder into the gap nearest the pointer, or to the end', async () =>
   await expect.poll(storedItems).toEqual([VALS_TITLE, LOOSE_TITLE, CORTINA_TITLE, TANDA]);
 });
 
+test('a tanda dragged from the Tandas tab lands at the drop spot', async () => {
+  await lib().locator('.tp-tab', {hasText: 'Tandas'}).click();
+  await lib().locator('.tp-tandax', {hasText: TANDA}).dragTo(row(VALS_TITLE), TOP);
+
+  await expect.poll(storedItems).toEqual([TANDA, VALS_TITLE, LOOSE_TITLE, CORTINA_TITLE, TANDA]);
+});
+
 test('the live queue takes drops and reorders the same way', async () => {
   await gotoView(page, 'Live');
   const live = page.locator('.tp-main');
@@ -155,6 +162,20 @@ test('the live queue takes drops and reorders the same way', async () => {
   // A queue row dragged onto the end marker moves to the very end.
   await rows.first().dragTo(end);
   await expectOrder([TANDA, LOOSE_TITLE, VALS_TITLE]);
+
+  // A tanda card drops in at the spot, like a song.
+  await live.locator('.tp-lib .tp-tab', {hasText: 'Tandas'}).click();
+  await live.locator('.tp-lib .tp-tandax', {hasText: TANDA}).dragTo(rows.nth(1), TOP);
+  await expectOrder([TANDA, TANDA, LOOSE_TITLE, VALS_TITLE]);
+
+  // A playlist card unpacks into its items, in order, at the spot.
+  await live.locator('.tp-lib .tp-tab', {hasText: 'Playlists'}).click();
+  await live.locator('.tp-lib .tp-libcard', {hasText: 'Saturday milonga'}).dragTo(rows.nth(3), TOP);
+  await expectOrder([
+    TANDA, TANDA, LOOSE_TITLE,
+    TANDA, VALS_TITLE, LOOSE_TITLE, CORTINA_TITLE, TANDA,
+    VALS_TITLE,
+  ]);
 });
 
 test('the tanda builder takes drops and reorders the same way', async () => {

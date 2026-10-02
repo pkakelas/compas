@@ -88,8 +88,9 @@ function TandaImpact({ emptied, shrunk }) {
  * the Playlists editor. Collapsed it's a minified summary (name, genre/tags,
  * singer · songs · length); the caret (or tapping the row) expands it to reveal
  * every song, each of which auditions on click. `onAdd` shows a +/✓ add button;
- * `preview` is the shared listen affordance (omit either to drop that feature). */
-function TandaLibCard({ t, preview, onAdd, added, addTitle }) {
+ * `preview` is the shared listen affordance (omit either to drop that feature).
+ * `drag` (drag-source handlers) makes the whole card draggable into a queue. */
+function TandaLibCard({ t, preview, onAdd, added, addTitle, drag, dragging }) {
   const [open, setOpen] = useState(false);
   const m = tandaMeta(t);
   const songNameOnly = useSongNameOnly();
@@ -123,7 +124,7 @@ function TandaLibCard({ t, preview, onAdd, added, addTitle }) {
     return () => { ro.disconnect(); window.removeEventListener("resize", recompute); };
   }, [open]);
   return (
-    <div className={"tp-tandax" + (open ? " is-open" : "")}>
+    <div className={"tp-tandax" + (open ? " is-open" : "") + (dragging ? " is-dragging" : "")} draggable={!!drag} {...drag}>
       <div ref={headRef} className="tp-tandax-head">
         <button className={"tp-tandax-caret" + (open ? " is-open" : "")} onClick={toggle}
           title={open ? "Hide songs" : "Show songs"} aria-expanded={open}>

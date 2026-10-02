@@ -95,7 +95,8 @@ function PlLibrary({ tandas, cortinas, onAdd, makeDrag, draggingId, preview }) {
           <div className="tp-lib-scroll">
             {tab === "tandas"
               ? ft.map((t) => <TandaLibCard key={t.id} t={t} preview={preview}
-                  onAdd={() => onAdd("tanda", t)} addTitle="Add to playlist" />)
+                  onAdd={() => onAdd("tanda", t)} addTitle="Add to playlist"
+                  drag={makeDrag(t, "tanda")} dragging={draggingId === "tanda:" + t.id} />)
               : fc.map((c) => <PlAddCortinaRow key={c.id} c={c} onAdd={() => onAdd("cortina", c)}
                   makeDrag={makeDrag} draggingId={draggingId} />)}
             {tab === "tandas" && ft.length === 0 && (
@@ -238,7 +239,8 @@ function PlEditorSongItem({ it, slot, onRemove, preview }) {
 function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, onDelete, onExport }) {
   const items = open.items;
   const scrollRef = useRef(null);
-  const dnd = useQueueDrop({ count: items.length, scrollRef, onReorder: api.reorder, onInsertSong: api.insertSong });
+  const dnd = useQueueDrop({ count: items.length, scrollRef, onReorder: api.reorder,
+    onInsertSong: api.insertSong, onInsertItem: api.insertRef });
   const slot = dnd.slot;
   const meta = playlistMeta(items);
 
@@ -284,7 +286,7 @@ function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, on
           <div className="pl-dock-empty">
             <div className="ic"><I.note s={24} /></div>
             <h3>Empty playlist</h3>
-            <p>Add tandas, cortinas &amp; songs from the left — tap +, or drag a song in. Drag rows to reorder, click any song to audition.</p>
+            <p>Add tandas, cortinas &amp; songs from the left — tap +, or drag one in. Drag rows to reorder, click any song to audition.</p>
           </div>
         )}
         {items.map((it, i) => {
@@ -308,7 +310,7 @@ function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, on
         })}
         {items.length > 0 && <DropGap open={dnd.gapOpen(items.length)} />}
         {items.length > 0 && (
-          <div className="tp-q-end">End of playlist — drag songs here, or add more from the left</div>
+          <div className="tp-q-end">End of playlist — drag more here, or add from the left</div>
         )}
       </div>
     </div>
@@ -490,13 +492,9 @@ function PlaylistsView({ onPlay, dockWidth, onDockWidthChange }) {
   const { toast, flash, dismiss } = useToast();
   const { ask, modal } = useConfirm();
 
-  // Drag source for library songs & cortinas — the same "song:<id>" payload the
-  // Live tab uses, read off the drop by the editor queue.
-  const [draggingId, setDraggingId] = useState(null);
-  const makeDrag = (s) => ({
-    onDragStart: (e) => { e.dataTransfer.setData("text/plain", "song:" + s.id); e.dataTransfer.effectAllowed = "copy"; setDraggingId(s.id); },
-    onDragEnd: () => setDraggingId(null),
-  });
+  // Drag source for the library's songs, cortinas and tandas — the same payload
+  // the Live tab uses, read off the drop by the editor queue.
+  const { makeDrag, draggingId } = useLibraryDrag();
 
   // Live dock width while dragging the divider; seeded from the persisted tweak.
   const [dockW, setDockW] = useState(dockWidth || 452);
@@ -540,11 +538,18 @@ function PlaylistsView({ onPlay, dockWidth, onDockWidthChange }) {
     },
     flushName: () => { clearTimeout(nameTimer.current); persist(open.name, open.items); },
     addItem: (type, data) => update([...open.items, { key: plKid(), type, data }]),
-    // Insert a song (as a single-song item, like the Live queue does) in front
-    // of row `at` — used when a library song is dropped onto the editor.
-    insertSong: (song, at) => {
-      const a = open.items.slice(); a.splice(at, 0, { key: plKid(), type: "cortina", data: song });
+    // Insert an item in front of row `at` — used when something from the
+    // library is dropped onto the editor.
+    insertAt: (type, data, at) => {
+      const a = open.items.slice(); a.splice(at, 0, { key: plKid(), type, data });
       update(a);
+    },
+    // A dropped song goes in as a single-song item, like the Live queue does.
+    insertSong: (song, at) => api.insertAt("cortina", song, at),
+    // A dropped tanda card arrives as its kind and id.
+    insertRef: (kind, id, at) => {
+      const t = kind === "tanda" && tandas.find((x) => String(x.id) === id);
+      if (t) api.insertAt("tanda", t, at);
     },
     removeAt: (i) => update(open.items.filter((_, j) => j !== i)),
     // Move row `from` so it lands in front of row `to` (items.length = the end).
