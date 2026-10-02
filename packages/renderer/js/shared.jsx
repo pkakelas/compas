@@ -321,41 +321,28 @@ function cleanSongTitle(s) {
   return title || raw;
 }
 
-// Reactive read of the "show song name only" library preference. Seeded from
-// localStorage and kept live via the same `tweakchange` event setTweak emits.
-function useSongNameOnly() {
+// Reactive read of an on/off preference from Settings. Seeded from localStorage
+// ("compas.<key>") and kept live via the `tweakchange` event setTweak emits.
+function useBoolPref(key) {
   const [on, setOn] = useState(() => {
-    try { return localStorage.getItem("compas.songNameOnly") === "1"; } catch (e) { return false; }
+    try { return localStorage.getItem("compas." + key) === "1"; } catch (e) { return false; }
   });
   useEffect(() => {
     const onTweak = (e) => {
-      if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, "songNameOnly")) {
-        setOn(!!e.detail.songNameOnly);
-      }
+      if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, key)) setOn(!!e.detail[key]);
     };
     window.addEventListener("tweakchange", onTweak);
     return () => window.removeEventListener("tweakchange", onTweak);
-  }, []);
+  }, [key]);
   return on;
 }
+// "Show song name only" library display preference.
+const useSongNameOnly = () => useBoolPref("songNameOnly");
+// "Collapse folders by default" — folder trees re-seed their open state the
+// moment the DJ flips it.
+const useCollapseFoldersByDefault = () => useBoolPref("collapseFoldersByDefault");
+// "Cortinas in filters" — whether cortinas' orchestras, singers, styles and
+// years are offered in the library's filter dropdowns.
+const useCortinasInFilters = () => useBoolPref("cortinasInFilters");
 
-// Reactive read of the "collapse folders by default" preference. Seeded from
-// localStorage and kept live via the same `tweakchange` event setTweak emits,
-// so folder trees can re-seed their open state the moment the DJ flips it.
-function useCollapseFoldersByDefault() {
-  const [on, setOn] = useState(() => {
-    try { return localStorage.getItem("compas.collapseFoldersByDefault") === "1"; } catch (e) { return false; }
-  });
-  useEffect(() => {
-    const onTweak = (e) => {
-      if (e.detail && Object.prototype.hasOwnProperty.call(e.detail, "collapseFoldersByDefault")) {
-        setOn(!!e.detail.collapseFoldersByDefault);
-      }
-    };
-    window.addEventListener("tweakchange", onTweak);
-    return () => window.removeEventListener("tweakchange", onTweak);
-  }, []);
-  return on;
-}
-
-Object.assign(window, { I, Waveform, EQ, Marquee, PreviewGlyph, previewTitle, clickKeys, GENRE_LABEL, GenreTag, useToast, Toast, ConfirmModal, useConfirm, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, STYLE_LABELS, isCoreStyle, genreLabel, genreClass, cleanSongTitle, useSongNameOnly, useCollapseFoldersByDefault });
+Object.assign(window, { I, Waveform, EQ, Marquee, PreviewGlyph, previewTitle, clickKeys, GENRE_LABEL, GenreTag, useToast, Toast, ConfirmModal, useConfirm, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, STYLE_LABELS, isCoreStyle, genreLabel, genreClass, cleanSongTitle, useSongNameOnly, useCollapseFoldersByDefault, useCortinasInFilters });

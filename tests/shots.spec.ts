@@ -130,6 +130,7 @@ test('capture all views in both themes', async () => {
   await gotoView(page, 'Live');
   await page.waitForTimeout(700);
   await dismissPopups();
+  await page.locator('.tp-main .tp-tab', {hasText: 'Tandas'}).click().catch(() => {});
   const addBtns = page.locator('.tp-addbtn');
   const n = await addBtns.count();
   for (let i = 0; i < Math.min(n, 2); i++) await addBtns.nth(i).click();

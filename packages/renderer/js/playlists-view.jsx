@@ -9,15 +9,25 @@ const plKid = () => "pl" + (_plKid++);
 
 /* ---------- playlist meta helpers ---------- */
 // itemSongs + queueDurationSec are shared with the live player (window globals).
+// What a playlist item is shown and counted as. A single-song item is a
+// cortina only when it plays that role (see actsAsCortina — the song's own
+// isCortina flag doesn't decide it); other single songs are loose. One rule for
+// the editor's rows, its header counts and the playlist cards, matching Live.
+function plItemRole(items, i) {
+  if (items[i].type === "tanda") return "tanda";
+  return actsAsCortina(items, i) ? "cortina" : "song";
+}
 function playlistMeta(items) {
   const list = items || [];
-  // A single-song item is counted as a cortina only when it plays that role
-  // (between tandas, or flagged cortina material); other single songs are loose.
-  let cortinas = 0;
-  list.forEach((it, i) => { if (it.type === "cortina" || (it.type !== "tanda" && actsAsCortina(list, i))) cortinas += 1; });
+  let cortinas = 0, loose = 0;
+  list.forEach((it, i) => {
+    const role = plItemRole(list, i);
+    if (role === "cortina") cortinas += 1; else if (role === "song") loose += 1;
+  });
   return {
     tandas: list.filter((i) => i.type === "tanda").length,
     cortinas,
+    loose,
     songs: list.reduce((a, it) => a + itemSongs(it).length, 0),
     total: fmtDur(queueDurationSec(list)),
   };
@@ -26,27 +36,10 @@ function itemTitle(it) {
   return it.type === "cortina" ? it.data.title : (it.data.name || tandaMeta(it.data).orq);
 }
 
-/* ---------- internal drag-to-reorder for the editor queue (index based) ---------- */
-function usePLReorder(onReorder) {
-  const [drag, setDrag] = useState(null);
-  const [over, setOver] = useState(null);
-  return (i) => ({
-    dragging: drag === i,
-    over: over === i && drag !== null && drag !== i,
-    handlers: {
-      draggable: true,
-      onDragStart: (e) => { e.dataTransfer.effectAllowed = "move"; setDrag(i); },
-      onDragEnd: () => { setDrag(null); setOver(null); },
-      onDragOver: (e) => { e.preventDefault(); if (over !== i) setOver(i); },
-      onDrop: (e) => { e.preventDefault(); if (drag !== null && drag !== i) onReorder(drag, i); setDrag(null); setOver(null); },
-    },
-  });
-}
-
 /* ============================ ADD LIBRARY (left) ============================ */
-function PlAddCortinaRow({ c, onAdd }) {
+function PlAddCortinaRow({ c, onAdd, makeDrag, draggingId }) {
   return (
-    <div className="tp-cortrow">
+    <div className={"tp-cortrow" + (draggingId === c.id ? " is-dragging" : "")} draggable {...makeDrag(c)}>
       <span className="tp-cortrow-ic"><I.curtain s={15} /></span>
       <div className="tp-flex1">
         <div className="tp-cortrow-title">{c.title}</div>
@@ -57,7 +50,9 @@ function PlAddCortinaRow({ c, onAdd }) {
   );
 }
 
-function PlLibrary({ tandas, cortinas, onAdd, preview }) {
+const PL_NO_IDS = new Set();
+
+function PlLibrary({ tandas, cortinas, onAdd, makeDrag, draggingId, preview }) {
   const [tab, setTab] = useState("tandas");
   const [q, setQ] = useState("");
 
@@ -78,29 +73,40 @@ function PlLibrary({ tandas, cortinas, onAdd, preview }) {
         <div className="tp-tabs">
           <button className={"tp-tab" + (tab === "tandas" ? " is-on" : "")} onClick={() => setTab("tandas")}>Tandas</button>
           <button className={"tp-tab" + (tab === "cortinas" ? " is-on" : "")} onClick={() => setTab("cortinas")}>Cortinas</button>
+          <button className={"tp-tab" + (tab === "library" ? " is-on" : "")} onClick={() => setTab("library")}>Songs</button>
         </div>
       </div>
 
-      <div className="tp-lib-controls">
-        <label className="tp-search">
-          <I.search s={16} />
-          <input value={q} onChange={(e) => setQ(e.target.value)}
-            placeholder={tab === "tandas" ? "Search tandas…" : "Search cortinas…"} />
-        </label>
-      </div>
+      {tab === "library" ? (
+        // The same folders+songs tree as the Live tab's picker. Tapping + on a
+        // song appends it to the playlist; dragging it drops it at an exact spot.
+        <LibraryTree builderIds={PL_NO_IDS} onAdd={(s) => onAdd("cortina", s)} makeDrag={makeDrag}
+          draggingId={draggingId} preview={preview} />
+      ) : (
+        <React.Fragment>
+          <div className="tp-lib-controls">
+            <label className="tp-search">
+              <I.search s={16} />
+              <input value={q} onChange={(e) => setQ(e.target.value)}
+                placeholder={tab === "tandas" ? "Search tandas…" : "Search cortinas…"} />
+            </label>
+          </div>
 
-      <div className="tp-lib-scroll">
-        {tab === "tandas"
-          ? ft.map((t) => <TandaLibCard key={t.id} t={t} preview={preview}
-              onAdd={() => onAdd("tanda", t)} addTitle="Add to playlist" />)
-          : fc.map((c) => <PlAddCortinaRow key={c.id} c={c} onAdd={() => onAdd("cortina", c)} />)}
-        {tab === "tandas" && ft.length === 0 && (
-          <div className="tp-empty">{tandas.length ? "No tandas match." : "No tandas yet — build some in the Tandas view."}</div>
-        )}
-        {tab === "cortinas" && fc.length === 0 && (
-          <div className="tp-empty">{cortinas.length ? "No cortinas match." : "No cortinas found — put short clips in a folder named “Cortinas”."}</div>
-        )}
-      </div>
+          <div className="tp-lib-scroll">
+            {tab === "tandas"
+              ? ft.map((t) => <TandaLibCard key={t.id} t={t} preview={preview}
+                  onAdd={() => onAdd("tanda", t)} addTitle="Add to playlist" />)
+              : fc.map((c) => <PlAddCortinaRow key={c.id} c={c} onAdd={() => onAdd("cortina", c)}
+                  makeDrag={makeDrag} draggingId={draggingId} />)}
+            {tab === "tandas" && ft.length === 0 && (
+              <div className="tp-empty">{tandas.length ? "No tandas match." : "No tandas yet — build some in the Tandas view."}</div>
+            )}
+            {tab === "cortinas" && fc.length === 0 && (
+              <div className="tp-empty">{cortinas.length ? "No cortinas match." : "No cortinas found — put short clips in a folder named “Cortinas”."}</div>
+            )}
+          </div>
+        </React.Fragment>
+      )}
     </div>
   );
 }
@@ -143,7 +149,8 @@ function PlDockResizer({ width, min, max, onResize, onCommit }) {
 /* ============================ EDITOR QUEUE (right) ============================
  * The same visual language as the live queue: tandas read as full cards with
  * their song list, cortinas as the calm dark band. Rows are draggable to
- * reorder, every song auditions on click, and the × trims an item. */
+ * reorder and library songs drop in at an exact spot (useQueueDrop, shared
+ * with the live queue), every song auditions on click, and the × trims an item. */
 function PlEditorSong({ n, title, dur, playing, onPlay, preview }) {
   return (
     <div className={"tp-songrow is-clickable" + (playing ? " is-now" : "")}
@@ -161,7 +168,7 @@ function PlEditorTanda({ it, ix, slot, onRemove, preview }) {
   const m = tandaMeta(t);
   const songNameOnly = useSongNameOnly();
   return (
-    <div className={"tp-tandacard pl-tandacard tp-qdrag" + (slot.dragging ? " is-dragging" : "") + (slot.over ? " is-over" : "")}
+    <div className={"tp-tandacard pl-tandacard tp-qdrag" + (slot.dragging ? " is-dragging" : "")}
       {...slot.handlers}>
       <div className="tp-tanda-head">
         <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
@@ -190,7 +197,7 @@ function PlEditorCortina({ it, slot, onRemove, preview }) {
   const c = it.data;
   const playing = preview && preview.previewId === c.id && preview.playing;
   return (
-    <div className={"tp-cortina tp-qrow tp-qdrag" + (slot.dragging ? " is-dragging" : "") + (slot.over ? " is-over" : "") + (playing ? " is-now" : "")}
+    <div className={"tp-cortina tp-qrow tp-qdrag" + (slot.dragging ? " is-dragging" : "") + (playing ? " is-now" : "")}
       {...slot.handlers}
       onClick={() => preview && preview.toggle(c)} title={previewTitle(preview, playing, "Audition this cortina")}>
       <div className="curtain"></div>
@@ -213,7 +220,7 @@ function PlEditorSongItem({ it, slot, onRemove, preview }) {
   const songNameOnly = useSongNameOnly();
   const playing = preview && preview.previewId === s.id && preview.playing;
   return (
-    <div className={"tp-songcard tp-qrow tp-qdrag" + (slot.dragging ? " is-dragging" : "") + (slot.over ? " is-over" : "") + (playing ? " is-now" : "")}
+    <div className={"tp-songcard tp-qrow tp-qdrag" + (slot.dragging ? " is-dragging" : "") + (playing ? " is-now" : "")}
       {...slot.handlers}
       onClick={() => preview && preview.toggle(s)} title={previewTitle(preview, playing, "Audition this song")}>
       <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
@@ -230,7 +237,9 @@ function PlEditorSongItem({ it, slot, onRemove, preview }) {
 
 function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, onDelete, onExport }) {
   const items = open.items;
-  const slot = usePLReorder(api.reorder);
+  const scrollRef = useRef(null);
+  const dnd = useQueueDrop({ count: items.length, scrollRef, onReorder: api.reorder, onInsertSong: api.insertSong });
+  const slot = dnd.slot;
   const meta = playlistMeta(items);
 
   let tIx = 0;
@@ -258,6 +267,7 @@ function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, on
         <div className="tv-dock-meta">
           <b>{meta.tandas}</b> {meta.tandas === 1 ? "tanda" : "tandas"}
           {meta.cortinas > 0 && <><span>·</span> <b>{meta.cortinas}</b> {meta.cortinas === 1 ? "cortina" : "cortinas"}</>}
+          {meta.loose > 0 && <><span>·</span> <b>{meta.loose}</b> {meta.loose === 1 ? "song" : "songs"}</>}
           {items.length > 0 && <><span>·</span> <b className="tp-mono">{meta.total}</b></>}
         </div>
         <div className="pl-actions">
@@ -268,12 +278,13 @@ function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, on
         </div>
       </div>
 
-      <div className="tp-q-scroll">
+      <div ref={scrollRef} className="tp-q-scroll" {...dnd.list}>
+        {items.length === 0 && <DropGap open={dnd.gapOpen(0)} />}
         {items.length === 0 && (
           <div className="pl-dock-empty">
             <div className="ic"><I.note s={24} /></div>
             <h3>Empty playlist</h3>
-            <p>Add tandas &amp; cortinas from the left to build your set. Drag rows to reorder, click any song to audition.</p>
+            <p>Add tandas, cortinas &amp; songs from the left — tap +, or drag a song in. Drag rows to reorder, click any song to audition.</p>
           </div>
         )}
         {items.map((it, i) => {
@@ -281,19 +292,23 @@ function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, on
           const sp = slot(i);
           const prev = items[i - 1];
           const gap = it.type === "tanda" && prev && prev.type === "tanda";
-          // A single song reads as a cortina only when it plays that role.
-          const role = it.type === "tanda" ? "tanda" : (actsAsCortina(items, i) ? "cortina" : "song");
+          const role = plItemRole(items, i);
           const row = role === "tanda"
             ? <PlEditorTanda key={it.key} it={it} ix={tIx} slot={sp} onRemove={() => api.removeAt(i)} preview={preview} />
             : role === "cortina"
               ? <PlEditorCortina key={it.key} it={it} slot={sp} onRemove={() => api.removeAt(i)} preview={preview} />
               : <PlEditorSongItem key={it.key} it={it} slot={sp} onRemove={() => api.removeAt(i)} preview={preview} />;
-          return gap
-            ? <React.Fragment key={it.key}><MissingCortinaHint />{row}</React.Fragment>
-            : row;
+          return (
+            <React.Fragment key={it.key}>
+              <DropGap open={dnd.gapOpen(i)} />
+              {gap && <MissingCortinaHint />}
+              {row}
+            </React.Fragment>
+          );
         })}
+        {items.length > 0 && <DropGap open={dnd.gapOpen(items.length)} />}
         {items.length > 0 && (
-          <div className="tp-q-end">End of playlist — add more from the left</div>
+          <div className="tp-q-end">End of playlist — drag songs here, or add more from the left</div>
         )}
       </div>
     </div>
@@ -399,13 +414,14 @@ function PlaylistCard({ pl, onOpen, onDelete, onPlay, onExport }) {
           <div className="sub">
             {meta.tandas} {meta.tandas === 1 ? "tanda" : "tandas"}
             {meta.cortinas > 0 ? ` · ${meta.cortinas} ${meta.cortinas === 1 ? "cortina" : "cortinas"}` : ""}
+            {meta.loose > 0 ? ` · ${meta.loose} ${meta.loose === 1 ? "song" : "songs"}` : ""}
           </div>
         </div>
         <span className="pl-card-open"><I.chev s={16} /></span>
       </div>
       <div className="tv-tcard-songs">
         {preview.map((it, i) => {
-          const role = it.type === "tanda" ? "tanda" : (it.type === "cortina" || actsAsCortina(pl.items, i) ? "cortina" : "song");
+          const role = plItemRole(pl.items, i);
           return (
             <div key={it.type + i} className={"tv-tcard-song pl-row-" + role}>
               <span className="n pl-typ" title={role === "tanda" ? "Tanda" : role === "cortina" ? "Cortina" : "Single song"}>
@@ -474,6 +490,14 @@ function PlaylistsView({ onPlay, dockWidth, onDockWidthChange }) {
   const { toast, flash, dismiss } = useToast();
   const { ask, modal } = useConfirm();
 
+  // Drag source for library songs & cortinas — the same "song:<id>" payload the
+  // Live tab uses, read off the drop by the editor queue.
+  const [draggingId, setDraggingId] = useState(null);
+  const makeDrag = (s) => ({
+    onDragStart: (e) => { e.dataTransfer.setData("text/plain", "song:" + s.id); e.dataTransfer.effectAllowed = "copy"; setDraggingId(s.id); },
+    onDragEnd: () => setDraggingId(null),
+  });
+
   // Live dock width while dragging the divider; seeded from the persisted tweak.
   const [dockW, setDockW] = useState(dockWidth || 452);
   useEffect(() => { setDockW(dockWidth || 452); }, [dockWidth]);
@@ -516,10 +540,20 @@ function PlaylistsView({ onPlay, dockWidth, onDockWidthChange }) {
     },
     flushName: () => { clearTimeout(nameTimer.current); persist(open.name, open.items); },
     addItem: (type, data) => update([...open.items, { key: plKid(), type, data }]),
+    // Insert a song (as a single-song item, like the Live queue does) in front
+    // of row `at` — used when a library song is dropped onto the editor.
+    insertSong: (song, at) => {
+      const a = open.items.slice(); a.splice(at, 0, { key: plKid(), type: "cortina", data: song });
+      update(a);
+    },
     removeAt: (i) => update(open.items.filter((_, j) => j !== i)),
+    // Move row `from` so it lands in front of row `to` (items.length = the end).
+    // Removing `from` first shifts later rows down by one, so a downward move
+    // targets `to - 1` to avoid landing past the target.
     reorder: (from, to) => {
-      if (from === to || from < 0 || to < 0) return;
-      const a = open.items.slice(); const [mv] = a.splice(from, 1); a.splice(to, 0, mv);
+      const at = from < to ? to - 1 : to;
+      if (from < 0 || to < 0 || at === from) return;
+      const a = open.items.slice(); const [mv] = a.splice(from, 1); a.splice(at, 0, mv);
       update(a);
     },
   };
@@ -595,7 +629,8 @@ function PlaylistsView({ onPlay, dockWidth, onDockWidthChange }) {
     return (
       <div className="tv">
         <div className="tv-body">
-          <PlLibrary tandas={tandas} cortinas={cortinas} onAdd={api.addItem} preview={preview} />
+          <PlLibrary tandas={tandas} cortinas={cortinas} onAdd={api.addItem}
+            makeDrag={makeDrag} draggingId={draggingId} preview={preview} />
           <PlDockResizer width={dockW} min={PL_DOCK_MIN_W} max={PL_DOCK_MAX_W}
             onResize={setDockW} onCommit={commitDockW} />
           <PlEditorDock open={open} status={status} api={api} preview={preview} width={dockW}
