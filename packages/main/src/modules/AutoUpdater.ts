@@ -31,6 +31,10 @@ export class AutoUpdater implements AppModule {
 
   async enable(): Promise<void> {
     this.registerIpc();
+    // A Microsoft Store install is updated by the Store, which also rejects
+    // apps that update themselves — so never check GitHub from one. The IPC
+    // handlers stay registered so the renderer just sees "no update".
+    if (process.windowsStore) return;
     await this.runAutoUpdater();
   }
 
