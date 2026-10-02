@@ -88,8 +88,9 @@ function TandaImpact({ emptied, shrunk }) {
  * the Playlists editor. Collapsed it's a minified summary (name, genre/tags,
  * singer · songs · length); the caret (or tapping the row) expands it to reveal
  * every song, each of which auditions on click. `onAdd` shows a +/✓ add button;
- * `preview` is the shared listen affordance (omit either to drop that feature). */
-function TandaLibCard({ t, preview, onAdd, added, addTitle }) {
+ * `preview` is the shared listen affordance (omit either to drop that feature).
+ * `drag` (drag-source handlers) makes the whole card draggable into a queue. */
+function TandaLibCard({ t, preview, onAdd, added, addTitle, drag, dragging }) {
   const [open, setOpen] = useState(false);
   const m = tandaMeta(t);
   const songNameOnly = useSongNameOnly();
@@ -123,7 +124,7 @@ function TandaLibCard({ t, preview, onAdd, added, addTitle }) {
     return () => { ro.disconnect(); window.removeEventListener("resize", recompute); };
   }, [open]);
   return (
-    <div className={"tp-tandax" + (open ? " is-open" : "")}>
+    <div className={"tp-tandax" + (open ? " is-open" : "") + (dragging ? " is-dragging" : "")} draggable={!!drag} {...drag}>
       <div ref={headRef} className="tp-tandax-head">
         <button className={"tp-tandax-caret" + (open ? " is-open" : "")} onClick={toggle}
           title={open ? "Hide songs" : "Show songs"} aria-expanded={open}>
@@ -1046,7 +1047,7 @@ function BulkValuePicker({ field, options, count, onPick, onBack }) {
 
 /* Search + filter toolbar for the library tree. */
 function SongSearchBar({ filters, onChange, options, sort, setSort, searching, countLabel,
-  showCollapse, collapseOpen, onCollapse, includeCortinas, onToggleCortinas, layout, setLayout }) {
+  showCollapse, collapseOpen, onCollapse, layout, setLayout }) {
   const inputRef = useRef(null);
   const set = (key, val) => onChange({ ...filters, [key]: val });
   const clearText = () => { set("text", ""); inputRef.current && inputRef.current.focus(); };
@@ -1087,28 +1088,22 @@ function SongSearchBar({ filters, onChange, options, sort, setSort, searching, c
           ) : null}
         </div>
         <div className="tv-search-actions">
-          {onToggleCortinas ? (
-            <button type="button" className="tv-cortina-toggle tp-tip" data-on={includeCortinas ? "1" : "0"}
-              role="switch" aria-checked={!!includeCortinas} onClick={() => onToggleCortinas(!includeCortinas)}
-              data-hint="When on, cortinas' orchestras, singers, styles and years are offered in the filter dropdowns above. When off, the lists only show your dance music. (Cortinas still appear when you browse or search the library.)">
-              <I.curtain s={14} /> Cortinas in filters
-            </button>
-          ) : null}
           {setLayout ? (
             <div className="tv-layout" role="radiogroup" aria-label="Library view">
-              <button type="button" role="radio" aria-checked={layout === "folders"} data-on={layout === "folders" ? "1" : "0"}
+              <button type="button" role="radio" aria-label="Folders" aria-checked={layout === "folders"} data-on={layout === "folders" ? "1" : "0"}
                 onClick={() => setLayout("folders")} title="Browse by folder">
-                <I.folder s={14} /> Folders
+                <I.folder s={14} /> <span className="lb">Folders</span>
               </button>
-              <button type="button" role="radio" aria-checked={layout === "list"} data-on={layout === "list" ? "1" : "0"}
+              <button type="button" role="radio" aria-label="Songs" aria-checked={layout === "list"} data-on={layout === "list" ? "1" : "0"}
                 onClick={() => setLayout("list")} title="One list of songs with orchestra, singer, style and year">
-                <I.note s={14} /> Songs
+                <I.note s={14} /> <span className="lb">Songs</span>
               </button>
             </div>
           ) : null}
           {showCollapse ? (
-            <button type="button" className="tv-collapse" onClick={onCollapse}>
-              <I.chev s={12} /> {collapseOpen ? "Collapse" : "Expand"}
+            <button type="button" className="tv-collapse" onClick={onCollapse}
+              title={collapseOpen ? "Collapse all folders" : "Expand all folders"}>
+              <I.chev s={12} /> <span className="lb">{collapseOpen ? "Collapse" : "Expand"}</span>
             </button>
           ) : null}
           <label className="tv-sort">
@@ -1221,7 +1216,7 @@ function SongListHead({ sort, setSort }) {
 /* ============================ LIBRARY BROWSER ============================
  * Shared folder-tree song browser for Library, Builder, and Live: search,
  * dropdown filters, sort, and a windowed list for large libraries. */
-function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, onSongContext, editingId, onSongEdit, onCloseEdit, library, builderIds, onAdd, makeDrag, draggingId, hint, selectedIds, setSelectedIds, anchorRef, includeCortinas, onToggleCortinas }) {
+function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, onSongContext, editingId, onSongEdit, onCloseEdit, library, builderIds, onAdd, makeDrag, draggingId, selectedIds, setSelectedIds, anchorRef, includeCortinas }) {
   const { tree, songs } = useStore();
   const scrollRef = useRef(null);
   const [sort, setSort] = useState("title");
@@ -1426,9 +1421,7 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
         <SongSearchBar filters={filters} onChange={setFiltersSafe} options={filterOptions}
           sort={sort} setSort={setSort} searching={searching} countLabel={countLabel}
           showCollapse={!isList && !searching && rows.length > 0} collapseOpen={anyOpen} onCollapse={toggleAll}
-          layout={layout} setLayout={setLayout}
-          includeCortinas={includeCortinas} onToggleCortinas={onToggleCortinas} />
-        {hint && <div className="tv-songs-hint">{hint}</div>}
+          layout={layout} setLayout={setLayout} />
       </div>
       <div className="tv-treewrap">
         <div className="tv-tree-scroll" ref={scrollRef}>
@@ -1450,14 +1443,14 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
   );
 }
 
-function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, library }) {
+function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, library }) {
   const { tandas, songs } = useStore();
   const [filters, setFilters] = useState(EMPTY_SEARCH);
   // Cortinas are floor-clearers, not repertoire — by default their orchestras,
   // singers and years stay out of the filter dropdowns so they don't clutter a
-  // DJ's browsing. Turning this on folds them back in. Cortina songs themselves
-  // are always in the tree and always findable by text search, regardless.
-  const [includeCortinas, setIncludeCortinas] = useState(false);
+  // DJ's browsing. A Settings switch folds them back in. Cortina songs
+  // themselves are always in the tree and always findable by text search.
+  const includeCortinas = useCortinasInFilters();
   // When cortinas are hidden again, retire any active filter that only a cortina
   // satisfied, so the tree doesn't sit on a now-invisible selection.
   useEffect(() => {
@@ -1702,9 +1695,9 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, hint, l
       <LibraryBrowser filters={filters} setFilters={setFilters} query={query} preview={preview} onFolderContext={openMenu}
         onSongContext={openSongMenu} editingId={editingId} onSongEdit={(s) => setEditingId(s.id)} onCloseEdit={() => setEditingId(null)}
         library={library} builderIds={builderIds} onAdd={onAdd} makeDrag={makeDrag}
-        draggingId={draggingId} hint={hint}
+        draggingId={draggingId}
         selectedIds={library ? selectedIds : undefined} setSelectedIds={library ? setSelectedIds : undefined} anchorRef={anchorRef}
-        includeCortinas={includeCortinas} onToggleCortinas={setIncludeCortinas} />
+        includeCortinas={includeCortinas} />
       {ctxMenu}
       {modal}
     </div>

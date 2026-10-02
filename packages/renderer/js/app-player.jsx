@@ -197,13 +197,13 @@ function queueDurationSec(queue) {
 
 /* ============================ LIBRARY (left) ============================ */
 
-function LibPlaylistCard({ pl, added, onAdd }) {
+function LibPlaylistCard({ pl, added, onAdd, drag, dragging }) {
   const tandaCount = pl.items.filter((i) => i.type === "tanda").length;
   // Count single songs as cortinas only when they play that role.
   const cortinaCount = pl.items.filter((it, i) => it.type !== "tanda" && actsAsCortina(pl.items, i)).length;
   const total = fmtDur(queueDurationSec(pl.items));
   return (
-    <div className="tp-libcard">
+    <div className={"tp-libcard" + (dragging ? " is-dragging" : "")} draggable={!!drag} {...drag}>
       <div className="tp-libcard-main">
         <div className="tp-libcard-top">
           <span className="tp-libcard-orq">{pl.name || "Untitled playlist"}</span>
@@ -239,7 +239,7 @@ function LibCortinaRow({ c, added, onAdd, preview, makeDrag, draggingId }) {
   const playing = preview && preview.previewId === c.id && preview.playing;
   const drag = makeDrag ? makeDrag(c) : {};
   return (
-    <div className={"tp-cortrow" + (draggingId === c.id ? " is-dragging" : "")} {...drag}
+    <div className={"tp-cortrow" + (draggingId === c.id ? " is-dragging" : "")} draggable={!!makeDrag} {...drag}
       onClick={preview ? () => preview.toggle(c) : undefined}
       title={previewTitle(preview, playing, "Audition this cortina")}>
       <span className="tp-cortrow-ic">{playing ? <EQ /> : (preview && preview.viaMonitor ? <span className="tp-cuebadge"><I.headphones s={14} /></span> : <I.curtain s={15} />)}</span>
@@ -254,8 +254,7 @@ function LibCortinaRow({ c, added, onAdd, preview, makeDrag, draggingId }) {
   );
 }
 
-function LibraryPanel({ tandas, cortinas, playlists, onAddTanda, onAddSong, onAddPlaylist, makeDrag, draggingId, preview, flash }) {
-  const [tab, setTab] = useState("tandas");
+function LibraryPanel({ tab, setTab, tandas, cortinas, playlists, onAddTanda, onAddSong, onAddPlaylist, makeDrag, draggingId, preview, flash }) {
   const [genre, setGenre] = useState("all");
   const [q, setQ] = useState("");
 
@@ -284,10 +283,10 @@ function LibraryPanel({ tandas, cortinas, playlists, onAddTanda, onAddSong, onAd
       <div className="tp-lib-head">
         <div className="tv-title">Add to queue</div>
         <div className="tp-tabs">
-          <button className={"tp-tab" + (tab === "tandas" ? " is-on" : "")} onClick={() => setTab("tandas")}>Tandas</button>
-          <button className={"tp-tab" + (tab === "cortinas" ? " is-on" : "")} onClick={() => setTab("cortinas")}>Cortinas</button>
           <button className={"tp-tab" + (tab === "library" ? " is-on" : "")} onClick={() => setTab("library")}>Songs</button>
+          <button className={"tp-tab" + (tab === "tandas" ? " is-on" : "")} onClick={() => setTab("tandas")}>Tandas</button>
           <button className={"tp-tab" + (tab === "playlists" ? " is-on" : "")} onClick={() => setTab("playlists")}>Playlists</button>
+          <button className={"tp-tab" + (tab === "cortinas" ? " is-on" : "")} onClick={() => setTab("cortinas")}>Cortinas</button>
         </div>
       </div>
 
@@ -295,7 +294,7 @@ function LibraryPanel({ tandas, cortinas, playlists, onAddTanda, onAddSong, onAd
         // The same folders+songs tree used by the Tandas builder. Tapping + on a
         // song appends it to the queue; dragging it drops it at an exact spot.
         <LibraryTree builderIds={EMPTY_SET} onAdd={onAddSong} makeDrag={makeDrag}
-          draggingId={draggingId} preview={preview} hint="Drag a song into the queue, or tap +" />
+          draggingId={draggingId} preview={preview} />
       ) : (
         <React.Fragment>
           <div className="tp-lib-controls">
@@ -317,14 +316,16 @@ function LibraryPanel({ tandas, cortinas, playlists, onAddTanda, onAddSong, onAd
           <div className="tp-lib-scroll">
             {tab === "tandas" && filteredTandas.map((t) => (
               <TandaLibCard key={t.id} t={t} preview={preview} added={flash === "t:" + t.id}
-                onAdd={() => onAddTanda(t)} addTitle="Add tanda to queue" />
+                onAdd={() => onAddTanda(t)} addTitle="Add tanda to queue"
+                drag={makeDrag(t, "tanda")} dragging={draggingId === "tanda:" + t.id} />
             ))}
             {tab === "cortinas" && filteredCortinas.map((c) => (
               <LibCortinaRow key={c.id} c={c} added={flash === "c:" + c.id} onAdd={() => onAddSong(c)}
                 preview={preview} makeDrag={makeDrag} draggingId={draggingId} />
             ))}
             {tab === "playlists" && filteredPlaylists.map((p) => (
-              <LibPlaylistCard key={p.id} pl={p} added={flash === "p:" + p.id} onAdd={() => onAddPlaylist(p)} />
+              <LibPlaylistCard key={p.id} pl={p} added={flash === "p:" + p.id} onAdd={() => onAddPlaylist(p)}
+                drag={makeDrag(p, "playlist")} dragging={draggingId === "playlist:" + p.id} />
             ))}
             {tab === "tandas" && filteredTandas.length === 0 && (
               <div className="tp-empty">{tandas.length ? "No tandas match." : "No tandas yet — build some in the Tandas view."}</div>
@@ -506,16 +507,143 @@ function MissingCortinaHint() {
   );
 }
 
+// Edge auto-scroll while dragging: native HTML5 drag doesn't scroll the list,
+// so without this you can't drag an item further than one screenful (e.g. a
+// tanda from the bottom up past several earlier tandas). When the cursor nears
+// the top/bottom edge of the scroll box we scroll it via a RAF loop, faster the
+// closer the cursor is to the edge. Shared by the live queue and the playlist
+// editor: call update(clientY) on dragover and stop() when the drag ends.
+function useDragAutoScroll(scrollRef) {
+  const autoScroll = useRef({ raf: 0, dir: 0, speed: 0 });
+  const stop = () => {
+    if (autoScroll.current.raf) cancelAnimationFrame(autoScroll.current.raf);
+    autoScroll.current.raf = 0;
+    autoScroll.current.dir = 0;
+  };
+  const step = () => {
+    const box = scrollRef.current, a = autoScroll.current;
+    if (!box || !a.dir) { a.raf = 0; return; }
+    box.scrollTop += a.dir * a.speed;
+    a.raf = requestAnimationFrame(step);
+  };
+  const update = (clientY) => {
+    const box = scrollRef.current;
+    if (!box) return;
+    const r = box.getBoundingClientRect();
+    const EDGE = 64, MAX = 20, a = autoScroll.current;
+    if (clientY < r.top + EDGE && box.scrollTop > 0) {
+      a.dir = -1; a.speed = Math.ceil((r.top + EDGE - clientY) / EDGE * MAX);
+    } else if (clientY > r.bottom - EDGE && box.scrollTop + box.clientHeight < box.scrollHeight) {
+      a.dir = 1; a.speed = Math.ceil((clientY - (r.bottom - EDGE)) / EDGE * MAX);
+    } else {
+      stop(); return;
+    }
+    if (!a.raf) a.raf = requestAnimationFrame(step);
+  };
+  useEffect(() => stop, []);
+  return { update, stop };
+}
+
+/* ---------- drag & drop for a queue list (index based) ----------
+ * Shared by the live queue, the playlist editor and the Tandas builder. Two
+ * things get dropped on such a list: one of its own rows being reordered, and
+ * something dragged in from the library on the left (transfer data
+ * "<kind>:<id>", see useLibraryDrag). Songs and cortinas arrive resolved via
+ * onInsertSong; a list that also takes tandas or playlists gets their kind and
+ * id via onInsertItem. A drop lands in the gap nearest the pointer — in front
+ * of a row from its top half, after it from its bottom half — and that gap
+ * eases open to show where (DropGap). Gap `i` sits in front of row `i`; gap
+ * `count` is the end of the list. `rows` selects the list's row elements. */
+function useQueueDrop({ count, scrollRef, onReorder, onInsertSong, onInsertItem, rows = ".tp-qdrag" }) {
+  const [drag, setDrag] = useState(null);   // index of the row being moved
+  const dragRef = useRef(null);             // same, readable by a drop before the next render
+  const [over, setOver] = useState(null);   // gap a drop would land in
+  const { update: autoScroll, stop: stopAutoScroll } = useDragAutoScroll(scrollRef);
+  const clear = () => { stopAutoScroll(); dragRef.current = null; setDrag(null); setOver(null); };
+
+  // The gap for a pointer at this height: in front of the first row whose
+  // middle is still below it. Measured live, so an opened gap (which pushes the
+  // rows after it down) only ever moves the pointer deeper into its own half.
+  const gapAt = (clientY) => {
+    const els = scrollRef.current ? scrollRef.current.querySelectorAll(rows) : [];
+    for (let i = 0; i < els.length; i++) {
+      const r = els[i].getBoundingClientRect();
+      if (clientY < r.top + r.height / 2) return i;
+    }
+    return count;
+  };
+  // While reordering, the gaps on either side of the dragged row leave it where
+  // it is — nothing opens for those.
+  const open = over !== null && (drag === null || (over !== drag && over !== drag + 1)) ? over : null;
+
+  return {
+    slot: (i) => ({
+      dragging: drag === i,
+      handlers: {
+        draggable: true,
+        onDragStart: (e) => { e.dataTransfer.effectAllowed = "move"; dragRef.current = i; setDrag(i); },
+        onDragEnd: clear,
+      },
+    }),
+    gapOpen: (i) => open === i,
+    // The whole list is the drop zone; rows only start drags.
+    list: {
+      onDragOver: (e) => {
+        e.preventDefault();
+        autoScroll(e.clientY);
+        const at = gapAt(e.clientY);
+        if (over !== at) setOver(at);
+      },
+      onDrop: (e) => {
+        e.preventDefault();
+        const at = gapAt(e.clientY);
+        const raw = e.dataTransfer.getData("text/plain") || "";
+        const lib = /^(song|tanda|playlist):(.+)$/.exec(raw);
+        if (lib && lib[1] === "song") {
+          const s = Store.songById(lib[2]);
+          if (s) onInsertSong(s, at);
+        } else if (lib) {
+          if (onInsertItem) onInsertItem(lib[1], lib[2], at);
+        } else if (dragRef.current !== null) {
+          onReorder(dragRef.current, at);
+        }
+        clear();
+      },
+      onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) { stopAutoScroll(); setOver(null); } },
+    },
+  };
+}
+
+// Drag source for things in a library panel: songs and cortinas, and — where
+// the list on the right takes them — tandas and playlists. The payload is
+// "<kind>:<id>", read off the drop by useQueueDrop. `draggingId` says what is
+// in the air, for dimming its row: the song's id, or "<kind>:<id>" otherwise.
+function useLibraryDrag() {
+  const [draggingId, setDraggingId] = useState(null);
+  const makeDrag = (it, kind = "song") => ({
+    onDragStart: (e) => {
+      e.dataTransfer.setData("text/plain", kind + ":" + it.id);
+      e.dataTransfer.effectAllowed = "copy";
+      setDraggingId(kind === "song" ? it.id : kind + ":" + it.id);
+    },
+    onDragEnd: () => setDraggingId(null),
+  });
+  return { makeDrag, draggingId };
+}
+
+// The space a dragged song or row would land in. Every gap is always in the
+// list, collapsed to nothing, so it can ease open and shut as the pointer moves.
+function DropGap({ open }) {
+  return <div className={"tp-dropgap" + (open ? " is-open" : "")} aria-hidden="true" />;
+}
+
 // A friendly default name so the DJ can just hit Save: "Set · Jun 4".
 function defaultPlaylistName() {
   const d = new Date();
   return `Set · ${d.toLocaleString("en-US", { month: "short" })} ${d.getDate()}`;
 }
 
-function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, onPlaySongAt, onSkipSong, onRemove, onReorder, onInsertSong, onSavePlaylist, onClearQueue }) {
-  const dragKey = useRef(null);              // set while reordering an existing queue item
-  const [overKey, setOverKey] = useState(null);
-  const [overEnd, setOverEnd] = useState(false);
+function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, onPlaySongAt, onSkipSong, onRemove, onReorder, onInsertSong, onInsertItem, onSavePlaylist, onClearQueue, onBrowse }) {
   const [saveOpen, setSaveOpen] = useState(false);
   // When locked, clicking a song won't start playback — a safety latch for DJs
   // who fear a stray click cutting off the song currently on the floor.
@@ -524,7 +652,15 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
   const [savingNow, setSavingNow] = useState(false);
   const saveInputRef = useRef(null);
   const scrollRef = useRef(null);
-  const autoScroll = useRef({ raf: 0, dir: 0, speed: 0 });
+  // Gaps are index based, the player's queue is key based: gap `at` is "in
+  // front of queue[at]", and past the last row there is no key — the end.
+  const keyAt = (at) => (at < queue.length ? queue[at].key : null);
+  const dnd = useQueueDrop({
+    count: queue.length, scrollRef,
+    onReorder: (from, at) => onReorder(queue[from].key, keyAt(at)),
+    onInsertSong: (s, at) => onInsertSong(s, keyAt(at)),
+    onInsertItem: (kind, id, at) => onInsertItem(kind, id, keyAt(at)),
+  });
   const { toast, flash, dismiss } = useToast();
   const { ask, modal } = useConfirm();
   const tandaCount = queue.filter(i => i.type === "tanda").length;
@@ -583,74 +719,6 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
       .catch(() => { setSavingNow(false); flash("Couldn’t save playlist"); });
   };
 
-  // Edge auto-scroll while dragging: native HTML5 drag doesn't scroll the list,
-  // so without this you can't drag an item further than one screenful (e.g. a
-  // tanda from the bottom up past several earlier tandas). When the cursor nears
-  // the top/bottom edge of the scroll box we scroll it via a RAF loop, faster the
-  // closer the cursor is to the edge.
-  const stopAutoScroll = () => {
-    if (autoScroll.current.raf) cancelAnimationFrame(autoScroll.current.raf);
-    autoScroll.current.raf = 0;
-    autoScroll.current.dir = 0;
-  };
-  const stepAutoScroll = () => {
-    const box = scrollRef.current, a = autoScroll.current;
-    if (!box || !a.dir) { a.raf = 0; return; }
-    box.scrollTop += a.dir * a.speed;
-    a.raf = requestAnimationFrame(stepAutoScroll);
-  };
-  const updateAutoScroll = (clientY) => {
-    const box = scrollRef.current;
-    if (!box) return;
-    const r = box.getBoundingClientRect();
-    const EDGE = 64, MAX = 20, a = autoScroll.current;
-    if (clientY < r.top + EDGE && box.scrollTop > 0) {
-      a.dir = -1; a.speed = Math.ceil((r.top + EDGE - clientY) / EDGE * MAX);
-    } else if (clientY > r.bottom - EDGE && box.scrollTop + box.clientHeight < box.scrollHeight) {
-      a.dir = 1; a.speed = Math.ceil((clientY - (r.bottom - EDGE)) / EDGE * MAX);
-    } else {
-      stopAutoScroll(); return;
-    }
-    if (!a.raf) a.raf = requestAnimationFrame(stepAutoScroll);
-  };
-  useEffect(() => stopAutoScroll, []);
-
-  const clearDrag = () => { stopAutoScroll(); dragKey.current = null; setOverKey(null); setOverEnd(false); };
-
-  // A drop is either an internal reorder (dragKey set, no transfer data) or a
-  // song dragged in from the library tree (transfer data "song:<id>"). beforeKey
-  // is the queue item to insert in front of; null means append to the end.
-  const handleDrop = (e, beforeKey) => {
-    e.preventDefault();
-    const raw = e.dataTransfer.getData("text/plain") || "";
-    if (raw.indexOf("song:") === 0) {
-      const s = Store.songById(raw.slice(5));
-      if (s) onInsertSong(s, beforeKey);
-    } else if (dragKey.current && beforeKey && dragKey.current !== beforeKey) {
-      onReorder(dragKey.current, beforeKey);
-    }
-    clearDrag();
-  };
-
-  const dragProps = (item) => {
-    return {
-      draggable: true,
-      onDragStart: (e) => { dragKey.current = item.key; e.dataTransfer.effectAllowed = "move"; },
-      onDragEnd: clearDrag,
-      onDragOver: (e) => { e.preventDefault(); if (overKey !== item.key) setOverKey(item.key); if (overEnd) setOverEnd(false); },
-      onDrop: (e) => { e.stopPropagation(); handleDrop(e, item.key); },
-      className: "tp-qdrag" + (overKey === item.key && dragKey.current !== item.key ? " is-over" : "") + (dragKey.current === item.key ? " is-dragging" : ""),
-    };
-  };
-
-  // Whole-list drop zone: appends. Item rows stop propagation so an on-item drop
-  // inserts in place instead of bubbling here.
-  const listDrop = {
-    onDragOver: (e) => { e.preventDefault(); updateAutoScroll(e.clientY); if (e.target === e.currentTarget && !overEnd) setOverEnd(true); },
-    onDrop: (e) => handleDrop(e, null),
-    onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) clearDrag(); },
-  };
-
   let tIx = 0;
   return (
     <div className="tp-queue" style={width ? { flex: `0 0 ${width}px`, width } : undefined}>
@@ -701,10 +769,26 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
         </div>
       )}
 
-      <div ref={scrollRef} className={"tp-q-scroll" + (overEnd ? " drop-end" : "")} {...listDrop}>
+      <div ref={scrollRef} className="tp-q-scroll" {...dnd.list}>
+        {queue.length === 0 && <DropGap open={dnd.gapOpen(0)} />}
+        {queue.length === 0 && (
+          // Nothing queued: point at the three ways to start a set. Each button
+          // opens that picker in the "Add to queue" panel on the left.
+          <div className="pl-dock-empty">
+            <div className="ic"><I.note s={24} /></div>
+            <h3>Start your set</h3>
+            <p>Begin with a song, a tanda or a playlist — tap + on the left, or drag one in.</p>
+            <div className="tp-q-starts">
+              <button className="tp-btn pill sm" onClick={() => onBrowse("library")}>Songs</button>
+              <button className="tp-btn pill sm" onClick={() => onBrowse("tandas")}>Tandas</button>
+              <button className="tp-btn pill sm" onClick={() => onBrowse("playlists")}>Playlists</button>
+            </div>
+          </div>
+        )}
         {queue.map((item, i) => {
           if (item.type === "tanda") tIx += 1;
-          const dp = dragProps(item);
+          const sp = dnd.slot(i);
+          const dp = { ...sp.handlers, className: "tp-qdrag" + (sp.dragging ? " is-dragging" : "") };
           const isNow = item.key === nowKey;
           const prev = queue[i - 1];
           const gap = item.type === "tanda" && prev && prev.type === "tanda";
@@ -716,15 +800,18 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
             : role === "cortina"
               ? <QueueCortina key={item.key} item={item} now={isNow} playing={playing} onPlay={locked ? undefined : () => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />
               : <QueueSong key={item.key} item={item} now={isNow} playing={playing} onPlay={locked ? undefined : () => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />;
-          return gap
-            ? <React.Fragment key={item.key}><MissingCortinaHint />{row}</React.Fragment>
-            : row;
+          return (
+            <React.Fragment key={item.key}>
+              <DropGap open={dnd.gapOpen(i)} />
+              {gap && <MissingCortinaHint />}
+              {row}
+            </React.Fragment>
+          );
         })}
-        <div className="tp-q-end"
-          onDragOver={(e) => { e.preventDefault(); if (!overEnd) setOverEnd(true); setOverKey(null); }}
-          onDrop={(e) => { e.stopPropagation(); handleDrop(e, null); }}>
-          {queue.length ? "End of queue — drag songs here, or add from the left" : "Empty queue — add tandas & cortinas from the left"}
-        </div>
+        {queue.length > 0 && <DropGap open={dnd.gapOpen(queue.length)} />}
+        {queue.length > 0 && (
+          <div className="tp-q-end">End of queue — drag more here, or add from the left</div>
+        )}
       </div>
       <Toast toast={toast} onDismiss={dismiss} />
       {modal}
@@ -1287,19 +1374,31 @@ function usePlayerEngine(mainDeviceId, playback) {
 
   const addTanda = (t) => { setQueue((q) => [...q, mk("tanda", t)]); ping("t:" + t.id); };
   const addCortina = (c) => { setQueue((q) => [...q, mk("cortina", c)]); ping("c:" + c.id); };
-  // Insert a song (as a standalone cortina item) at an exact spot — used when a
-  // library song is dropped onto the queue. beforeKey null appends to the end.
+  // Insert items at an exact spot — used when something from the library is
+  // dropped onto the queue. beforeKey null appends to the end.
+  const insertAt = (items, beforeKey) => setQueue((q) => {
+    const idx = beforeKey ? q.findIndex((i) => i.key === beforeKey) : -1;
+    if (idx < 0) return [...q, ...items];
+    const copy = q.slice();
+    copy.splice(idx, 0, ...items);
+    return copy;
+  });
+  // A dropped song goes in as a standalone single-song item.
   const insertSong = (song, beforeKey) => {
     if (!song) return;
-    setQueue((q) => {
-      const item = mk("cortina", song);
-      const idx = beforeKey ? q.findIndex((i) => i.key === beforeKey) : -1;
-      if (idx < 0) return [...q, item];
-      const copy = q.slice();
-      copy.splice(idx, 0, item);
-      return copy;
-    });
+    insertAt([mk("cortina", song)], beforeKey);
     ping("c:" + song.id);
+  };
+  const insertTanda = (t, beforeKey) => {
+    if (!t) return;
+    insertAt([mk("tanda", t)], beforeKey);
+    ping("t:" + t.id);
+  };
+  // A dropped playlist unpacks into its tandas & cortinas, in order, at the spot.
+  const insertPlaylist = (pl, beforeKey) => {
+    if (!pl || !pl.items || !pl.items.length) return;
+    insertAt(pl.items.map((it) => mk(it.type, it.data)), beforeKey);
+    ping("p:" + pl.id);
   };
   const addPlaylist = (pl) => {
     if (!pl.items || !pl.items.length) return;
@@ -1311,11 +1410,12 @@ function usePlayerEngine(mainDeviceId, playback) {
     if (key === nowKey) { setNowKey(null); setNowIx(0); setPlaying(false); }
     return filtered;
   });
-  // Reorder so the dragged item lands *in front of* the drop target (see
-  // QueuePanel.handleDrop). Removing `from` first shifts later indices down by
-  // one, so a downward move targets `to - 1` to avoid landing past the target.
+  // Reorder so the dragged item lands *in front of* the drop target; a null
+  // toKey sends it to the end. Removing `from` first shifts later indices down
+  // by one, so a downward move targets `to - 1` to avoid landing past the target.
   const reorder = (fromKey, toKey) => setQueue((q) => {
-    const from = q.findIndex((i) => i.key === fromKey), to = q.findIndex((i) => i.key === toKey);
+    const from = q.findIndex((i) => i.key === fromKey);
+    const to = toKey == null ? q.length : q.findIndex((i) => i.key === toKey);
     if (from < 0 || to < 0 || from === to) return q;
     const copy = q.slice();
     const [m] = copy.splice(from, 1);
@@ -1441,7 +1541,7 @@ function usePlayerEngine(mainDeviceId, playback) {
     resetEq: () => setEqBandsState(EQ_BANDS.map(() => 0)),
     previewId: preview ? preview.id : null,
     clearPreview: () => { setPreview(null); setPlaying(false); },
-    addTanda, addCortina, addPlaylist, insertSong, remove, reorder, clearQueue,
+    addTanda, addCortina, addPlaylist, insertSong, insertTanda, insertPlaylist, remove, reorder, clearQueue,
     playItem, playItemAt, toggleSkip, playPause, prev, next, seek, fadeToTanda,
     previewSong, loadPlaylist, saveQueueAsPlaylist,
   };
@@ -1804,7 +1904,10 @@ function PlayerProvider({ children }) {
 function LivePlayer({ queueWidth, onQueueWidthChange }) {
   const { tandas, songs, playlists } = useStore();
   const p = usePlayer();
-  const [draggingId, setDraggingId] = useState(null);
+  const { makeDrag, draggingId } = useLibraryDrag();
+  // Which "Add to queue" picker is showing. Held here so the empty queue can
+  // open one of them.
+  const [tab, setTab] = useState("library");
 
   // Live queue width while dragging the divider; seeded from the persisted tweak.
   const [qW, setQW] = useState(queueWidth || 600);
@@ -1813,12 +1916,11 @@ function LivePlayer({ queueWidth, onQueueWidthChange }) {
   // Cortina material is flagged per song (song.isCortina), independent of genre.
   const cortinas = useMemo(() => (songs || []).filter((s) => s.isCortina), [songs]);
 
-  // Drag source for library songs — mirrors the Tandas builder's payload so the
-  // queue can read "song:<id>" off the drop.
-  const makeDrag = (s) => ({
-    onDragStart: (e) => { e.dataTransfer.setData("text/plain", "song:" + s.id); e.dataTransfer.effectAllowed = "copy"; setDraggingId(s.id); },
-    onDragEnd: () => setDraggingId(null),
-  });
+  // A tanda or playlist card dropped on the queue arrives as its kind and id.
+  const insertItem = (kind, id, beforeKey) => {
+    if (kind === "tanda") p.insertTanda(tandas.find((t) => String(t.id) === id), beforeKey);
+    else if (kind === "playlist") p.insertPlaylist(playlists.find((pl) => String(pl.id) === id), beforeKey);
+  };
 
   // Single-song "listen" — routes to the monitor when cueing is on, otherwise
   // through the shared engine (see PlayerProvider).
@@ -1826,12 +1928,12 @@ function LivePlayer({ queueWidth, onQueueWidthChange }) {
 
   return (
     <div className="tp-main">
-      <LibraryPanel tandas={tandas} cortinas={cortinas} playlists={playlists}
+      <LibraryPanel tab={tab} setTab={setTab} tandas={tandas} cortinas={cortinas} playlists={playlists}
         onAddTanda={p.addTanda} onAddSong={p.addCortina} onAddPlaylist={p.addPlaylist}
         makeDrag={makeDrag} draggingId={draggingId} preview={preview} flash={p.flash} />
       <QueueResizer width={qW} min={LIVE_QUEUE_MIN_W} max={LIVE_QUEUE_MAX_W}
         onResize={setQW} onCommit={commitQW} />
-      <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} playing={p.playing} pos={p.pos} width={qW} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onSkipSong={p.toggleSkip} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onSavePlaylist={p.saveQueueAsPlaylist} onClearQueue={p.clearQueue} />
+      <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} playing={p.playing} pos={p.pos} width={qW} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onSkipSong={p.toggleSkip} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onInsertItem={insertItem} onSavePlaylist={p.saveQueueAsPlaylist} onClearQueue={p.clearQueue} onBrowse={setTab} />
     </div>
   );
 }
@@ -2009,4 +2111,4 @@ function AnalysisBanner() {
   );
 }
 
-Object.assign(window, { LivePlayer, PlayerProvider, PlayerBar, usePlayer, AnalysisBanner, MissingCortinaHint, itemSongs, queueDurationSec, actsAsCortina });
+Object.assign(window, { LivePlayer, PlayerProvider, PlayerBar, usePlayer, AnalysisBanner, MissingCortinaHint, itemSongs, queueDurationSec, actsAsCortina, useQueueDrop, useLibraryDrag, DropGap });

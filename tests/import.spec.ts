@@ -49,6 +49,8 @@ test('imported songs are visible in the Library view', async () => {
   // Library groups by folder (collapsed by default): assert the count header and
   // both fixture folders render with their per-folder song counts.
   await expect(page.getByText(`${fixtureCounts.total} songs across 3 folders`)).toBeVisible({timeout: 10_000});
-  await expect(page.getByText('Di Sarli - Tango').first()).toBeVisible();
-  await expect(page.getByText('Biagi - Vals').first()).toBeVisible();
+  // Every view stays mounted and the Live tab opens on its own song browser,
+  // so look only at what's on screen.
+  await expect(page.getByText('Di Sarli - Tango').filter({visible: true}).first()).toBeVisible();
+  await expect(page.getByText('Biagi - Vals').filter({visible: true}).first()).toBeVisible();
 });

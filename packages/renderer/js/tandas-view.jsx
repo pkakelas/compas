@@ -1,45 +1,6 @@
 // tandas-view.jsx — the Tandas workspace: import → folder library → builder → manage
 const { useState, useEffect, useRef } = React;
 
-/* ---------- shared drag-and-drop for the builder ---------- */
-function useBuilderDnD(api) {
-  const [hot, setHot] = useState(false);
-  const [drag, setDrag] = useState(null);
-  const [over, setOver] = useState(null);
-  const readDrop = (e, i) => {
-    const raw = e.dataTransfer.getData("text/plain") || "";
-    if (raw.indexOf("idx:") === 0) {
-      const from = +raw.slice(4);
-      if (i == null || i >= api.length) api.moveSong(from, api.length - 1);
-      else api.moveSong(from, i);
-    } else if (raw.indexOf("song:") === 0) {
-      const s = Store.songById(raw.slice(5));
-      if (s) api.insertSong(s, i == null ? api.length : i);
-    }
-  };
-  const dropTarget = {
-    hot,
-    onDragOver: (e) => { e.preventDefault(); if (!hot) setHot(true); },
-    onDragLeave: (e) => { if (e.currentTarget === e.target) setHot(false); },
-    onDrop: (e) => { e.preventDefault(); setHot(false); readDrop(e, null); },
-  };
-  const slot = (i) => ({
-    dragging: drag === i, over: over === i,
-    handlers: {
-      draggable: true,
-      onDragStart: (e) => { e.dataTransfer.setData("text/plain", "idx:" + i); e.dataTransfer.effectAllowed = "move"; setDrag(i); },
-      onDragEnd: () => { setDrag(null); setOver(null); setHot(false); },
-      onDragOver: (e) => { e.preventDefault(); e.stopPropagation(); if (over !== i) setOver(i); },
-      onDrop: (e) => { e.preventDefault(); e.stopPropagation(); readDrop(e, i); setOver(null); setDrag(null); setHot(false); },
-    },
-  });
-  const dropAt = (i) => ({
-    onDragOver: (e) => { e.preventDefault(); },
-    onDrop: (e) => { e.preventDefault(); e.stopPropagation(); readDrop(e, i); setHot(false); },
-  });
-  return { dropTarget, slot, dropAt };
-}
-
 function builderSummary(songs) {
   const m = tandaMeta({ songs });
   return (
@@ -86,8 +47,20 @@ function BuilderResizer({ width, min, max, onResize, onCommit }) {
 function BuilderBench({ builder, api, width, preview }) {
   const songs = builder.songs;
   const songNameOnly = useSongNameOnly();
-  const { dropTarget, slot, dropAt } = useBuilderDnD(api);
+  // Drag & drop is the shared queue behaviour (useQueueDrop): a dragged song
+  // or slot lands in the gap nearest the pointer, which eases open. The gap's
+  // index counts the dragged slot too, so a move further down lands one earlier.
+  const scrollRef = useRef(null);
+  const dnd = useQueueDrop({
+    count: songs.length, scrollRef, rows: ".tv-slot.filled",
+    onReorder: (from, at) => api.moveSong(from, from < at ? at - 1 : at),
+    onInsertSong: api.insertSong,
+  });
   const m = tandaMeta({ songs });
+  // A tanda needs a name before it can be saved. One is filled in for the DJ
+  // when the songs share an orchestra or era (TandaNameSuggest); when they
+  // don't, the DJ has to type one — warn until they do.
+  const unnamed = songs.length > 0 && !builder.name.trim() && !suggestTandaName(songs);
   const target = songs.length >= 8 ? songs.length : Math.max(4, songs.length + 1);
   const empties = [];
   for (let i = songs.length; i < target; i++) empties.push(i);
@@ -95,25 +68,30 @@ function BuilderBench({ builder, api, width, preview }) {
   const dockStyle = width ? { flex: "0 0 " + width + "px", width: width } : undefined;
 
   return (
-    <div className={"tv-dock" + (dropTarget.hot ? " drop-hot" : "")} style={dockStyle}>
+    <div className="tv-dock" style={dockStyle}>
       <div className="tv-dock-head">
         <div className="tv-dock-title-row">
-          <input className="tv-dock-name" value={builder.name} onChange={(e) => api.setName(e.target.value)}
-            placeholder={m.orq !== "Empty tanda" ? m.orq : "Name this tanda…"} />
-          {api.editing && <span className="tv-edit-tag">Editing</span>}
+          <label className={"tv-dock-namefield" + (unnamed ? " is-missing" : "")} title="Name this tanda">
+            <I.pencil s={15} />
+            <input className="tv-dock-name" value={builder.name} onChange={(e) => api.setName(e.target.value)}
+              placeholder={m.orq && m.orq !== "Empty tanda" ? m.orq : "Name this tanda…"} />
+          </label>
         </div>
+        {unnamed && <div className="tv-name-warn" role="alert">Give this tanda a name before saving.</div>}
         <TandaNameSuggest songs={songs} name={builder.name} onApply={api.setName} />
         {builderSummary(songs)}
         <TagField tags={api.tags} onChange={api.setTags} />
         <TandaTagSuggest songs={songs} tags={api.tags} onApply={api.setTags} />
       </div>
 
-      <div className="tv-dock-scroll" {...{ onDragOver: dropTarget.onDragOver, onDragLeave: dropTarget.onDragLeave, onDrop: dropTarget.onDrop }}>
+      <div ref={scrollRef} className="tv-dock-scroll" {...dnd.list}>
         {songs.map((s, i) => {
-          const sp = slot(i);
+          const sp = dnd.slot(i);
           const isPlaying = preview && preview.previewId === s.id && preview.playing;
           return (
-            <div key={s.id} className={"tv-slot filled" + (sp.dragging ? " dragging" : "") + (sp.over ? " over" : "") + (preview ? " clickable" : "") + (isPlaying ? " playing" : "")}
+            <React.Fragment key={s.id}>
+            <DropGap open={dnd.gapOpen(i)} />
+            <div className={"tv-slot filled" + (sp.dragging ? " dragging" : "") + (preview ? " clickable" : "") + (isPlaying ? " playing" : "")}
               {...sp.handlers}
               onClick={preview ? () => preview.toggle(s) : undefined}
               title={previewTitle(preview, isPlaying)}>
@@ -126,12 +104,16 @@ function BuilderBench({ builder, api, width, preview }) {
               <span className="du">{s.dur}</span>
               <button className="rm" onClick={(e) => { e.stopPropagation(); api.removeAt(i); }} title="Remove"><I.x s={14} /></button>
             </div>
+            </React.Fragment>
           );
         })}
+        {/* The "next" empty slot is the drop target for the end; once the tanda
+            has outgrown the empty slots, a gap is. */}
+        {empties.length === 0 && <DropGap open={dnd.gapOpen(songs.length)} />}
         {empties.map((i) => {
           const isNext = i === songs.length;
           return (
-            <div key={"e" + i} className={"tv-slot-empty" + (isNext ? " next" : " ghost")} {...dropAt(i)}>
+            <div key={"e" + i} className={"tv-slot-empty" + (isNext ? " next" : " ghost") + (isNext && dnd.gapOpen(songs.length) ? " is-target" : "")}>
               <span className="num">{i + 1}</span>
               {isNext
                 ? <span className="hint"><I.plus s={14} /> Drop a song here, or tap + to add</span>
@@ -142,7 +124,8 @@ function BuilderBench({ builder, api, width, preview }) {
       </div>
 
       <div className="tv-dock-foot">
-        <button className="tp-btn primary lg block" disabled={!songs.length} onClick={api.save}>
+        <button className="tp-btn primary lg block" disabled={!songs.length || unnamed} onClick={api.save}
+          title={unnamed ? "Name this tanda before saving" : undefined}>
           <I.check s={17} /> {api.editing ? "Update tanda" : "Save tanda"}
         </button>
         <button className="tv-clear" disabled={!songs.length && !api.editing} onClick={api.clear}>
@@ -208,7 +191,7 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
   const goBuild = () => setTab("build");
   const goManage = () => setTab("mine");
   const [builder, setBuilder] = useState({ songs: [], name: "", tags: [], editingId: null });
-  const [draggingId, setDraggingId] = useState(null);
+  const { makeDrag, draggingId } = useLibraryDrag();
   const { toast, flash, dismiss } = useToast();
   const { ask, modal } = useConfirm();
   const player = usePlayer();
@@ -247,7 +230,7 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
   const removeAt = (idx) => setBuilder((b) => ({ ...b, songs: b.songs.filter((_, i) => i !== idx) }));
   const clear = () => setBuilder({ songs: [], name: "", tags: [], editingId: null });
   const save = () => {
-    if (!builder.songs.length) return;
+    if (!builder.songs.length || !builder.name.trim()) return;
     const editing = !!builder.editingId;
     Store.saveTanda({
       id: builder.editingId,
@@ -291,10 +274,6 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
   };
   const dismissSuggestion = (t) => Store.dismissSuggestion(t.refId);
 
-  const makeDrag = (s) => ({
-    onDragStart: (e) => { e.dataTransfer.setData("text/plain", "song:" + s.id); e.dataTransfer.effectAllowed = "copy"; setDraggingId(s.id); },
-    onDragEnd: () => setDraggingId(null),
-  });
 
   if (!imported) return <div className="tv"><ImportScreen /></div>;
 

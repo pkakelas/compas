@@ -47,8 +47,9 @@ test.afterAll(async () => {
 test('a saved tanda can be queued and played', async () => {
   await gotoView(page, 'Live');
 
-  // The tanda now appears in the "Add to queue" source list. Use its "+"
+  // The tanda appears in the "Add to queue" panel's Tandas picker. Use its "+"
   // button (clicking the name only previews; the add button queues it).
+  await page.locator('.tp-main .tp-tab', {hasText: 'Tandas'}).click();
   await expect(page.getByText('Test Tanda').first()).toBeVisible({timeout: 10_000});
   await page.locator('button[title="Add tanda to queue"]').first().click();
 

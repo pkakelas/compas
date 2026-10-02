@@ -10,7 +10,8 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "fontScale": 100,
   "tandaLayout": "grid",
   "songNameOnly": false,
-  "collapseFoldersByDefault": false
+  "collapseFoldersByDefault": false,
+  "cortinasInFilters": false
 }/*EDITMODE-END*/;
 
 // Text size is a whole-app zoom (everything is sized in px, so scaling the page
@@ -92,6 +93,7 @@ function AppShell() {
       if (savedLayout === "list" || savedLayout === "grid") seed.tandaLayout = savedLayout;
       seed.songNameOnly = localStorage.getItem("compas.songNameOnly") === "1";
       seed.collapseFoldersByDefault = localStorage.getItem("compas.collapseFoldersByDefault") === "1";
+      seed.cortinasInFilters = localStorage.getItem("compas.cortinasInFilters") === "1";
       return seed;
     } catch (e) { return TWEAK_DEFAULTS; }
   })());
@@ -132,6 +134,11 @@ function AppShell() {
   React.useEffect(() => {
     try { localStorage.setItem("compas.collapseFoldersByDefault", t.collapseFoldersByDefault ? "1" : "0"); } catch (e) { /* ignore */ }
   }, [t.collapseFoldersByDefault]);
+
+  // Persist whether cortinas show up in the library's filter dropdowns.
+  React.useEffect(() => {
+    try { localStorage.setItem("compas.cortinasInFilters", t.cortinasInFilters ? "1" : "0"); } catch (e) { /* ignore */ }
+  }, [t.cortinasInFilters]);
 
   // Cmd/Ctrl +/-/0 come in as menu-driven IPC commands (the View ▸ Zoom items own
   // the accelerators on every platform). A ref holds the live scale so the

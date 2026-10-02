@@ -274,6 +274,10 @@ function LibraryDisplayCard({ t, setTweak }) {
         desc="Start with every folder closed when you open the Library or the Tanda builder, so you can expand only the ones you need. Otherwise the top-level folders open automatically.">
         <SetSwitch checked={!!t.collapseFoldersByDefault} onChange={(v) => setTweak("collapseFoldersByDefault", v)} />
       </SetRow>
+      <SetRow label="Cortinas in filters"
+        desc="Offer cortinas’ orchestras, singers, styles and years in the library’s filter dropdowns. When off, the dropdowns only list your dance music — cortinas still appear when you browse or search.">
+        <SetSwitch checked={!!t.cortinasInFilters} onChange={(v) => setTweak("cortinasInFilters", v)} />
+      </SetRow>
       {t.songNameOnly && (
         <div className="tp-set-note">
           Strips, on display only, the kinds of clutter that creep into title tags:
