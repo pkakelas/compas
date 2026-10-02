@@ -702,6 +702,11 @@ button.tp-nav {
 .tp-nb-t.rem { color: var(--ink); }
 
 .tp-nb-ctrls { display: flex; align-items: center; gap: 11px; flex: 0 0 auto; }
+/* Live-set lock: the same latch as the queue header's, on the bar it guards.
+   Locked, the transport dims to show it won't answer — volume, EQ and the
+   cortina's fade chip still do. */
+.tp-nb-lock.on, .tp-nb-lock.on:hover { color: var(--accent-deep); background: var(--accent-soft); }
+.tp-nowbar.is-locked .tp-tbtn { opacity: .45; cursor: default; box-shadow: none; }
 
 /* clickable queue rows + live states */
 .tp-qrow { cursor: pointer; }

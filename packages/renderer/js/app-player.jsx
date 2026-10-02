@@ -459,7 +459,7 @@ function QueueCortina({ item, now, playing, onPlay, onRemove, drag }) {
   const { className: dragCls = "", ...handlers } = drag;
   return (
     <div className={"tp-cortina tp-qrow" + (now ? " is-now" : "") + (onPlay ? "" : " is-locked") + " " + dragCls} {...handlers}
-      onClick={onPlay} title={onPlay ? undefined : "Queue locked — unlock to play"}>
+      onClick={onPlay} title={onPlay ? undefined : "Live set locked — unlock to play"}>
       <div className="curtain"></div>
       <span className="tp-grip dark" title="Drag to reorder"><I.grip s={15} /></span>
       <I.curtain s={17} />
@@ -468,7 +468,7 @@ function QueueCortina({ item, now, playing, onPlay, onRemove, drag }) {
         <div className="tp-cortina-sub">“{c.title}” · {c.orq || "Cortina"}</div>
       </div>
       <div className="tp-fade">{now && playing ? <EQ /> : <I.clock s={13} />} {c.dur}</div>
-      <button className="tp-qx dark" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove"><I.x s={14} /></button>
+      {onRemove && <button className="tp-qx dark" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove"><I.x s={14} /></button>}
     </div>
   );
 }
@@ -482,7 +482,7 @@ function QueueSong({ item, now, playing, onPlay, onRemove, drag }) {
   const { className: dragCls = "", ...handlers } = drag;
   return (
     <div className={"tp-songcard tp-qrow" + (now ? " is-now" : "") + (onPlay ? "" : " is-locked") + " " + dragCls} {...handlers}
-      onClick={onPlay} title={onPlay ? undefined : "Queue locked — unlock to play"}>
+      onClick={onPlay} title={onPlay ? undefined : "Live set locked — unlock to play"}>
       <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
       <span className="tp-songcard-glyph">{now && playing ? <EQ /> : <I.note s={15} />}</span>
       <div className="tp-flex1">
@@ -643,11 +643,11 @@ function defaultPlaylistName() {
   return `Set · ${d.toLocaleString("en-US", { month: "short" })} ${d.getDate()}`;
 }
 
-function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, onPlaySongAt, onSkipSong, onRemove, onReorder, onInsertSong, onInsertItem, onSavePlaylist, onClearQueue, onBrowse }) {
+const LOCK_ON_TITLE = "Live set locked — the queue, the transport bar and the spacebar can’t change what’s playing. Click to unlock.";
+const LOCK_OFF_TITLE = "Lock the live set so a stray click can’t interrupt the current song.";
+
+function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, onPlaySongAt, onSkipSong, onRemove, onReorder, onInsertSong, onInsertItem, onSavePlaylist, onClearQueue, onBrowse, locked, onToggleLock }) {
   const [saveOpen, setSaveOpen] = useState(false);
-  // When locked, clicking a song won't start playback — a safety latch for DJs
-  // who fear a stray click cutting off the song currently on the floor.
-  const [locked, setLocked] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [savingNow, setSavingNow] = useState(false);
   const saveInputRef = useRef(null);
@@ -733,8 +733,8 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
             <span className="tp-mono">set {setTotal}</span>
           </div>
           <div className="tp-qhead-btns">
-            <button className={"tp-lockq" + (locked ? " is-on" : "")} onClick={() => setLocked((v) => !v)}
-              title={locked ? "Queue locked — songs can’t be played by clicking. Click to unlock." : "Lock the queue so a stray click can’t interrupt the current song."}
+            <button className={"tp-lockq" + (locked ? " is-on" : "")} onClick={onToggleLock}
+              title={locked ? LOCK_ON_TITLE : LOCK_OFF_TITLE}
               aria-pressed={locked}>
               {locked ? <I.unlock s={14} /> : <I.lock s={14} />} {locked ? "unlock" : "lock"}
             </button>
@@ -742,8 +742,8 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
               title={queue.length ? "Save this set as a playlist" : "Add tandas to save a playlist"}>
               <I.plus s={14} /> Save as playlist
             </button>
-            <button className="tp-clearq" onClick={handleClear} disabled={!queue.length}
-              title={queue.length ? "Clear the whole queue" : "Queue is already empty"}>
+            <button className="tp-clearq" onClick={handleClear} disabled={!queue.length || locked}
+              title={!queue.length ? "Queue is already empty" : locked ? "Live set locked — unlock to clear the queue" : "Clear the whole queue"}>
               <I.trash s={14} /> Clear queue
             </button>
           </div>
@@ -798,7 +798,7 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
           const row = role === "tanda"
             ? <QueueTanda key={item.key} item={item} ix={tIx} now={isNow} playing={playing} nowIx={isNow ? nowIx : 0} onPlaySong={locked ? undefined : (ix) => onPlaySongAt(item.key, ix)} onSkipSong={(ix) => onSkipSong(item.key, ix)} onRemove={() => onRemove(item.key)} drag={dp} />
             : role === "cortina"
-              ? <QueueCortina key={item.key} item={item} now={isNow} playing={playing} onPlay={locked ? undefined : () => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />
+              ? <QueueCortina key={item.key} item={item} now={isNow} playing={playing} onPlay={locked ? undefined : () => onPlay(item.key)} onRemove={locked && isNow ? undefined : () => onRemove(item.key)} drag={dp} />
               : <QueueSong key={item.key} item={item} now={isNow} playing={playing} onPlay={locked ? undefined : () => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />;
           return (
             <React.Fragment key={item.key}>
@@ -830,41 +830,53 @@ function nextTandaAfter(queue, key) {
 function SeekBar({ pos, dur, onSeek, className = "tp-nb-bar" }) {
   const ref = useRef(null);
   const frac = dur > 0 ? Math.min(1, Math.max(0, pos / dur)) : 0;
+  const live = !!onSeek && dur > 0;
   const onClick = (e) => {
-    if (!ref.current || dur <= 0) return;
+    if (!ref.current || !live) return;
     const r = ref.current.getBoundingClientRect();
     onSeek(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * dur);
   };
   return (
-    <div ref={ref} className={className} onClick={onClick} style={{ cursor: dur > 0 ? "pointer" : "default" }}>
+    <div ref={ref} className={className} onClick={onClick} style={{ cursor: live ? "pointer" : "default" }}>
       <div className="tp-nb-bar-fill" style={{ width: (frac * 100) + "%" }}></div>
     </div>
   );
 }
 
-function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPause, onPrev, onNext, onSeek, onFadeToTanda, onVolume, onToggleMute, cortinaSnippetEnabled, cortinaSnippetSec, eqEnabled, eqBands, onToggleEq, onEqBand, onResetEq }) {
+function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, locked, onToggleLock, onPlayPause, onPrev, onNext, onSeek, onFadeToTanda, onVolume, onToggleMute, cortinaSnippetEnabled, cortinaSnippetSec, eqEnabled, eqBands, onToggleEq, onEqBand, onResetEq }) {
   const eqProps = { enabled: eqEnabled, bands: eqBands, onToggle: onToggleEq, onBand: onEqBand, onReset: onResetEq };
   const songNameOnly = useSongNameOnly();
+  // The bar shows on every tab, so the lock is visible — and can be released —
+  // right where it bites. Locked, the transport is inert; volume, EQ and the
+  // cortina's "Fade to next tanda" aren't.
+  const barCls = "tp-nowbar" + (locked ? " is-locked" : "");
+  const lockBtn = (
+    <button className={"tp-vol-btn tp-nb-lock" + (locked ? " on" : "")} onClick={onToggleLock}
+      title={locked ? LOCK_ON_TITLE : LOCK_OFF_TITLE} aria-pressed={!!locked} aria-label="Lock the live set">
+      {locked ? <I.lock s={16} /> : <I.unlock s={16} />}
+    </button>
+  );
   if (!now) {
     // Nothing is selected yet. If the queue already has items, the main Play
     // button must still work — it starts the set from the top (onPlayPause falls
     // back to queue[0]). Only a truly empty queue leaves the transport inert.
     const hasQueue = queue.length > 0;
     return (
-      <div className="tp-nowbar">
+      <div className={barCls}>
         <div className="tp-nb-meta">
           <div className="tp-nb-mark"><I.note s={16} /></div>
           <div style={{ minWidth: 0 }}>
             <div className="tp-nb-title">{hasQueue ? "Ready to play" : "Nothing playing"}</div>
             <div className="tp-nb-sub">
-              {hasQueue ? "Press play to start the set" : "Add a tanda or cortina, then press play"}
+              {!hasQueue ? "Add a tanda or cortina, then press play" : locked ? "Unlock, then press play to start the set" : "Press play to start the set"}
             </div>
           </div>
         </div>
         <div className="tp-nb-wave" />
         <div className="tp-nb-ctrls">
+          {lockBtn}
           <button className="tp-tbtn nb" disabled><I.prev s={16} /></button>
-          <button className="tp-tbtn nb play" onClick={hasQueue ? onPlayPause : undefined} disabled={!hasQueue}><I.play s={22} /></button>
+          <button className="tp-tbtn nb play" onClick={hasQueue ? onPlayPause : undefined} disabled={!hasQueue || locked}><I.play s={22} /></button>
           <button className="tp-tbtn nb" disabled><I.next s={16} /></button>
           <EqualizerControl {...eqProps} /><VolumeControl volume={volume} muted={muted} onVolume={onVolume} onToggleMute={onToggleMute} />
         </div>
@@ -886,7 +898,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
     const snippetActive = cortinaSnippetEnabled && !!upcoming;
     const snippetRemain = Math.max(0, cortinaSnippetSec - (pos || 0));
     return (
-      <div className="tp-nowbar is-cortina">
+      <div className={barCls + " is-cortina"}>
         <div className="tp-nb-meta">
           <div className="tp-nb-mark cortina"><I.curtain s={18} /></div>
           <div style={{ minWidth: 0 }}>
@@ -905,16 +917,17 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
 
         <div className="tp-nb-wave">
           <span className="tp-mono tp-nb-t">{fmtDur(pos)}</span>
-          <SeekBar pos={pos} dur={dur} onSeek={onSeek} />
+          <SeekBar pos={pos} dur={dur} onSeek={locked ? undefined : onSeek} />
           <span className="tp-mono tp-nb-t rem">−{fmtDur(remain)}</span>
         </div>
 
         <div className="tp-nb-ctrls">
-          <button className="tp-tbtn nb" onClick={onPrev}><I.prev s={16} /></button>
-          <button className="tp-tbtn nb play" onClick={onPlayPause}>
+          {lockBtn}
+          <button className="tp-tbtn nb" onClick={onPrev} disabled={locked}><I.prev s={16} /></button>
+          <button className="tp-tbtn nb play" onClick={onPlayPause} disabled={locked}>
             {playing ? <I.pause s={22} /> : <I.play s={22} />}
           </button>
-          <button className="tp-tbtn nb" onClick={onNext}><I.next s={16} /></button>
+          <button className="tp-tbtn nb" onClick={onNext} disabled={locked}><I.next s={16} /></button>
           <button className="tp-chip warn" style={{ marginLeft: 6 }} onClick={onFadeToTanda} disabled={!upcoming}>
             <I.fwd s={15} /> Fade to next tanda{upcoming ? <span className="tp-chip-tail"> · {tandaMeta(upcoming.data).orq}</span> : null}
           </button>
@@ -931,7 +944,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
   const orq = isTanda ? tandaMeta(now.data).orq : ((song && song.orq) || "Unknown");
   const tandaSongs = isTanda ? (now.data.songs || []) : [];
   return (
-    <div className="tp-nowbar">
+    <div className={barCls}>
       <div className="tp-nb-meta">
         <div className="tp-nb-mark">{playing ? <EQ /> : <I.pause s={16} />}</div>
         <div style={{ minWidth: 0 }}>
@@ -947,9 +960,9 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
 
       <div className="tp-nb-wave">
         <span className="tp-mono tp-nb-t">{fmtDur(pos)}</span>
-        <div className="tp-flex1" style={{ cursor: dur > 0 ? "pointer" : "default" }}
+        <div className="tp-flex1" style={{ cursor: dur > 0 && !locked ? "pointer" : "default" }}
           onClick={(e) => {
-            if (dur <= 0) return;
+            if (dur <= 0 || locked) return;
             const r = e.currentTarget.getBoundingClientRect();
             onSeek(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * dur);
           }}>
@@ -959,11 +972,12 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
       </div>
 
       <div className="tp-nb-ctrls">
-        <button className="tp-tbtn nb" onClick={onPrev}><I.prev s={16} /></button>
-        <button className="tp-tbtn nb play" onClick={onPlayPause}>
+        {lockBtn}
+        <button className="tp-tbtn nb" onClick={onPrev} disabled={locked}><I.prev s={16} /></button>
+        <button className="tp-tbtn nb play" onClick={onPlayPause} disabled={locked}>
           {playing ? <I.pause s={22} /> : <I.play s={22} />}
         </button>
-        <button className="tp-tbtn nb" onClick={onNext}><I.next s={16} /></button>
+        <button className="tp-tbtn nb" onClick={onNext} disabled={locked}><I.next s={16} /></button>
         <EqualizerControl {...eqProps} /><VolumeControl volume={volume} muted={muted} onVolume={onVolume} onToggleMute={onToggleMute} />
       </div>
     </div>
@@ -975,6 +989,9 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, onPlayPau
 // lives at the shell level (always visible) and every play action — the live
 // queue, a song preview from the Tandas view, a saved playlist — runs through
 // this single engine, so only one thing is ever audible.
+
+// Shown when a locked live set turns down a listen that would go out to the floor.
+const LOCKED_LISTEN_MSG = "Live set is locked — unlock it to listen through the main output.";
 
 const PlayerContext = React.createContext(null);
 const usePlayer = () => React.useContext(PlayerContext);
@@ -1006,6 +1023,13 @@ function usePlayerEngine(mainDeviceId, playback) {
   const [eqBands, setEqBandsState] = useState(loadEqBands); // per-band gain in dB
   const [flash, setFlash] = useState(null);
   const [preview, setPreview] = useState(null);   // a standalone song played outside the queue
+  // Live-set lock: a safety latch for DJs who fear a stray click cutting off
+  // the song on the floor. While it's on, nothing the DJ clicks or presses can
+  // change what the floor is playing — the queue rows, the transport bar and
+  // the spacebar all go inert, and the set only moves on by itself. The one
+  // exception is "Fade to next tanda" on a cortina. Volume and EQ stay live,
+  // and the queue can still be built up around the current song.
+  const [locked, setLocked] = useState(false);
   const [error, setError] = useState(null);       // transient transport error (e.g. missing file)
   const flashTimer = useRef(null);
   const errTimer = useRef(null);
@@ -1405,11 +1429,15 @@ function usePlayerEngine(mainDeviceId, playback) {
     setQueue((q) => [...q, ...pl.items.map((it) => mk(it.type, it.data))]);
     ping("p:" + pl.id);
   };
-  const remove = (key) => setQueue((q) => {
-    const filtered = q.filter((i) => i.key !== key);
-    if (key === nowKey) { setNowKey(null); setNowIx(0); setPlaying(false); }
-    return filtered;
-  });
+  const remove = (key) => {
+    // Removing the item that's on air stops it — not while locked.
+    if (locked && key === nowKey) return;
+    setQueue((q) => {
+      const filtered = q.filter((i) => i.key !== key);
+      if (key === nowKey) { setNowKey(null); setNowIx(0); setPlaying(false); }
+      return filtered;
+    });
+  };
   // Reorder so the dragged item lands *in front of* the drop target; a null
   // toKey sends it to the end. Removing `from` first shifts later indices down
   // by one, so a downward move targets `to - 1` to avoid landing past the target.
@@ -1424,6 +1452,7 @@ function usePlayerEngine(mainDeviceId, playback) {
   });
   // Wipe the whole live set and stop playback — the "start the night over" reset.
   const clearQueue = () => {
+    if (locked) return;
     setPreview(null);
     setQueue([]);
     setNowKey(null);
@@ -1432,6 +1461,7 @@ function usePlayerEngine(mainDeviceId, playback) {
   };
 
   const playItem = (key) => {
+    if (locked) return;
     if (preview) setPreview(null);
     if (!preview && key === nowKey) { setPlaying((p) => !p); return; }
     const item = queue.find((i) => i.key === key);
@@ -1451,11 +1481,13 @@ function usePlayerEngine(mainDeviceId, playback) {
   // Jump straight to a specific song inside a queued item (e.g. tapping the 3rd
   // song of a tanda). Clicking the song that's already playing toggles play/pause.
   const playItemAt = (key, ix) => {
+    if (locked) return;
     if (preview) setPreview(null);
     if (!preview && key === nowKey && ix === nowIx) { setPlaying((p) => !p); return; }
     setNowKey(key); setNowIx(ix); setPlaying(true);
   };
   const playPause = () => {
+    if (locked) return;
     if (preview) { setPlaying((p) => !p); return; }
     if (!nowKey) {
       const first = queue[0];
@@ -1465,6 +1497,7 @@ function usePlayerEngine(mainDeviceId, playback) {
     setPlaying((p) => !p);
   };
   const prev = () => {
+    if (locked) return;
     if (preview) { const h = howlRef.current; if (h) h.seek(0); setPos(0); return; }
     if (queueNow && queueNow.type === "tanda" && nowIx > 0) { setNowIx(nowIx - 1); setPlaying(true); return; }
     const idx = queue.findIndex((i) => i.key === nowKey);
@@ -1473,12 +1506,15 @@ function usePlayerEngine(mainDeviceId, playback) {
     else { const h = howlRef.current; if (h) h.seek(0); setPos(0); }
   };
   const next = () => {
+    if (locked) return;
     if (preview) { setPreview(null); setPlaying(false); return; }
     advancingRef.current = false; advance(); setPlaying(true);
   };
   // UI seconds are relative to the trimmed window; map back to real file time.
-  const seek = (sec) => { const h = howlRef.current; if (h) { h.seek((trimRef.current.startSec || 0) + sec); setPos(sec); } };
+  const seek = (sec) => { const h = howlRef.current; if (h && !locked) { h.seek((trimRef.current.startSec || 0) + sec); setPos(sec); } };
 
+  // Deliberately not held by the lock: ending a cortina is the one move a DJ
+  // makes on purpose mid-set, and the chip only shows while a cortina is on.
   const fadeToTanda = () => {
     const t = nextTandaAfter(queue, nowKey);
     if (t) startFadeTo(t.key);
@@ -1496,6 +1532,9 @@ function usePlayerEngine(mainDeviceId, playback) {
   // Play a single song outside the queue (the Tandas-view song preview).
   const previewSong = (song) => {
     if (!song) return;
+    // This preview plays through the floor's own engine, so it would replace
+    // the song the dancers are hearing.
+    if (locked) { flashError(LOCKED_LISTEN_MSG); return; }
     if (preview && preview.id === song.id) { setPlaying((p) => !p); return; }
     setPreview(song);
     setPlaying(true);
@@ -1514,7 +1553,7 @@ function usePlayerEngine(mainDeviceId, playback) {
 
   // Replace the queue with a saved playlist and start it (handoff from Playlists view).
   const loadPlaylist = (items) => {
-    if (!items || !items.length) return;
+    if (locked || !items || !items.length) return;
     const q = items.map((it) => mk(it.type, it.data));
     setPreview(null);
     setQueue(q);
@@ -1540,7 +1579,9 @@ function usePlayerEngine(mainDeviceId, playback) {
     }),
     resetEq: () => setEqBandsState(EQ_BANDS.map(() => 0)),
     previewId: preview ? preview.id : null,
-    clearPreview: () => { setPreview(null); setPlaying(false); },
+    clearPreview: () => { if (locked) return; setPreview(null); setPlaying(false); },
+    locked, toggleLock: () => setLocked((v) => !v),
+    notify: flashError,
     addTanda, addCortina, addPlaylist, insertSong, insertTanda, insertPlaylist, remove, reorder, clearQueue,
     playItem, playItemAt, toggleSkip, playPause, prev, next, seek, fadeToTanda,
     previewSong, loadPlaylist, saveQueueAsPlaylist,
@@ -1852,9 +1893,12 @@ function PlayerProvider({ children }) {
   // only ever fed by the explicit "Import to Live" action in the Live tab.
   const playSongs = useCallback((songs) => {
     if (!songs || !songs.length) return;
+    // Without a monitor card the cue engine shares the floor's output, so a
+    // locked set refuses rather than play over the song that's on.
+    if (engine.locked && !devices.monitorReady) { engine.notify(LOCKED_LISTEN_MSG); return; }
     engine.clearPreview();
     cueEngine.cueSongs(songs);
-  }, [engine, cueEngine]);
+  }, [engine, cueEngine, devices.monitorReady]);
 
   // Play a whole tanda in place.
   const playTanda = useCallback((t) => {
@@ -1871,10 +1915,11 @@ function PlayerProvider({ children }) {
   // Spacebar is a global play/pause toggle. While the floor is live and the
   // headphone monitor (the "backup player") is enabled, Space drives the monitor
   // so it can never pause the dancers mid-tanda by accident; otherwise it toggles
-  // the floor. Kept in a ref so the listener subscribes once.
+  // the floor. A locked live set never hands Space to the floor either. Kept in
+  // a ref so the listener subscribes once.
   const spaceRef = useRef(() => {});
   spaceRef.current = () => {
-    if (engine.livePlaying && devices.monitorReady) cueEngine.toggle();
+    if (engine.locked || (engine.livePlaying && devices.monitorReady)) cueEngine.toggle();
     else engine.playPause();
   };
   useEffect(() => {
@@ -1933,7 +1978,7 @@ function LivePlayer({ queueWidth, onQueueWidthChange }) {
         makeDrag={makeDrag} draggingId={draggingId} preview={preview} flash={p.flash} />
       <QueueResizer width={qW} min={LIVE_QUEUE_MIN_W} max={LIVE_QUEUE_MAX_W}
         onResize={setQW} onCommit={commitQW} />
-      <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} playing={p.playing} pos={p.pos} width={qW} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onSkipSong={p.toggleSkip} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onInsertItem={insertItem} onSavePlaylist={p.saveQueueAsPlaylist} onClearQueue={p.clearQueue} onBrowse={setTab} />
+      <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} playing={p.playing} pos={p.pos} width={qW} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onSkipSong={p.toggleSkip} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onInsertItem={insertItem} onSavePlaylist={p.saveQueueAsPlaylist} onClearQueue={p.clearQueue} onBrowse={setTab} locked={p.locked} onToggleLock={p.toggleLock} />
     </div>
   );
 }
@@ -2071,7 +2116,7 @@ function PlayerBar() {
       )}
       <CueBar cue={p.cue} monitorLabel={p.devices.labelFor(p.devices.monitorDeviceId)} />
       <NowBar now={p.now} nowIx={p.nowIx} queue={p.queue} playing={p.playing} pos={p.pos} dur={p.dur}
-        volume={p.volume} muted={p.muted}
+        volume={p.volume} muted={p.muted} locked={p.locked} onToggleLock={p.toggleLock}
         cortinaSnippetEnabled={p.cortinaSnippetEnabled} cortinaSnippetSec={p.cortinaSnippetSec}
         eqEnabled={p.eqEnabled} eqBands={p.eqBands}
         onToggleEq={p.setEqEnabled} onEqBand={p.setEqBand} onResetEq={p.resetEq}
