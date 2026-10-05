@@ -61,17 +61,20 @@ function pluralCategory(loc, count) {
 
 // Resolve a key to its raw message. With a numeric `count` the plural form is
 // tried first (key_one, key_other, …). Falls back to English, then to the key.
+// A plural family reached without a usable count (a missing or non-numeric
+// value) still resolves, to its general form, rather than showing the raw key.
 function lookup(key, vars) {
-  const hasCount = vars && typeof vars.count === "number";
+  const count = vars && vars.count != null && vars.count !== "" ? Number(vars.count) : NaN;
+  const hasCount = Number.isFinite(count);
   for (const loc of locale === DEFAULT_LOCALE ? [DEFAULT_LOCALE] : [locale, DEFAULT_LOCALE]) {
     const dict = MESSAGES[loc];
     if (!dict) continue;
     if (hasCount) {
-      const plural = dict[key + "_" + pluralCategory(loc, vars.count)];
+      const plural = dict[key + "_" + pluralCategory(loc, count)];
       if (plural != null) return plural;
-      if (dict[key + "_other"] != null) return dict[key + "_other"];
     }
     if (dict[key] != null) return dict[key];
+    if (dict[key + "_other"] != null) return dict[key + "_other"];
   }
   if (import.meta.env.DEV) console.warn("[i18n] missing message:", key);
   return key;
