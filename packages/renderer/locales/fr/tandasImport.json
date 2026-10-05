@@ -1,0 +1,10 @@
+{
+  "readingLibrary": "Analyse de votre bibliothèque…",
+  "scanningHint": "Compás parcourt chaque dossier et lit les tags — rien n’est modifié.",
+  "addYourMusic": "Ajoutez votre musique",
+  "nothingMoved": "Rien n’est déplacé ni copié.",
+  "chooseFolder": "Choisir un dossier",
+  "importPlaylist": "Importer une playlist",
+  "foldersStay": "Vos dossiers restent tels quels",
+  "playlistsWork": "Les playlists de VLC, Apple Music et des logiciels de DJ sont compatibles"
+}

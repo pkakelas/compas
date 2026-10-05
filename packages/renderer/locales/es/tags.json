@@ -1,0 +1,13 @@
+{
+  "catType": "Tipo",
+  "catAge": "Época",
+  "catOrquesta": "Orquesta",
+  "catMood": "Carácter",
+  "catCustom": "Personalizada",
+  "suggestedTags": "Etiquetas sugeridas",
+  "useSuggestedTags": "Usar las etiquetas sugeridas",
+  "removeTag": "Quitar etiqueta",
+  "addTag": "Añadir etiqueta…",
+  "addTagsHint": "Añade etiquetas: tipo, época, orquesta, carácter o las tuyas…",
+  "addAs": "Añadir «{label}» como"
+}

@@ -1,0 +1,13 @@
+{
+  "catType": "Tipo",
+  "catAge": "Epoca",
+  "catOrquesta": "Orquesta",
+  "catMood": "Atmosfera",
+  "catCustom": "Personalizzato",
+  "suggestedTags": "Tag suggeriti",
+  "useSuggestedTags": "Usa i tag suggeriti",
+  "removeTag": "Rimuovi tag",
+  "addTag": "Aggiungi tag…",
+  "addTagsHint": "Aggiungi tag: tipo, epoca, orquesta, atmosfera o uno tutto tuo…",
+  "addAs": "Aggiungi «{label}» come"
+}

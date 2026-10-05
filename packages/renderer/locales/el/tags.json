@@ -1,0 +1,13 @@
+{
+  "catType": "Τύπος",
+  "catAge": "Εποχή",
+  "catOrquesta": "Orquesta",
+  "catMood": "Διάθεση",
+  "catCustom": "Απλή ετικέτα",
+  "suggestedTags": "Προτεινόμενες ετικέτες",
+  "useSuggestedTags": "Χρήση προτεινόμενων ετικετών",
+  "removeTag": "Αφαίρεση ετικέτας",
+  "addTag": "Προσθήκη ετικέτας…",
+  "addTagsHint": "Προσθέστε ετικέτες — τύπο, εποχή, orquesta, διάθεση ή δικές σας…",
+  "addAs": "Προσθήκη «{label}» ως"
+}

@@ -1,0 +1,10 @@
+{
+  "readingLibrary": "Leyendo tu biblioteca…",
+  "scanningHint": "Explorando todas las carpetas y leyendo las etiquetas. No se cambia nada.",
+  "addYourMusic": "Añade tu música",
+  "nothingMoved": "No se mueve ni se copia nada.",
+  "chooseFolder": "Elegir una carpeta",
+  "importPlaylist": "Importar una playlist",
+  "foldersStay": "Tus carpetas se quedan como están",
+  "playlistsWork": "Funciona con playlists de VLC, Apple Music y apps de DJ"
+}

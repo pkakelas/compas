@@ -1,0 +1,13 @@
+{
+  "catType": "类型",
+  "catAge": "年代",
+  "catOrquesta": "乐团",
+  "catMood": "情绪",
+  "catCustom": "自定义",
+  "suggestedTags": "推荐标签",
+  "useSuggestedTags": "使用推荐标签",
+  "removeTag": "移除标签",
+  "addTag": "添加标签…",
+  "addTagsHint": "添加标签：类型、年代、乐团、情绪，或自定义…",
+  "addAs": "将“{label}”添加为"
+}
