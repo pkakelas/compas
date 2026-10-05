@@ -10,6 +10,7 @@ import "@fontsource-variable/newsreader/wght-italic.css";
 
 import "./globals.js";
 import "./api.js";
+import "./i18n.js";
 import "../js/tweaks-panel.jsx";
 import "../js/shared.jsx";
 import "../js/chrome.jsx";

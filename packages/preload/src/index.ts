@@ -26,6 +26,12 @@ function openExternal(url: string): Promise<void> {
   return ipcRenderer.invoke('app:openExternal', url);
 }
 
+/** Tell the main process which UI language is active, so the native menu and
+ *  file dialogs match the renderer. */
+function setLocale(locale: string): Promise<void> {
+  return ipcRenderer.invoke('app:setLocale', locale);
+}
+
 /** Read the current library (folder tree + flat songs) from the database. */
 function getLibrary() {
   return ipcRenderer.invoke('library:get');
@@ -254,6 +260,7 @@ function onZoomCommand(cb: (dir: 'in' | 'out' | 'reset') => void) {
 export {
   getAppVersion,
   openExternal,
+  setLocale,
   getLibrary,
   clearLibrary,
   pruneMissingLibrary,

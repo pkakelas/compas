@@ -138,10 +138,10 @@ function PreviewGlyph({ preview, playing, n, s = 12 }) {
 /* The matching tooltip: "Pause" while playing, "Listen in headphones (monitor)"
    when previews route to the cue output, otherwise the caller's verb. Returns
    undefined when there's no preview affordance so the title attribute is dropped. */
-function previewTitle(preview, playing, verb = "Listen") {
+function previewTitle(preview, playing, verb = tr("common.listen")) {
   if (!preview) return undefined;
-  if (playing) return "Pause";
-  return preview.viaMonitor ? "Pre-listen in headphones" : verb;
+  if (playing) return tr("common.pause");
+  return preview.viaMonitor ? tr("common.preListenHeadphones") : verb;
 }
 
 /* Keyboard parity for a clickable non-<button> element (a song row, a toggle
@@ -158,8 +158,6 @@ function clickKeys(handler) {
   };
 }
 
-const GENRE_LABEL = { tango: "Tango", vals: "Vals", milonga: "Milonga", cortina: "Cortina" };
-
 /* The core danceable tango styles the player + tanda logic understand. Anything
    else (foxtrot, kizomba, chacarera, … or "unknown") is a free-form label: fully
    browsable and editable, but treated as non-tango. NB: "cortina" is NOT a
@@ -174,18 +172,15 @@ const STYLE_TYPES = [
   "tango", "vals", "milonga",
   "foxtrot", "kizomba", "chacarera", "zamba", "folklore", "salsa", "swing", "other",
 ];
-const STYLE_LABELS = {
-  mixed: "Mixed", tango: "Tango", vals: "Vals", milonga: "Milonga",
-  foxtrot: "Foxtrot", kizomba: "Kizomba", chacarera: "Chacarera", zamba: "Zamba",
-  folklore: "Folklore", salsa: "Salsa", swing: "Swing", other: "Other", unknown: "Unknown",
-  // Legacy label kept so any lingering genre='cortina' still renders nicely.
-  cortina: "Cortina",
-};
+/* Styles with a translated label (common.genre.<id>); custom values are shown
+   as typed. "cortina" is a legacy value kept so any lingering genre='cortina'
+   still renders nicely. */
+const LABELED_STYLES = STYLE_TYPES.concat(["unknown", "cortina"]);
 function isCoreStyle(g) { return CORE_STYLES.indexOf(g) !== -1; }
 /* Human label for any style value (known or custom). */
 function genreLabel(g) {
-  if (!g) return "Unknown";
-  return STYLE_LABELS[g] || (g[0].toUpperCase() + g.slice(1));
+  if (!g) return tr("common.genre.unknown");
+  return LABELED_STYLES.indexOf(g) !== -1 ? tr("common.genre." + g) : (g[0].toUpperCase() + g.slice(1));
 }
 /* The pill CSS class for a style: the four cores keep their colours; everything
    else shares a neutral "other"/"unknown" treatment. */
@@ -223,7 +218,7 @@ function Toast({ toast, onDismiss }) {
     <div className="tv-toast">
       <span className="ic"><I.check s={16} /></span>
       {toast.msg}
-      {toast.action && <button onClick={() => { toast.action(); onDismiss(); }}>Undo</button>}
+      {toast.action && <button onClick={() => { toast.action(); onDismiss(); }}>{tr("common.undo")}</button>}
     </div>
   );
 }
@@ -231,7 +226,7 @@ function Toast({ toast, onDismiss }) {
 /* A centered confirmation dialog for destructive actions (delete a tanda,
    remove a folder, delete a playlist). Reach for it via useConfirm() rather
    than rendering it directly. Enter confirms, Escape / backdrop click cancels. */
-function ConfirmModal({ title, message, confirmLabel = "Delete", cancelLabel = "Cancel", danger = true, onConfirm, onCancel }) {
+function ConfirmModal({ title, message, confirmLabel = tr("common.delete"), cancelLabel = tr("common.cancel"), danger = true, onConfirm, onCancel }) {
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") { e.preventDefault(); onCancel(); }
@@ -345,4 +340,4 @@ const useCollapseFoldersByDefault = () => useBoolPref("collapseFoldersByDefault"
 // years are offered in the library's filter dropdowns.
 const useCortinasInFilters = () => useBoolPref("cortinasInFilters");
 
-Object.assign(window, { I, Waveform, EQ, Marquee, PreviewGlyph, previewTitle, clickKeys, GENRE_LABEL, GenreTag, useToast, Toast, ConfirmModal, useConfirm, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, STYLE_LABELS, isCoreStyle, genreLabel, genreClass, cleanSongTitle, useSongNameOnly, useCollapseFoldersByDefault, useCortinasInFilters });
+Object.assign(window, { I, Waveform, EQ, Marquee, PreviewGlyph, previewTitle, clickKeys, GenreTag, useToast, Toast, ConfirmModal, useConfirm, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, isCoreStyle, genreLabel, genreClass, cleanSongTitle, useSongNameOnly, useCollapseFoldersByDefault, useCortinasInFilters });

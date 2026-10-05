@@ -1,11 +1,14 @@
 // tandas-view.jsx — the Tandas workspace: import → folder library → builder → manage
 const { useState, useEffect, useRef } = React;
 
+// Wraps the count of a "<b>{count}</b> songs" message (trx).
+const tvBold = (s) => <b>{s}</b>;
+
 function builderSummary(songs) {
   const m = tandaMeta({ songs });
   return (
     <div className="tv-dock-meta">
-      <b>{songs.length}</b> {songs.length === 1 ? "song" : "songs"}
+      {trx("tandas.songCountBold", { count: songs.length, b: tvBold })}
       {songs.length > 0 && <><span>·</span> <b>{m.total}</b><span>·</span><GenreTag genre={m.genre} small /></>}
     </div>
   );
@@ -37,7 +40,7 @@ function BuilderResizer({ width, min, max, onResize, onCommit }) {
     document.body.style.userSelect = "none";
   };
   return (
-    <div className="tv-resizer" onMouseDown={start} title="Drag to resize the builder">
+    <div className="tv-resizer" onMouseDown={start} title={tr("tandas.resizeHint")}>
       <span className="grip" />
     </div>
   );
@@ -71,13 +74,13 @@ function BuilderBench({ builder, api, width, preview }) {
     <div className="tv-dock" style={dockStyle}>
       <div className="tv-dock-head">
         <div className="tv-dock-title-row">
-          <label className={"tv-dock-namefield" + (unnamed ? " is-missing" : "")} title="Name this tanda">
+          <label className={"tv-dock-namefield" + (unnamed ? " is-missing" : "")} title={tr("tandas.nameHint")}>
             <I.pencil s={15} />
             <input className="tv-dock-name" value={builder.name} onChange={(e) => api.setName(e.target.value)}
-              placeholder={m.orq && m.orq !== "Empty tanda" ? m.orq : "Name this tanda…"} />
+              placeholder={m.orq && !m.empty ? m.orq : tr("tandas.namePlaceholder")} />
           </label>
         </div>
-        {unnamed && <div className="tv-name-warn" role="alert">Give this tanda a name before saving.</div>}
+        {unnamed && <div className="tv-name-warn" role="alert">{tr("tandas.nameWarning")}</div>}
         <TandaNameSuggest songs={songs} name={builder.name} onApply={api.setName} />
         {builderSummary(songs)}
         <TagField tags={api.tags} onChange={api.setTags} />
@@ -102,7 +105,7 @@ function BuilderBench({ builder, api, width, preview }) {
                 <div className="s">{s.orq}{s.singer ? " · " + s.singer : ""} · {s.year}</div>
               </div>
               <span className="du">{s.dur}</span>
-              <button className="rm" onClick={(e) => { e.stopPropagation(); api.removeAt(i); }} title="Remove"><I.x s={14} /></button>
+              <button className="rm" onClick={(e) => { e.stopPropagation(); api.removeAt(i); }} title={tr("tandas.removeSong")}><I.x s={14} /></button>
             </div>
             </React.Fragment>
           );
@@ -116,8 +119,8 @@ function BuilderBench({ builder, api, width, preview }) {
             <div key={"e" + i} className={"tv-slot-empty" + (isNext ? " next" : " ghost") + (isNext && dnd.gapOpen(songs.length) ? " is-target" : "")}>
               <span className="num">{i + 1}</span>
               {isNext
-                ? <span className="hint"><I.plus s={14} /> Drop a song here, or tap + to add</span>
-                : <span className="hint">Empty</span>}
+                ? <span className="hint"><I.plus s={14} /> {tr("tandas.dropHint")}</span>
+                : <span className="hint">{tr("tandas.emptySlot")}</span>}
             </div>
           );
         })}
@@ -125,11 +128,11 @@ function BuilderBench({ builder, api, width, preview }) {
 
       <div className="tv-dock-foot">
         <button className="tp-btn primary lg block" disabled={!songs.length || unnamed} onClick={api.save}
-          title={unnamed ? "Name this tanda before saving" : undefined}>
-          <I.check s={17} /> {api.editing ? "Update tanda" : "Save tanda"}
+          title={unnamed ? tr("tandas.nameBeforeSaving") : undefined}>
+          <I.check s={17} /> {api.editing ? tr("tandas.updateTanda") : tr("tandas.saveTanda")}
         </button>
         <button className="tv-clear" disabled={!songs.length && !api.editing} onClick={api.clear}>
-          {api.editing ? "Cancel edit" : "Clear builder"}
+          {api.editing ? tr("tandas.cancelEdit") : tr("tandas.clearBuilder")}
         </button>
       </div>
     </div>
@@ -157,19 +160,18 @@ function SuggestTandasTip({ suggestions, onDismiss, onBrowse }) {
   return (
     <div className="tp-modal-scrim" onMouseDown={onDismiss}>
       <div className="sotip" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
-        <button className="sotip-x" onClick={onDismiss} title="Dismiss"><I.x s={16} /></button>
+        <button className="sotip-x" onClick={onDismiss} title={tr("tandas.tipDismiss")}><I.x s={16} /></button>
         <div className="sotip-badge"><I.spark s={24} /></div>
-        <div className="sotip-title">Tandas from your library</div>
+        <div className="sotip-title">{tr("tandas.tipTitle")}</div>
         <div className="sotip-sub">
-          We cross-checked your songs against classic tandas and lined up {suggestions.length} you can
-          play right now — every track is one you already own.
+          {tr("tandas.tipBody", { count: suggestions.length })}
         </div>
         {orchestras.length > 0 && (
           <div className="sotip-chips">{orchestras.map((o) => <span key={o}>{o}</span>)}</div>
         )}
         <div className="sotip-actions">
-          <button className="tp-btn primary lg block" onClick={onBrowse}><I.spark s={15} /> Browse suggestions</button>
-          <span className="sotip-safe"><I.check s={13} /> Save the ones you like, dismiss the rest</span>
+          <button className="tp-btn primary lg block" onClick={onBrowse}><I.spark s={15} /> {tr("tandas.tipBrowse")}</button>
+          <span className="sotip-safe"><I.check s={13} /> {tr("tandas.tipSafe")}</span>
         </div>
       </div>
     </div>
@@ -238,7 +240,7 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
       songIds: builder.songs.map((s) => s.id),
       tags: builder.tags,
     });
-    flash(editing ? "Tanda updated" : "Tanda saved to your collection");
+    flash(editing ? tr("tandas.updated") : tr("tandas.savedToCollection"));
     clear();
     goManage();
   };
@@ -253,13 +255,13 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
   const playTanda = (t) => player.playTanda(t);
   const deleteTanda = (t) => {
     ask({
-      title: "Delete this tanda?",
-      message: `“${t.name || "Untitled tanda"}” will be removed from your collection.`,
-      confirmLabel: "Delete tanda",
+      title: tr("tandas.deleteTitle"),
+      message: tr("tandas.deleteMessage", { name: t.name || tr("tandas.untitled") }),
+      confirmLabel: tr("tandas.deleteTanda"),
       onConfirm: () => {
         const snapshot = tandas.slice();
         Store.deleteTanda(t.id);
-        flash("Tanda deleted", () => Store.setTandasLocal(snapshot));
+        flash(tr("tandas.deleted"), () => Store.setTandasLocal(snapshot));
       },
     });
   };
@@ -270,7 +272,7 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
     const orqTag = (t.tags || []).find((g) => g.cat === "orquesta");
     const name = t.name || suggestTandaName(t.songs, orqTag && orqTag.label) || (orqTag && orqTag.label) || null;
     Store.keepSuggestion({ ...t, name });
-    flash("Tanda saved to your collection");
+    flash(tr("tandas.savedToCollection"));
   };
   const dismissSuggestion = (t) => Store.dismissSuggestion(t.refId);
 
@@ -283,18 +285,18 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
   // whole workspace, so every tanda task reads as one place. Underline tabs
   // (not the heavy segmented pill) keep it reading as primary navigation.
   const sectabs = (
-    <div className="tv-sectabs" role="tablist" aria-label="Tandas">
+    <div className="tv-sectabs" role="tablist" aria-label={tr("tandas.sectionLabel")}>
       <button className={"tv-sectab" + (tab === "build" ? " on" : "")} role="tab" aria-selected={tab === "build"}
         onClick={() => setTab("build")}>
-        Build {builder.songs.length > 0 && <span className="ct">{builder.songs.length}</span>}<I.scissors s={15} />
+        {tr("tandas.tabBuild")} {builder.songs.length > 0 && <span className="ct">{builder.songs.length}</span>}<I.scissors s={15} />
       </button>
       <button className={"tv-sectab" + (tab === "mine" ? " on" : "")} role="tab" aria-selected={tab === "mine"}
         onClick={() => setTab("mine")}>
-        My tandas {tandas.length > 0 && <span className="ct">{tandas.length}</span>}
+        {tr("tandas.tabMine")} {tandas.length > 0 && <span className="ct">{tandas.length}</span>}
       </button>
       <button className={"tv-sectab" + (tab === "suggestions" ? " on" : "")} role="tab" aria-selected={tab === "suggestions"}
         onClick={() => setTab("suggestions")}>
-        Suggestions {sugg.length > 0 && <span className="ct">{sugg.length}</span>}
+        {tr("tandas.tabSuggestions")} {sugg.length > 0 && <span className="ct">{sugg.length}</span>}
       </button>
     </div>
   );
@@ -302,11 +304,12 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
   const subtitle = (
     <div className="tv-sub">
       {tab === "build" ? (
-        <><b>{totalSongs}</b> songs across <b>{totalFolders}</b> folders
-          {roots && roots.length > 1 && <> in <b>{roots.length}</b> libraries</>}</>
+        roots && roots.length > 1
+          ? trx("tandas.librarySummaryMulti", { songs: totalSongs, folders: totalFolders, libraries: roots.length, b: tvBold })
+          : trx("tandas.librarySummary", { songs: totalSongs, folders: totalFolders, b: tvBold })
       ) : tab === "mine"
-        ? "Tandas you've saved to your collection"
-        : "Built from songs already in your library — every track is one you own"}
+        ? tr("tandas.subtitleMine")
+        : tr("tandas.subtitleSuggestions")}
     </div>
   );
 
@@ -319,11 +322,11 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
       <div>{sectabs}{subtitle}</div>
       {tab !== "build" && (
         <div className="tv-head-r">
-          <div className="tv-viewtoggle" role="group" aria-label="Tanda layout">
+          <div className="tv-viewtoggle" role="group" aria-label={tr("tandas.layoutLabel")}>
             <button className={"tv-vt" + (tandaView === "grid" ? " on" : "")} onClick={() => setTandaView("grid")}
-              title="Grid view" aria-pressed={tandaView === "grid"}><I.grid s={15} /></button>
+              title={tr("tandas.gridView")} aria-pressed={tandaView === "grid"}><I.grid s={15} /></button>
             <button className={"tv-vt" + (tandaView === "list" ? " on" : "")} onClick={() => setTandaView("list")}
-              title="List view" aria-pressed={tandaView === "list"}><I.rows s={15} /></button>
+              title={tr("tandas.listView")} aria-pressed={tandaView === "list"}><I.rows s={15} /></button>
           </div>
         </div>
       )}

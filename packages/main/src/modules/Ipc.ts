@@ -15,6 +15,7 @@ import {commonAncestor, displayFolderPath, playlistSourceFolders} from '../servi
 import {clearAudioCache} from '../services/transcode.js';
 import {AnalysisManager, type AnalysisState} from '../services/loudness.js';
 import {LibraryWatcher} from '../services/watcher.js';
+import {setLocale, t} from '../i18n.js';
 import {writeSongTags} from '../services/tags.js';
 import {proposeLibrary, type EnrichInput} from '../services/enrich.js';
 import {suggestTandas} from '../services/suggest-tandas.js';
@@ -242,11 +243,11 @@ export class IpcModule implements AppModule {
         const playlist = opts?.kind === 'playlist';
         const dialogOpts: Electron.OpenDialogOptions = playlist
           ? {
-              title: 'Choose a playlist',
+              title: t('choosePlaylist'),
               properties: ['openFile'],
-              filters: [{name: 'Playlists', extensions: ['m3u8', 'm3u']}],
+              filters: [{name: t('filterPlaylists'), extensions: ['m3u8', 'm3u']}],
             }
-          : {title: 'Choose your music folder', properties: ['openDirectory']};
+          : {title: t('chooseMusicFolder'), properties: ['openDirectory']};
         const result = win
           ? await dialog.showOpenDialog(win, dialogOpts)
           : await dialog.showOpenDialog(dialogOpts);
@@ -348,6 +349,10 @@ export class IpcModule implements AppModule {
 
     // App version (from the packaged app's package.json) for the About card.
     ipcMain.handle('app:version', (): string => app.getVersion());
+
+    // The renderer owns the language choice; it reports it on launch and on
+    // every change so the native menu and file dialogs follow along.
+    ipcMain.handle('app:setLocale', (_event, locale: string): void => setLocale(String(locale)));
 
     // Open a vetted external link (the About footer's website / email) in the
     // user's default browser or mail client. Restricted to known targets so the
@@ -492,11 +497,11 @@ export class IpcModule implements AppModule {
       if (!playlist) return null;
       const win = BrowserWindow.fromWebContents(event.sender);
       const opts: Electron.SaveDialogOptions = {
-        title: 'Export playlist',
+        title: t('exportPlaylist'),
         defaultPath: exportFilename(playlist),
         filters: [
-          {name: 'M3U8 playlist (UTF-8)', extensions: ['m3u8']},
-          {name: 'M3U playlist', extensions: ['m3u']},
+          {name: t('filterM3u8'), extensions: ['m3u8']},
+          {name: t('filterM3u'), extensions: ['m3u']},
         ],
       };
       const result = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
@@ -524,11 +529,11 @@ export class IpcModule implements AppModule {
     ipcMain.handle('playlists:importPreview', async (event): Promise<ImportPreview | null> => {
       const win = BrowserWindow.fromWebContents(event.sender);
       const opts: Electron.OpenDialogOptions = {
-        title: 'Import playlist',
+        title: t('importPlaylist'),
         properties: ['openFile'],
         filters: [
-          {name: 'Playlists', extensions: ['m3u8', 'm3u']},
-          {name: 'All files', extensions: ['*']},
+          {name: t('filterPlaylists'), extensions: ['m3u8', 'm3u']},
+          {name: t('filterAllFiles'), extensions: ['*']},
         ],
       };
       const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);

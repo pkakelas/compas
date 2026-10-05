@@ -16,7 +16,7 @@ const { useState, useMemo, useEffect, useRef } = React;
 /* ---------- build a retype tree from the live library songs ---------- */
 function buildRetypeTree(songs) {
   const roots = new Map(); // root path -> node
-  const rootLabel = (r) => { const p = (r || "").split(/[\\/]/).filter(Boolean); return p[p.length - 1] || r || "Library"; };
+  const rootLabel = (r) => { const p = (r || "").split(/[\\/]/).filter(Boolean); return p[p.length - 1] || r || tr("importTree.libraryFallback"); };
   const ensureRoot = (r) => {
     if (!roots.has(r)) roots.set(r, { key: r + "::", name: rootLabel(r), path: "", count: 0, genres: new Set(), songs: [], childMap: new Map(), children: [] });
     return roots.get(r);
@@ -79,15 +79,15 @@ function TypePicker({ resolved, explicit, onPick, onClear }) {
       {resolved ? (
         <button className={"it-pickbtn tp-tag " + genreClass(resolved) + (explicit ? " explicit" : " inherited")}
           onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
-          title={explicit ? "Set on this folder — click to change" : "Inherited / guessed — click to set on this folder"}>
-          {genreLabel(resolved)}{!explicit ? <span className="it-inh">·inherited</span> : null}
+          title={explicit ? tr("importTree.pickerExplicitTitle") : tr("importTree.pickerInheritedTitle")}>
+          {genreLabel(resolved)}{!explicit ? <span className="it-inh">{tr("importTree.inheritedBadge")}</span> : null}
           <I.chev s={11} />
         </button>
       ) : (
         <button className="it-pickbtn it-unset"
           onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
-          title="Choose a style for this folder">
-          Set style <I.chev s={11} />
+          title={tr("importTree.pickerUnsetTitle")}>
+          {tr("importTree.setStyle")} <I.chev s={11} />
         </button>
       )}
       {open && (
@@ -100,11 +100,11 @@ function TypePicker({ resolved, explicit, onPick, onClear }) {
             ))}
           </div>
           <div className="it-pop-custom">
-            <input value={custom} placeholder="Custom style…" onChange={(e) => setCustom(e.target.value)}
+            <input value={custom} placeholder={tr("importTree.customStylePlaceholder")} onChange={(e) => setCustom(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && custom.trim()) pick(custom.trim().toLowerCase()); }} />
-            <button disabled={!custom.trim()} onClick={() => custom.trim() && pick(custom.trim().toLowerCase())}>Set</button>
+            <button disabled={!custom.trim()} onClick={() => custom.trim() && pick(custom.trim().toLowerCase())}>{tr("importTree.customStyleSet")}</button>
           </div>
-          {explicit && <button className="it-pop-clear" onClick={() => { onClear(); setOpen(false); }}>Clear (inherit)</button>}
+          {explicit && <button className="it-pop-clear" onClick={() => { onClear(); setOpen(false); }}>{tr("importTree.clearInherit")}</button>}
         </div>
       )}
     </div>
@@ -125,15 +125,15 @@ function TreeRow({ node, depth, openSet, toggle, resolvedMap, assignments, onPic
           <I.chev s={12} />
         </button>
         <span className="it-fic">{isOpen && hasKids ? <I.folderOpen s={15} /> : <I.folder s={15} />}</span>
-        <span className="it-name" title={node.name}>{node.name || "(root)"}</span>
+        <span className="it-name" title={node.name}>{node.name || tr("importTree.rootName")}</span>
         <span className="it-count">{node.count}</span>
         {showCortina && (
           <button className={"it-cortbtn" + (cr.resolved ? " on" : "")}
             onClick={(e) => { e.stopPropagation(); onToggleCortina(node.key, !cr.resolved); }}
             title={cr.resolved
-              ? "These are cortinas — click to unflag" + (cr.explicit ? "" : " (inherited/guessed)")
-              : "Flag this folder's songs as cortinas"}>
-            <I.curtain s={13} /> Cortinas
+              ? (cr.explicit ? tr("importTree.cortinaUnflagTitle") : tr("importTree.cortinaUnflagInheritedTitle"))
+              : tr("importTree.cortinaFlagTitle")}>
+            <I.curtain s={13} /> {tr("importTree.cortinas")}
           </button>
         )}
         <TypePicker resolved={r.resolved} explicit={!!assignments[node.key]}
@@ -255,27 +255,26 @@ function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
   const isImport = mode === "import";
   return (
     <div className="so-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}>
-      <div className="so-modal it-modal" role="dialog" aria-modal="true" aria-label="Set folder types">
+      <div className="so-modal it-modal" role="dialog" aria-modal="true" aria-label={tr("importTree.dialogLabel")}>
         <header className="so-head">
           <div className="so-head-l">
             <span className="so-head-ic"><I.folderOpen s={17} /></span>
             <div>
-              <div className="so-head-title">{isImport ? "Import — set folder types (optional)" : "Set folder genres"}</div>
+              <div className="so-head-title">{isImport ? tr("importTree.importHeading") : tr("importTree.retypeHeading")}</div>
               <div className="so-head-sub">{isImport
-                ? "Orchestra folders with tangos, vals and milongas together can stay Mixed — set a style only where your library is sorted by type."
-                : "Pick a style per folder. It applies to every folder below — override any subfolder."}</div>
+                ? tr("importTree.importSub")
+                : tr("importTree.retypeSub")}</div>
             </div>
           </div>
-          <button className="so-x" onClick={onCancel} disabled={busy} title="Close"><I.x s={16} /></button>
+          <button className="so-x" onClick={onCancel} disabled={busy} title={tr("importTree.close")}><I.x s={16} /></button>
         </header>
 
         <div className="so-body">
           <div className="it-hint">
             <span className="it-hint-ic"><I.folderOpen s={15} /></span>
             <div>{isImport
-              ? <>Set the genre for each folder so your library is easy to search later. Use <b>Set style</b> on any folder that holds a single genre — e.g. a <b>Vals</b> or <b>Milonga</b> folder — and it applies to everything inside it. Any folder you leave unset stays <b>Mixed</b>: its songs take their style from their own genre tag where they have one (set <b>Mixed</b> yourself to ignore the tags). Toggle <b>Cortina</b> to mark a folder of floor-clearers (kept separate from genre).</>
-              : <>Pick a style for each folder using the <b>Set style</b> button on the right, or toggle <b>Cortina</b> to mark a folder of floor-clearers.
-                Both apply to every folder inside — click a subfolder to override.</>}</div>
+              ? trx("importTree.importHint", { b: (s) => <b>{s}</b> })
+              : trx("importTree.retypeHint", { b: (s) => <b>{s}</b> })}</div>
           </div>
           <div className="so-scroll it-scroll">
             {(roots || []).map((r) => (
@@ -290,15 +289,15 @@ function ImportTreeModal({ mode, roots, onCancel, onConfirm }) {
           <div className="so-foot-note">
             {isImport
               ? (explicitFolders > 0
-                  ? <><I.check s={13} /> {explicitFolders} folder{explicitFolders === 1 ? "" : "s"} with an explicit style — the rest go by each song’s genre tag, or import as Mixed.</>
-                  : <><I.check s={13} /> Songs go by their genre tag, or import as Mixed — set styles only if you want to.</>)
-              : <><I.check s={13} /> Saved in Compás only — your files aren’t modified.</>}
+                  ? <><I.check s={13} /> {tr("importTree.footExplicitFolders", { count: explicitFolders })}</>
+                  : <><I.check s={13} /> {tr("importTree.footNoExplicit")}</>)
+              : <><I.check s={13} /> {tr("importTree.footRetype")}</>}
           </div>
           <div className="so-foot-actions">
-            <button className="tp-btn" onClick={onCancel} disabled={busy}>Cancel</button>
+            <button className="tp-btn" onClick={onCancel} disabled={busy}>{tr("common.cancel")}</button>
             <button className="tp-btn primary" onClick={confirm} disabled={busy || (!isImport && changeCount === 0)}>
-              {busy ? (isImport ? "Importing…" : "Applying…")
-                    : isImport ? "Import" : `Apply ${changeCount} change${changeCount === 1 ? "" : "s"}`}
+              {busy ? (isImport ? tr("importTree.importing") : tr("importTree.applying"))
+                    : isImport ? tr("importTree.import") : tr("importTree.applyChanges", { count: changeCount })}
             </button>
           </div>
         </footer>
@@ -356,7 +355,7 @@ function useFolderImport(flash) {
     setScanning(true);
     let node;
     try { node = await Store.previewImport(typeof source === "string" ? source : undefined); }
-    catch (e) { setScanning(false); say("Import failed. Please try again."); return; }
+    catch (e) { setScanning(false); say(tr("importTree.importFailed")); return; }
     setScanning(false);
     if (!node) return;                                   // cancelled
     if (node.playlist && !node.count) {
@@ -368,7 +367,7 @@ function useFolderImport(flash) {
       continueWithPlaylist(node.playlist);
       return;
     }
-    if (!node.count) { say("No audio files were found in that folder."); Store.cancelImport(); return; }
+    if (!node.count) { say(tr("importTree.noAudioFound")); Store.cancelImport(); return; }
     if (node.playlist) {
       // Importing a playlist: skip the folder-types step. Its folders come in
       // with the same defaults the review would show (each folder's own style
@@ -380,7 +379,7 @@ function useFolderImport(flash) {
       try { lib = await Store.commitImport(types, cortinas); } catch (_e) { lib = null; }
       setScanning(false);
       if (lib) continueWithPlaylist(node.playlist);
-      else say("Import failed. Please try again.");
+      else say(tr("importTree.importFailed"));
       return;
     }
     setTree(node);
@@ -395,8 +394,8 @@ function useFolderImport(flash) {
     if (lib && !playlist) {
       const added = (lib.totalSongs || 0) - before;
       say(added > 0
-        ? `Added ${added} song${added === 1 ? "" : "s"} from a new folder`
-        : "That folder is already in your library");
+        ? tr("importTree.addedSongs", { count: added })
+        : tr("importTree.alreadyInLibrary"));
     }
     if (lib && playlist) continueWithPlaylist(playlist);
   };

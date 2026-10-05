@@ -118,6 +118,7 @@ to update when a newer tag exists.
 │     ├─ styles.css        # design system styles
 │     ├─ vite.config.js    # classic JSX runtime
 │     ├─ entries/          # globals (React→window) + main entry module
+│     ├─ locales/          # translations: <locale>/<namespace>.json
 │     └─ js/               # the design source (*.jsx), bundled as-is
 └─ screenshots/            # reference renders
 ```
@@ -135,6 +136,17 @@ to update when a newer tag exists.
 - In dev the main process loads the Vite dev-server URL; in production it loads
   the built `dist/index.html` (resolved via the `@app/renderer` package
   `exports`).
+
+### Languages
+
+The UI is translated into English (default), Chinese, Hindi, Spanish, French,
+Greek, Italian, German, Turkish, Russian and Japanese; the DJ picks one in **Settings ▸ Appearance ▸ Language**. Strings live in
+`packages/renderer/locales/<locale>/<namespace>.json` and are read through the
+global `tr()` / `trx()` helpers (`entries/i18n.js`). The few native strings (View
+menu, file dialogs) are in `packages/main/src/i18n.ts`. See
+[`packages/renderer/locales/README.md`](packages/renderer/locales/README.md) for
+the conventions and how to add a language; `pnpm run i18n:check` validates that
+every locale matches English and every key used in code exists.
 
 ### Using native APIs later
 

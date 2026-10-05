@@ -16,16 +16,16 @@ function SmartOrganizeTip({ onTry, onDismiss }) {
   return (
     <div className="tp-modal-scrim" onMouseDown={onDismiss}>
       <div className="sotip" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
-        <button className="sotip-x" onClick={onDismiss} title="Dismiss"><I.x s={16} /></button>
+        <button className="sotip-x" onClick={onDismiss} title={tr("library.tipDismiss")}><I.x s={16} /></button>
         <div className="sotip-badge"><I.spark s={24} /></div>
-        <div className="sotip-title">Tidy up your library</div>
-        <div className="sotip-sub">Smart Organize fills in what’s missing, matched against a tango catalogue:</div>
+        <div className="sotip-title">{tr("library.tipTitle")}</div>
+        <div className="sotip-sub">{tr("library.tipSub")}</div>
         <div className="sotip-chips">
-          <span>Orchestras</span><span>Singers</span><span>Years</span><span>Styles</span>
+          <span>{tr("library.tipChipOrchestras")}</span><span>{tr("library.tipChipSingers")}</span><span>{tr("library.tipChipYears")}</span><span>{tr("library.tipChipStyles")}</span>
         </div>
         <div className="sotip-actions">
-          <button className="tp-btn primary lg block" onClick={onTry}><I.spark s={15} /> Try it</button>
-          <span className="sotip-safe"><I.check s={13} /> You approve every change first</span>
+          <button className="tp-btn primary lg block" onClick={onTry}><I.spark s={15} /> {tr("library.tipTry")}</button>
+          <span className="sotip-safe"><I.check s={13} /> {tr("library.tipSafe")}</span>
         </div>
       </div>
     </div>
@@ -50,31 +50,32 @@ function LibraryView() {
     if (cortinaOn.length) await Store.setSongCortina(cortinaOn, true);
     if (cortinaOff.length) await Store.setSongCortina(cortinaOff, false);
     const n = updates.length + cortinaOn.length + cortinaOff.length;
-    if (n) flash(`Updated ${n} song${n === 1 ? "" : "s"}`);
+    if (n) flash(tr("library.updatedSongs", { count: n }));
   };
 
   return (
     <div className="tv">
       <div className="tv-head">
         <div>
-          <div className="tv-title">Library</div>
+          <div className="tv-title">{tr("library.title")}</div>
           {imported && (
             <div className="tv-sub">
-              <b>{totalSongs}</b> songs across <b>{totalFolders}</b> folders
-              {roots && roots.length > 1 && <> in <b>{roots.length}</b> libraries</>}
+              {roots && roots.length > 1
+                ? trx("library.summaryLibraries", { songs: totalSongs, folders: totalFolders, libraries: roots.length, b: (s) => <b>{s}</b> })
+                : trx("library.summary", { songs: totalSongs, folders: totalFolders, b: (s) => <b>{s}</b> })}
             </div>
           )}
         </div>
         {imported && (
           <div className="tv-head-r">
-            <button className="tp-btn" onClick={openRetype} title="Set the genre (and cortinas) for each folder">
-              <I.folder s={15} /> Set folder genres
+            <button className="tp-btn" onClick={openRetype} title={tr("library.setFolderGenresTitle")}>
+              <I.folder s={15} /> {tr("library.setFolderGenres")}
             </button>
-            <button className="tp-btn accent" onClick={() => setOrganizing(true)} title="Clean up orchestras, singers, years & styles — review before anything changes">
-              <I.spark s={15} /> Smart Organize
+            <button className="tp-btn accent" onClick={() => setOrganizing(true)} title={tr("library.smartOrganizeTitle")}>
+              <I.spark s={15} /> {tr("library.smartOrganize")}
             </button>
-            <button className="tp-btn" onClick={imp.begin} disabled={imp.scanning} title="Import another folder into your library">
-              <I.upload s={15} /> {imp.scanning ? "Scanning…" : "Add folder"}
+            <button className="tp-btn" onClick={imp.begin} disabled={imp.scanning} title={tr("library.addFolderTitle")}>
+              <I.upload s={15} /> {imp.scanning ? tr("library.scanning") : tr("library.addFolder")}
             </button>
           </div>
         )}
@@ -102,7 +103,7 @@ function LibraryView() {
       {organizing && (
         <SmartOrganizeModal
           onClose={() => setOrganizing(false)}
-          onApplied={(n) => flash(`Updated ${n} song${n === 1 ? "" : "s"} — saved in Compás`)}
+          onApplied={(n) => flash(tr("library.updatedSongsSaved", { count: n }))}
         />
       )}
 
