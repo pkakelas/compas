@@ -35,6 +35,8 @@ function playlistMeta(items) {
 function itemTitle(it) {
   return it.type === "cortina" ? it.data.title : (it.data.name || tandaMeta(it.data).orq);
 }
+// Wraps the count of a "<b>{count}</b> tandas" message (trx).
+const plBold = (s) => <b>{s}</b>;
 
 /* ============================ ADD LIBRARY (left) ============================ */
 function PlAddCortinaRow({ c, onAdd, makeDrag, draggingId }) {
@@ -43,9 +45,9 @@ function PlAddCortinaRow({ c, onAdd, makeDrag, draggingId }) {
       <span className="tp-cortrow-ic"><I.curtain s={15} /></span>
       <div className="tp-flex1">
         <div className="tp-cortrow-title">{c.title}</div>
-        <div className="tp-cortrow-meta">{c.orq || "Cortina"}<span className="tp-dotsep">·</span><span className="tp-mono">{c.dur}</span></div>
+        <div className="tp-cortrow-meta">{c.orq || tr("playlists.cortina")}<span className="tp-dotsep">·</span><span className="tp-mono">{c.dur}</span></div>
       </div>
-      <button className="tp-addbtn sm" onClick={onAdd} title="Add to playlist"><I.plus s={15} /></button>
+      <button className="tp-addbtn sm" onClick={onAdd} title={tr("playlists.addToPlaylist")}><I.plus s={15} /></button>
     </div>
   );
 }
@@ -60,7 +62,7 @@ function PlLibrary({ tandas, cortinas, onAdd, makeDrag, draggingId, preview }) {
     const m = tandaMeta(t);
     const hay = ((t.name || "") + " " + m.orq + " " + m.singer + " " + t.songs.map((s) => s.title).join(" ")).toLowerCase();
     return q.trim() === "" || hay.includes(q.toLowerCase());
-  }), [tandas, q]);
+  }), [tandas, q, I18N.locale]);
 
   const fc = useMemo(() => cortinas.filter((c) =>
     q.trim() === "" || ((c.title || "") + " " + (c.orq || "") + " " + (c.folder || "")).toLowerCase().includes(q.toLowerCase())
@@ -69,11 +71,11 @@ function PlLibrary({ tandas, cortinas, onAdd, makeDrag, draggingId, preview }) {
   return (
     <div className="tp-lib">
       <div className="tp-lib-head">
-        <div className="tv-title">Add items</div>
+        <div className="tv-title">{tr("playlists.addItems")}</div>
         <div className="tp-tabs">
-          <button className={"tp-tab" + (tab === "tandas" ? " is-on" : "")} onClick={() => setTab("tandas")}>Tandas</button>
-          <button className={"tp-tab" + (tab === "cortinas" ? " is-on" : "")} onClick={() => setTab("cortinas")}>Cortinas</button>
-          <button className={"tp-tab" + (tab === "library" ? " is-on" : "")} onClick={() => setTab("library")}>Songs</button>
+          <button className={"tp-tab" + (tab === "tandas" ? " is-on" : "")} onClick={() => setTab("tandas")}>{tr("playlists.tabTandas")}</button>
+          <button className={"tp-tab" + (tab === "cortinas" ? " is-on" : "")} onClick={() => setTab("cortinas")}>{tr("playlists.tabCortinas")}</button>
+          <button className={"tp-tab" + (tab === "library" ? " is-on" : "")} onClick={() => setTab("library")}>{tr("playlists.tabSongs")}</button>
         </div>
       </div>
 
@@ -88,22 +90,22 @@ function PlLibrary({ tandas, cortinas, onAdd, makeDrag, draggingId, preview }) {
             <label className="tp-search">
               <I.search s={16} />
               <input value={q} onChange={(e) => setQ(e.target.value)}
-                placeholder={tab === "tandas" ? "Search tandas…" : "Search cortinas…"} />
+                placeholder={tab === "tandas" ? tr("playlists.searchTandas") : tr("playlists.searchCortinas")} />
             </label>
           </div>
 
           <div className="tp-lib-scroll">
             {tab === "tandas"
               ? ft.map((t) => <TandaLibCard key={t.id} t={t} preview={preview}
-                  onAdd={() => onAdd("tanda", t)} addTitle="Add to playlist"
+                  onAdd={() => onAdd("tanda", t)} addTitle={tr("playlists.addToPlaylist")}
                   drag={makeDrag(t, "tanda")} dragging={draggingId === "tanda:" + t.id} />)
               : fc.map((c) => <PlAddCortinaRow key={c.id} c={c} onAdd={() => onAdd("cortina", c)}
                   makeDrag={makeDrag} draggingId={draggingId} />)}
             {tab === "tandas" && ft.length === 0 && (
-              <div className="tp-empty">{tandas.length ? "No tandas match." : "No tandas yet — build some in the Tandas view."}</div>
+              <div className="tp-empty">{tandas.length ? tr("playlists.noTandasMatch") : tr("playlists.noTandasYet")}</div>
             )}
             {tab === "cortinas" && fc.length === 0 && (
-              <div className="tp-empty">{cortinas.length ? "No cortinas match." : "No cortinas found — put short clips in a folder named “Cortinas”."}</div>
+              <div className="tp-empty">{cortinas.length ? tr("playlists.noCortinasMatch") : tr("playlists.noCortinasFound")}</div>
             )}
           </div>
         </React.Fragment>
@@ -141,7 +143,7 @@ function PlDockResizer({ width, min, max, onResize, onCommit }) {
     document.body.style.userSelect = "none";
   };
   return (
-    <div className="tv-resizer" onMouseDown={start} title="Drag to resize the playlist">
+    <div className="tv-resizer" onMouseDown={start} title={tr("playlists.resizeHint")}>
       <span className="grip" />
     </div>
   );
@@ -156,7 +158,7 @@ function PlEditorSong({ n, title, dur, playing, onPlay, preview }) {
   return (
     <div className={"tp-songrow is-clickable" + (playing ? " is-now" : "")}
       onClick={(e) => { e.stopPropagation(); onPlay(); }} {...clickKeys(onPlay)}
-      title={previewTitle(preview, playing, "Audition this song")}>
+      title={previewTitle(preview, playing, tr("playlists.auditionSong"))}>
       <span className="n"><PreviewGlyph preview={preview} playing={playing} n={n} s={12} /></span>
       <span className="tt"><div className="tp-song-title">{title}</div></span>
       <span className="tp-song-dur">{dur}</span>
@@ -172,12 +174,12 @@ function PlEditorTanda({ it, ix, slot, onRemove, preview }) {
     <div className={"tp-tandacard pl-tandacard tp-qdrag" + (slot.dragging ? " is-dragging" : "")}
       {...slot.handlers}>
       <div className="tp-tanda-head">
-        <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
+        <span className="tp-grip" title={tr("playlists.dragToReorder")}><I.grip s={15} /></span>
         <span className="ix">{String(ix).padStart(2, "0")}</span>
         <span className="tp-now-orq pl-tname">{t.name || m.orq}</span>
         <GenreTag genre={m.genre} small />
         {m.year && <span className="tp-tag is-plain sm" title={m.era}>{m.year}</span>}
-        <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove from playlist"><I.x s={14} /></button>
+        <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title={tr("playlists.removeFromPlaylist")}><I.x s={14} /></button>
       </div>
       {t.songs.map((s, i) => {
         const playing = preview && preview.previewId === s.id && preview.playing;
@@ -186,8 +188,8 @@ function PlEditorTanda({ it, ix, slot, onRemove, preview }) {
       })}
       {t.inCollection === false && (
         <button className="pl-keep" onClick={(e) => { e.stopPropagation(); Store.keepTanda(t.id); }}
-          title="Add this tanda to My tandas so you can reuse it in other playlists">
-          <I.plus s={13} /> Save to My tandas
+          title={tr("playlists.keepTandaHint")}>
+          <I.plus s={13} /> {tr("playlists.keepTanda")}
         </button>
       )}
     </div>
@@ -200,16 +202,16 @@ function PlEditorCortina({ it, slot, onRemove, preview }) {
   return (
     <div className={"tp-cortina tp-qrow tp-qdrag" + (slot.dragging ? " is-dragging" : "") + (playing ? " is-now" : "")}
       {...slot.handlers}
-      onClick={() => preview && preview.toggle(c)} title={previewTitle(preview, playing, "Audition this cortina")}>
+      onClick={() => preview && preview.toggle(c)} title={previewTitle(preview, playing, tr("playlists.auditionCortina"))}>
       <div className="curtain"></div>
-      <span className="tp-grip dark" title="Drag to reorder"><I.grip s={15} /></span>
+      <span className="tp-grip dark" title={tr("playlists.dragToReorder")}><I.grip s={15} /></span>
       <span className="tp-cort-glyph">{playing ? <EQ /> : (preview && preview.viaMonitor ? <span className="tp-cuebadge"><I.headphones s={14} /></span> : <I.curtain s={17} />)}</span>
       <div className="tp-flex1">
-        <div className="tp-cortina-label">{playing ? "Cortina · playing" : "Cortina"}</div>
-        <div className="tp-cortina-sub">“{c.title}” · {c.orq || "Cortina"}</div>
+        <div className="tp-cortina-label">{playing ? tr("playlists.cortinaPlaying") : tr("playlists.cortina")}</div>
+        <div className="tp-cortina-sub">{tr("playlists.cortinaSub", { title: c.title, artist: c.orq || tr("playlists.cortina") })}</div>
       </div>
       <div className="tp-fade"><I.clock s={13} /> {c.dur}</div>
-      <button className="tp-qx dark" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove from playlist"><I.x s={14} /></button>
+      <button className="tp-qx dark" onClick={(e) => { e.stopPropagation(); onRemove(); }} title={tr("playlists.removeFromPlaylist")}><I.x s={14} /></button>
     </div>
   );
 }
@@ -223,15 +225,15 @@ function PlEditorSongItem({ it, slot, onRemove, preview }) {
   return (
     <div className={"tp-songcard tp-qrow tp-qdrag" + (slot.dragging ? " is-dragging" : "") + (playing ? " is-now" : "")}
       {...slot.handlers}
-      onClick={() => preview && preview.toggle(s)} title={previewTitle(preview, playing, "Audition this song")}>
-      <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
+      onClick={() => preview && preview.toggle(s)} title={previewTitle(preview, playing, tr("playlists.auditionSong"))}>
+      <span className="tp-grip" title={tr("playlists.dragToReorder")}><I.grip s={15} /></span>
       <span className="tp-songcard-glyph">{playing ? <EQ /> : (preview && preview.viaMonitor ? <span className="tp-cuebadge"><I.headphones s={14} /></span> : <I.note s={15} />)}</span>
       <div className="tp-flex1">
         <div className="tp-songcard-title">{songNameOnly ? cleanSongTitle(s) : s.title}</div>
-        <div className="tp-songcard-sub">{s.orq || "Unknown"}{s.singer ? " · " + s.singer : ""}</div>
+        <div className="tp-songcard-sub">{s.orq || tr("playlists.unknownArtist")}{s.singer ? " · " + s.singer : ""}</div>
       </div>
       <div className="tp-fade"><I.clock s={13} /> {s.dur || "—"}</div>
-      <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove from playlist"><I.x s={14} /></button>
+      <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title={tr("playlists.removeFromPlaylist")}><I.x s={14} /></button>
     </div>
   );
 }
@@ -249,34 +251,34 @@ function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, on
     <div className="tp-queue pl-dock" style={width ? { flex: `0 0 ${width}px`, width } : undefined}>
       <div className="pl-dhead">
         <div className="pl-dhead-top">
-          <button className="tp-btn pill sm pl-back" onClick={onBack} title="Back to playlists">
-            <I.chev s={15} /> <span>Playlists</span>
+          <button className="tp-btn pill sm pl-back" onClick={onBack} title={tr("playlists.backToPlaylists")}>
+            <I.chev s={15} /> <span>{tr("playlists.title")}</span>
           </button>
           <div className="pl-dhead-r">
             <span className={"pl-saved is-" + status}>
-              {status === "saving" ? "Saving…" : status === "saved" ? <><I.check s={13} /> Saved</> : "Not saved yet"}
+              {status === "saving" ? tr("playlists.saving") : status === "saved" ? <><I.check s={13} /> {tr("playlists.saved")}</> : tr("playlists.notSavedYet")}
             </span>
             {items.length > 0 && status !== "idle" && (
               <button className="tp-btn ghost sm pl-export" onClick={onExport}
-                title="Export this playlist to use it in VLC, Apple Music or a DJ app">
-                <I.download s={14} /> Export
+                title={tr("playlists.exportHint")}>
+                <I.download s={14} /> {tr("playlists.export")}
               </button>
             )}
           </div>
         </div>
-        <input className="pl-name-input" value={open.name} placeholder="Name this playlist…"
+        <input className="pl-name-input" value={open.name} placeholder={tr("playlists.namePlaceholder")}
           onChange={(e) => api.setName(e.target.value)} onBlur={api.flushName} />
         <div className="tv-dock-meta">
-          <b>{meta.tandas}</b> {meta.tandas === 1 ? "tanda" : "tandas"}
-          {meta.cortinas > 0 && <><span>·</span> <b>{meta.cortinas}</b> {meta.cortinas === 1 ? "cortina" : "cortinas"}</>}
-          {meta.loose > 0 && <><span>·</span> <b>{meta.loose}</b> {meta.loose === 1 ? "song" : "songs"}</>}
+          {trx("playlists.tandaCountBold", { count: meta.tandas, b: plBold })}
+          {meta.cortinas > 0 && <><span>·</span> {trx("playlists.cortinaCountBold", { count: meta.cortinas, b: plBold })}</>}
+          {meta.loose > 0 && <><span>·</span> {trx("playlists.songCountBold", { count: meta.loose, b: plBold })}</>}
           {items.length > 0 && <><span>·</span> <b className="tp-mono">{meta.total}</b></>}
         </div>
         <div className="pl-actions">
-          <button className="tp-btn primary lg grow" onClick={onPlayAll} disabled={!items.length} title="Play this set">
-            <I.play s={15} /> Play all
+          <button className="tp-btn primary lg grow" onClick={onPlayAll} disabled={!items.length} title={tr("playlists.playSetHint")}>
+            <I.play s={15} /> {tr("playlists.playAll")}
           </button>
-          <button className="pl-del" onClick={onDelete} title="Delete playlist"><I.trash s={15} /></button>
+          <button className="pl-del" onClick={onDelete} title={tr("playlists.deletePlaylist")}><I.trash s={15} /></button>
         </div>
       </div>
 
@@ -285,8 +287,8 @@ function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, on
         {items.length === 0 && (
           <div className="pl-dock-empty">
             <div className="ic"><I.note s={24} /></div>
-            <h3>Empty playlist</h3>
-            <p>Add tandas, cortinas &amp; songs from the left — tap +, or drag one in. Drag rows to reorder, click any song to audition.</p>
+            <h3>{tr("playlists.emptyPlaylist")}</h3>
+            <p>{tr("playlists.emptyHint")}</p>
           </div>
         )}
         {items.map((it, i) => {
@@ -310,7 +312,7 @@ function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, on
         })}
         {items.length > 0 && <DropGap open={dnd.gapOpen(items.length)} />}
         {items.length > 0 && (
-          <div className="tp-q-end">End of playlist — drag more here, or add from the left</div>
+          <div className="tp-q-end">{tr("playlists.endOfPlaylist")}</div>
         )}
       </div>
     </div>
@@ -347,15 +349,19 @@ function PlImportModal({ preview, onConfirm, onCancel }) {
     <div className="tp-modal-scrim" onMouseDown={onCancel}>
       <div className="tp-modal pl-imp" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
         <div className="tp-modal-icon accent"><I.upload s={20} /></div>
-        <div className="tp-modal-title">Import playlist</div>
+        <div className="tp-modal-title">{tr("playlists.importTitle")}</div>
         <div className="tp-modal-msg">
           {nothing
-            ? "None of these songs are in your library yet. Import the folder that holds them first, then try again."
-            : <><b>{tandas.length}</b> {tandas.length === 1 ? "tanda" : "tandas"}
-                {cortinas > 0 && <> and <b>{cortinas}</b> {cortinas === 1 ? "cortina" : "cortinas"}</>}</>}
+            ? tr("playlists.importNothing")
+            : cortinas > 0
+              ? trx("playlists.importSummaryBoth", {
+                  tandas: trx("playlists.tandaCountBold", { count: tandas.length, b: plBold }),
+                  cortinas: trx("playlists.cortinaCountBold", { count: cortinas, b: plBold }),
+                })
+              : trx("playlists.tandaCountBold", { count: tandas.length, b: plBold })}
         </div>
         {!nothing && (
-          <input className="pl-name-input pl-imp-name" value={name} placeholder="Name this playlist…"
+          <input className="pl-name-input pl-imp-name" value={name} placeholder={tr("playlists.namePlaceholder")}
             onChange={(e) => setName(e.target.value)} autoFocus />
         )}
         {!nothing && (
@@ -364,15 +370,15 @@ function PlImportModal({ preview, onConfirm, onCancel }) {
               <div className="pl-imp-row" key={i}>
                 <span className="pl-imp-n">{++tIx}</span>
                 <span className="pl-imp-main">
-                  <span className="pl-imp-title">{it.tanda.name || "Tanda " + tIx}</span>
+                  <span className="pl-imp-title">{it.tanda.name || tr("playlists.importTandaFallback", { n: tIx })}</span>
                   <span className="pl-imp-songs">
                     {it.tanda.songs.map((s) => s.title).join(" · ")}
                   </span>
                   {(it.tanda.existingTandaId || it.tanda.missing.length > 0) && (
                     <span className="pl-imp-sub">
-                      {it.tanda.existingTandaId && "Already in My tandas"}
+                      {it.tanda.existingTandaId && tr("playlists.importAlreadySaved")}
                       {it.tanda.existingTandaId && it.tanda.missing.length > 0 && " · "}
-                      {it.tanda.missing.length > 0 && <span className="pl-imp-miss">{it.tanda.missing.length} not found</span>}
+                      {it.tanda.missing.length > 0 && <span className="pl-imp-miss">{tr("playlists.importNotFound", { count: it.tanda.missing.length })}</span>}
                     </span>
                   )}
                 </span>
@@ -381,22 +387,22 @@ function PlImportModal({ preview, onConfirm, onCancel }) {
             ) : (
               <div className="pl-imp-row is-cortina" key={i}>
                 <span className="pl-imp-n"><I.curtain s={12} /></span>
-                <span className="pl-imp-main"><span className="pl-imp-title">{it.song.title}</span><span className="pl-imp-sub">cortina</span></span>
+                <span className="pl-imp-main"><span className="pl-imp-title">{it.song.title}</span><span className="pl-imp-sub">{tr("playlists.importRowCortina")}</span></span>
               </div>
             ))}
           </div>
         )}
         {preview.missing.length > 0 && (
           <div className="tp-modal-note pl-imp-note">
-            <strong>{preview.missing.length} {preview.missing.length === 1 ? "song isn't" : "songs aren't"} in your library</strong>
+            <strong>{tr("playlists.importMissing", { count: preview.missing.length })}</strong>
             {preview.missing.slice(0, 6).map((m, i) => <span key={i} className="pl-imp-missrow">{m}</span>)}
-            {preview.missing.length > 6 && <span className="pl-imp-missrow">…and {preview.missing.length - 6} more</span>}
+            {preview.missing.length > 6 && <span className="pl-imp-missrow">{tr("playlists.importMoreMissing", { count: preview.missing.length - 6 })}</span>}
           </div>
         )}
         <div className="tp-modal-actions">
-          <button className="tp-modal-cancel" onClick={onCancel}>Cancel</button>
+          <button className="tp-modal-cancel" onClick={onCancel}>{tr("common.cancel")}</button>
           <button className="tp-modal-confirm accent" onClick={confirm} disabled={nothing || busy}>
-            <I.check s={14} /> {busy ? "Importing…" : "Import"}
+            <I.check s={14} /> {busy ? tr("playlists.importing") : tr("playlists.importConfirm")}
           </button>
         </div>
       </div>
@@ -409,14 +415,14 @@ function PlaylistCard({ pl, onOpen, onDelete, onPlay, onExport }) {
   const preview = pl.items.slice(0, 6);
   const songNameOnly = useSongNameOnly();
   return (
-    <div className="tv-tcard pl-card" onClick={() => onOpen(pl)} title="Open playlist">
+    <div className="tv-tcard pl-card" onClick={() => onOpen(pl)} title={tr("playlists.openPlaylist")}>
       <div className="tv-tcard-top">
         <div className="tv-tcard-orq">
-          <div className="o">{pl.name || "Untitled playlist"}</div>
+          <div className="o">{pl.name || tr("playlists.untitled")}</div>
           <div className="sub">
-            {meta.tandas} {meta.tandas === 1 ? "tanda" : "tandas"}
-            {meta.cortinas > 0 ? ` · ${meta.cortinas} ${meta.cortinas === 1 ? "cortina" : "cortinas"}` : ""}
-            {meta.loose > 0 ? ` · ${meta.loose} ${meta.loose === 1 ? "song" : "songs"}` : ""}
+            {tr("playlists.tandaCount", { count: meta.tandas })}
+            {meta.cortinas > 0 ? " · " + tr("playlists.cortinaCount", { count: meta.cortinas }) : ""}
+            {meta.loose > 0 ? " · " + tr("playlists.songCount", { count: meta.loose }) : ""}
           </div>
         </div>
         <span className="pl-card-open"><I.chev s={16} /></span>
@@ -426,28 +432,28 @@ function PlaylistCard({ pl, onOpen, onDelete, onPlay, onExport }) {
           const role = plItemRole(pl.items, i);
           return (
             <div key={it.type + i} className={"tv-tcard-song pl-row-" + role}>
-              <span className="n pl-typ" title={role === "tanda" ? "Tanda" : role === "cortina" ? "Cortina" : "Single song"}>
+              <span className="n pl-typ" title={role === "tanda" ? tr("playlists.rowTanda") : role === "cortina" ? tr("playlists.cortina") : tr("playlists.rowSingleSong")}>
                 {role === "tanda" ? <I.rows s={13} /> : role === "cortina" ? <I.curtain s={13} /> : <I.note s={13} />}
               </span>
               <span className="t">{it.type !== "tanda" ? (songNameOnly && role === "song" ? cleanSongTitle(it.data) : it.data.title) : itemTitle(it)}</span>
-              <span className="d">{role === "tanda" ? it.data.songs.length + " songs" : role === "cortina" ? "Cortina" : "Song"}</span>
+              <span className="d">{role === "tanda" ? tr("playlists.songCount", { count: it.data.songs.length }) : role === "cortina" ? tr("playlists.cortina") : tr("playlists.rowSong")}</span>
             </div>
           );
         })}
         {pl.items.length > 6 && (
-          <div className="tv-tcard-song"><span className="n" /><span className="t pl-more">+{pl.items.length - 6} more</span><span className="d" /></div>
+          <div className="tv-tcard-song"><span className="n" /><span className="t pl-more">{tr("playlists.moreItems", { count: pl.items.length - 6 })}</span><span className="d" /></div>
         )}
         {pl.items.length === 0 && (
-          <div className="tv-tcard-song"><span className="t pl-more">Empty playlist</span></div>
+          <div className="tv-tcard-song"><span className="t pl-more">{tr("playlists.emptyPlaylist")}</span></div>
         )}
       </div>
       <div className="tv-tcard-foot">
         <div className="tv-tcard-total"><b>{meta.total}</b></div>
-        <button className="tv-tcbtn pl-play" onClick={(e) => { e.stopPropagation(); onPlay(pl); }} disabled={!pl.items.length}><I.play s={13} /> Play</button>
-        <button className="tv-tcbtn" onClick={(e) => { e.stopPropagation(); onOpen(pl); }}>Open</button>
+        <button className="tv-tcbtn pl-play" onClick={(e) => { e.stopPropagation(); onPlay(pl); }} disabled={!pl.items.length}><I.play s={13} /> {tr("playlists.play")}</button>
+        <button className="tv-tcbtn" onClick={(e) => { e.stopPropagation(); onOpen(pl); }}>{tr("playlists.open")}</button>
         <button className="tv-tcbtn del" onClick={(e) => { e.stopPropagation(); onExport(pl); }} disabled={!pl.items.length}
-          title="Export this playlist to use it in VLC, Apple Music or a DJ app"><I.download s={15} /></button>
-        <button className="tv-tcbtn del" onClick={(e) => { e.stopPropagation(); onDelete(pl); }} title="Delete playlist"><I.trash s={15} /></button>
+          title={tr("playlists.exportHint")}><I.download s={15} /></button>
+        <button className="tv-tcbtn del" onClick={(e) => { e.stopPropagation(); onDelete(pl); }} title={tr("playlists.deletePlaylist")}><I.trash s={15} /></button>
       </div>
     </div>
   );
@@ -459,10 +465,10 @@ function PlManageGrid({ playlists, onOpen, onDelete, onPlay, onNew, onExport }) 
       <div className="tv-manage">
         <div className="tv-empty-manage">
           <div className="ic"><I.note s={26} /></div>
-          <h3>No playlists yet</h3>
-          <p>Save a set of tandas &amp; cortinas you can replay any night.</p>
+          <h3>{tr("playlists.noPlaylistsYet")}</h3>
+          <p>{tr("playlists.noPlaylistsHint")}</p>
           <button className="tp-btn primary lg" onClick={onNew}>
-            <I.plus s={17} /> Build a playlist
+            <I.plus s={17} /> {tr("playlists.buildPlaylist")}
           </button>
         </div>
       </div>
@@ -476,7 +482,7 @@ function PlManageGrid({ playlists, onOpen, onDelete, onPlay, onNew, onExport }) 
         ))}
         <button className="tv-newcard" onClick={onNew}>
           <span className="ic"><I.plus s={22} /></span>
-          <span className="lb">New playlist</span>
+          <span className="lb">{tr("playlists.newPlaylist")}</span>
         </button>
       </div>
     </div>
@@ -580,13 +586,13 @@ function PlaylistsView({ onPlay, dockWidth, onDockWidthChange }) {
   const back = () => { clearTimeout(nameTimer.current); setOpen(null); };
 
   const removePlaylist = (id, name, after) => ask({
-    title: "Delete this playlist?",
-    message: `“${name || "Untitled playlist"}” will be removed. The tandas & cortinas in it stay in your collection.`,
-    confirmLabel: "Delete playlist",
+    title: tr("playlists.deleteTitle"),
+    message: tr("playlists.deleteMessage", { name: name || tr("playlists.untitled") }),
+    confirmLabel: tr("playlists.deletePlaylist"),
     onConfirm: () => {
       const snapshot = playlists.slice();
       Store.deletePlaylist(id);
-      flash("Playlist deleted", () => Store.setPlaylistsLocal(snapshot));
+      flash(tr("playlists.deleted"), () => Store.setPlaylistsLocal(snapshot));
       if (after) after();
     },
   });
@@ -602,7 +608,7 @@ function PlaylistsView({ onPlay, dockWidth, onDockWidthChange }) {
   const exportPlaylist = async (id) => {
     let path = null;
     try { path = await window.compas.exportPlaylist(id); } catch (_e) { path = null; }
-    if (path) flash("Saved “" + path.split(/[\\/]/).pop() + "”");
+    if (path) flash(tr("playlists.exportSaved", { file: path.split(/[\\/]/).pop() }));
   };
   const exportOpen = async () => {
     // Flush a pending rename first so the file carries the current name.
@@ -624,8 +630,8 @@ function PlaylistsView({ onPlay, dockWidth, onDockWidthChange }) {
           <div className="tv-manage">
             <div className="tv-empty-manage">
               <div className="ic"><I.folderOpen s={26} /></div>
-              <h3>Import your library first</h3>
-              <p>Head to the Tandas view to import music and build some tandas.</p>
+              <h3>{tr("playlists.importLibraryFirst")}</h3>
+              <p>{tr("playlists.importLibraryFirstHint")}</p>
             </div>
           </div>
         </div>
@@ -652,13 +658,13 @@ function PlaylistsView({ onPlay, dockWidth, onDockWidthChange }) {
     <div className="tv">
       <div className="tv-head">
         <div>
-          <div className="tv-title">Playlists</div>
-          <div className="tv-sub">Open a set to reorder, trim &amp; audition it</div>
+          <div className="tv-title">{tr("playlists.title")}</div>
+          <div className="tv-sub">{tr("playlists.subtitle")}</div>
         </div>
         <div className="tv-head-r">
           <button className="tp-btn" onClick={imp.beginPlaylist} disabled={imp.scanning}
-            title="Import a playlist from VLC, Apple Music or a DJ app"><I.upload s={15} /> {imp.scanning ? "Reading…" : "Import a playlist"}</button>
-          <button className="tp-btn" onClick={newPlaylist}><I.plus s={15} /> New playlist</button>
+            title={tr("playlists.importHint")}><I.upload s={15} /> {imp.scanning ? tr("playlists.reading") : tr("playlists.importPlaylist")}</button>
+          <button className="tp-btn" onClick={newPlaylist}><I.plus s={15} /> {tr("playlists.newPlaylist")}</button>
         </div>
       </div>
 

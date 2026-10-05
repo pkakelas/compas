@@ -30,7 +30,7 @@ function DemoImport() {
       <ObRow icon={<I.folder s={15} />} name="Di Sarli — Instrumentales"><GenreTag genre="tango" small /></ObRow>
       <ObRow icon={<I.folder s={15} />} name="Valses de oro"><GenreTag genre="vals" small /></ObRow>
       <ObRow icon={<I.folder s={15} />} name="Milongas para bailar"><GenreTag genre="milonga" small /></ObRow>
-      <ObRow icon={<I.curtain s={15} />} name="Cortinas"><span className="tp-tag is-cortina sm">Cortina</span></ObRow>
+      <ObRow icon={<I.curtain s={15} />} name="Cortinas"><span className="tp-tag is-cortina sm">{tr("common.genre.cortina")}</span></ObRow>
     </div>
   );
 }
@@ -40,8 +40,8 @@ function DemoCredits() {
   return (
     <div className="tp-ob-edit tv-song-edit">
       <div className="tv-song-edit-grid">
-        <label className="f"><span>Orquesta</span><input readOnly value="Carlos Di Sarli" /></label>
-        <label className="f"><span>Singer</span><input readOnly value="Roberto Rufino" /></label>
+        <label className="f"><span>{tr("onboarding.demoOrquesta")}</span><input readOnly value="Carlos Di Sarli" /></label>
+        <label className="f"><span>{tr("onboarding.demoSinger")}</span><input readOnly value="Roberto Rufino" /></label>
       </div>
       <TagPills tags={[{ cat: "orquesta", label: "Di Sarli" }, { cat: "age", label: "40s" }, { cat: "mood", label: "Lyrical" }]} />
     </div>
@@ -55,14 +55,14 @@ function DemoOrganize() {
     <div className="tp-ob-org">
       <div className="tp-ob-orgrow">
         <span className="nm">Nido gaucho</span>
-        <span className="tp-ob-tierbadge"><I.check s={12} /> Verified</span>
+        <span className="tp-ob-tierbadge"><I.check s={12} /> {tr("onboarding.demoVerified")}</span>
       </div>
       <div className="tp-ob-adds">
-        <span className="tp-ob-add"><b>Orchestra</b> Troilo</span>
-        <span className="tp-ob-add"><b>Singer</b> Fiorentino</span>
-        <span className="tp-ob-add"><b>Year</b> 1942</span>
+        <span className="tp-ob-add"><b>{tr("onboarding.demoOrchestra")}</b> Troilo</span>
+        <span className="tp-ob-add"><b>{tr("onboarding.demoSinger")}</b> Fiorentino</span>
+        <span className="tp-ob-add"><b>{tr("onboarding.demoYear")}</b> 1942</span>
       </div>
-      <div className="tp-ob-orgnote"><I.check s={12} /> You approve every change — files on disk are never touched.</div>
+      <div className="tp-ob-orgnote"><I.check s={12} /> {tr("onboarding.demoOrganizeNote")}</div>
     </div>
   );
 }
@@ -73,8 +73,8 @@ function DemoCortina() {
     <div className="tp-ob-toggle">
       <span className="tp-ob-curtbadge"><I.curtain s={16} /></span>
       <div className="tx">
-        <div className="t">Mark as cortina</div>
-        <div className="d">Kept apart from the dance music</div>
+        <div className="t">{tr("onboarding.demoCortinaToggle")}</div>
+        <div className="d">{tr("onboarding.demoCortinaToggleDesc")}</div>
       </div>
       <span className="tp-sw" data-on="1" aria-hidden="true"><i /></span>
     </div>
@@ -101,9 +101,9 @@ function DemoTanda() {
 function DemoSuggest() {
   return (
     <div className="tp-ob-suggest">
-      <button className="tp-btn accent sm" type="button" tabIndex={-1}><I.spark s={14} /> Suggest tanda</button>
-      <div className="tp-ob-srow"><I.check s={14} /> <span>Same orquesta · Di Sarli</span></div>
-      <div className="tp-ob-srow"><I.check s={14} /> <span>Same era · 1940s</span></div>
+      <button className="tp-btn accent sm" type="button" tabIndex={-1}><I.spark s={14} /> {tr("onboarding.demoSuggestTanda")}</button>
+      <div className="tp-ob-srow"><I.check s={14} /> <span>{tr("onboarding.demoSameOrquesta", { orquesta: "Di Sarli" })}</span></div>
+      <div className="tp-ob-srow"><I.check s={14} /> <span>{tr("onboarding.demoSameEra")}</span></div>
     </div>
   );
 }
@@ -135,13 +135,13 @@ function DemoOutputs() {
     <div className="tp-ob-cards">
       <div className="tp-ob-out floor">
         <span className="ic"><I.speaker s={18} /></span>
-        <div className="t">Floor</div>
-        <div className="d">The dancers hear this</div>
+        <div className="t">{tr("onboarding.demoFloor")}</div>
+        <div className="d">{tr("onboarding.demoFloorDesc")}</div>
       </div>
       <div className="tp-ob-out cue">
         <span className="ic"><I.headphones s={18} /></span>
-        <div className="t">Pre-listen</div>
-        <div className="d">Only in your headset</div>
+        <div className="t">{tr("onboarding.demoPreListen")}</div>
+        <div className="d">{tr("onboarding.demoPreListenDesc")}</div>
       </div>
     </div>
   );
@@ -167,77 +167,77 @@ function Where({ trail }) {
 const ONBOARDING_STEPS = [
   {
     icon: "play", welcome: true,
-    title: "Welcome to Compás",
-    body: "A quick tour of what the player can do — from importing your music to running the floor. Step through it, or skip and explore on your own.",
+    titleKey: "onboarding.welcomeTitle",
+    bodyKey: "onboarding.welcomeBody",
     demo: () => <Waveform progress={0.5} bars={64} seed={11} height={48} />,
   },
   {
-    icon: "upload", eyebrow: "Library",
-    title: "Import with a style",
-    body: "Point Compás at a folder and tag everything as it comes in — tango, vals, milonga or your own label — so the music lands organised from the very start.",
+    icon: "upload", eyebrowKey: "onboarding.eyebrowLibrary",
+    titleKey: "onboarding.importTitle",
+    bodyKey: "onboarding.importBody",
     demo: DemoImport,
-    how: () => <>Drop a folder in, then hit <b>Set style</b> on it while importing.</>,
+    how: () => trx("onboarding.importHow", { b: (s) => <b>{s}</b> }),
   },
   {
-    icon: "pencil", eyebrow: "Library",
-    title: "Edit orchestras & singers",
-    body: "Open any song to set its orchestra and singer. Clean credits make tandas easier to build and your whole library easier to search.",
+    icon: "pencil", eyebrowKey: "onboarding.eyebrowLibrary",
+    titleKey: "onboarding.creditsTitle",
+    bodyKey: "onboarding.creditsBody",
     demo: DemoCredits,
-    how: () => <>Click a song in the <b>Library</b> to open its editor.</>,
+    how: () => trx("onboarding.creditsHow", { b: (s) => <b>{s}</b> }),
   },
   {
-    icon: "spark", eyebrow: "Library",
-    title: "Smart Organize",
-    body: "Let Compás fill in missing orchestras, singers, years and styles — matched against a built-in tango catalogue and sorted by confidence, so you can apply the safe ones in one go.",
+    icon: "spark", eyebrowKey: "onboarding.eyebrowLibrary",
+    titleKey: "onboarding.organizeTitle",
+    bodyKey: "onboarding.organizeBody",
     demo: DemoOrganize,
-    how: () => <>Hit <b>Smart Organize</b> in the <b>Library</b> header, then review by tier.</>,
+    how: () => trx("onboarding.organizeHow", { b: (s) => <b>{s}</b> }),
   },
   {
-    icon: "curtain", eyebrow: "Cortinas",
-    title: "Mark your cortinas",
-    body: "Flag tracks as cortinas so they sit apart from the dance music and surface instantly whenever you reach for one.",
+    icon: "curtain", eyebrowKey: "onboarding.eyebrowCortinas",
+    titleKey: "onboarding.cortinaTitle",
+    bodyKey: "onboarding.cortinaBody",
     demo: DemoCortina,
-    how: () => <>Flag a song or whole folder as a cortina in the <b>Library</b> — or in a song's editor.</>,
+    how: () => trx("onboarding.cortinaHow", { b: (s) => <b>{s}</b> }),
   },
   {
-    icon: "note", eyebrow: "Tandas",
-    title: "Build tandas",
-    body: "Group songs into tandas in the builder — drag tracks onto the bench, reorder them, and save the set ready for the night.",
+    icon: "note", eyebrowKey: "onboarding.eyebrowTandas",
+    titleKey: "onboarding.tandaTitle",
+    bodyKey: "onboarding.tandaBody",
     demo: DemoTanda,
-    how: () => <>Open the <Where trail={["Tandas", "Build"]} /> tab and drag songs onto the bench.</>,
+    how: () => trx("onboarding.tandaHow", { where: <Where trail={[tr("common.nav.Tandas"), tr("onboarding.crumbBuild")]} /> }),
   },
   {
-    icon: "spark", eyebrow: "Tandas",
-    title: "Tanda suggestions",
-    body: "Let Compás propose matching tracks by orchestra, era and style, so a coherent tanda comes together in seconds.",
+    icon: "spark", eyebrowKey: "onboarding.eyebrowTandas",
+    titleKey: "onboarding.suggestTitle",
+    bodyKey: "onboarding.suggestBody",
     demo: DemoSuggest,
-    how: () => <>Browse the <Where trail={["Tandas", "Suggestions"]} /> tab.</>,
+    how: () => trx("onboarding.suggestHow", { where: <Where trail={[tr("common.nav.Tandas"), tr("onboarding.crumbSuggestions")]} /> }),
   },
   {
-    icon: "scissor", eyebrow: "Playback",
-    title: "Silence between tandas",
-    body: "Drop a beat of silence between tracks so the floor breathes, and trim dead air at the edges of each song.",
+    icon: "scissor", eyebrowKey: "onboarding.eyebrowPlayback",
+    titleKey: "onboarding.silenceTitle",
+    bodyKey: "onboarding.silenceBody",
     demo: DemoSilence,
-    how: () => <>Set it under <Where trail={["Settings", "Silence & spacing"]} />.</>,
+    how: () => trx("onboarding.silenceHow", { where: <Where trail={[tr("common.nav.Settings"), tr("onboarding.crumbSilence")]} /> }),
   },
   {
-    icon: "vol", eyebrow: "Playback",
-    title: "Cortinas fade by default",
-    body: "Cortinas ease out on their own at the end of the round — you never have to ride the fader to bow one out.",
+    icon: "vol", eyebrowKey: "onboarding.eyebrowPlayback",
+    titleKey: "onboarding.fadeTitle",
+    bodyKey: "onboarding.fadeBody",
     demo: DemoFade,
-    how: () => <>Tune the fade (or play only the first seconds) in <Where trail={["Settings", "Cortinas"]} />.</>,
+    how: () => trx("onboarding.fadeHow", { where: <Where trail={[tr("common.nav.Settings"), tr("onboarding.crumbCortinas")]} /> }),
   },
   {
-    icon: "headphones", eyebrow: "Live",
-    title: "Live & headset, side by side",
-    body: "The floor output and your headset preview live in separate cards, so you can audition the next tanda while the current one plays.",
+    icon: "headphones", eyebrowKey: "onboarding.eyebrowLive",
+    titleKey: "onboarding.outputsTitle",
+    bodyKey: "onboarding.outputsBody",
     demo: DemoOutputs,
-    how: () => <>Turn on <b>Pre-listen</b> under <Where trail={["Settings", "Audio outputs"]} />.</>,
+    how: () => trx("onboarding.outputsHow", { b: (s) => <b>{s}</b>, where: <Where trail={[tr("common.nav.Settings"), tr("onboarding.crumbAudioOutputs")]} /> }),
   },
   {
     signoff: true,
-    title: "Made by a nerd milonguero",
-    body: "Built for the people who make the night — the DJs spinning, the dancers in the ronda, everyone who keeps the floor alive. With all my heart. Enjoy.",
+    titleKey: "onboarding.signoffTitle",
+    bodyKey: "onboarding.signoffBody",
   },
 ];
 
@@ -289,14 +289,14 @@ function OnboardingWizard({ onClose }) {
 
   return (
     <div className="tp-ob-scrim">
-      <div className={"tp-ob" + (step.signoff ? " is-signoff" : "")} role="dialog" aria-modal="true" aria-label="Welcome tour">
-        {!last && <button className="tp-ob-skip" onClick={onClose}>Skip</button>}
+      <div className={"tp-ob" + (step.signoff ? " is-signoff" : "")} role="dialog" aria-modal="true" aria-label={tr("onboarding.dialogLabel")}>
+        {!last && <button className="tp-ob-skip" onClick={onClose}>{tr("onboarding.skip")}</button>}
 
         {Icon && <div className={"tp-ob-icon" + (step.welcome ? " welcome" : "")}><Icon s={26} /></div>}
         {step.signoff && <div className="tp-ob-sign" aria-hidden="true">♥</div>}
-        {step.eyebrow && <div className="tp-ob-eyebrow">{step.eyebrow}</div>}
-        <div className="tp-ob-title">{step.title}</div>
-        <div className="tp-ob-body">{step.body}</div>
+        {step.eyebrowKey && <div className="tp-ob-eyebrow">{tr(step.eyebrowKey)}</div>}
+        <div className="tp-ob-title">{tr(step.titleKey)}</div>
+        <div className="tp-ob-body">{tr(step.bodyKey)}</div>
 
         {Demo && <div className="tp-ob-demo"><Demo /></div>}
         {step.how && <div className="tp-ob-how"><I.spark s={13} /><span>{step.how()}</span></div>}
@@ -304,15 +304,15 @@ function OnboardingWizard({ onClose }) {
         <div className="tp-ob-dots">
           {steps.map((_, n) => (
             <button key={n} className={"tp-ob-dot" + (n === i ? " on" : "")}
-              aria-label={"Go to step " + (n + 1)} aria-current={n === i ? "step" : undefined}
+              aria-label={tr("onboarding.goToStep", { number: n + 1 })} aria-current={n === i ? "step" : undefined}
               onClick={() => setI(n)} />
           ))}
         </div>
 
         <div className="tp-ob-actions">
-          <button className="tp-ob-back" onClick={back} disabled={first}>Back</button>
+          <button className="tp-ob-back" onClick={back} disabled={first}>{tr("onboarding.back")}</button>
           <button className="tp-ob-next" onClick={last ? onClose : next} autoFocus>
-            {last ? "Let's dance" : "Continue"}{!last && <I.chev s={14} />}
+            {last ? tr("onboarding.letsDance") : tr("onboarding.continue")}{!last && <I.chev s={14} />}
           </button>
         </div>
       </div>

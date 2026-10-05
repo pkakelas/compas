@@ -191,8 +191,14 @@ export type Proposal = {
   tier: ProposalTier;
   source: 'canonical' | 'derived';
   canonicalDate: string | null;
-  note: string | null;
+  note: ProposalNote | null;
 };
+
+/** Why a proposal needs review. A code (plus its values) rather than prose: the
+ *  renderer words it in the DJ's language (smartOrganize.note.<code>). */
+export type ProposalNote =
+  | {code: 'styleMismatch'; own: string; catalog: string}
+  | {code: 'singerNotOrchestra' | 'instrumentalNotOrchestra' | 'notOrchestra'};
 
 const SINGER_JOIN = ', ';
 
@@ -217,7 +223,7 @@ export function resolveSong(song: EnrichInput): Proposal | null {
   let source: 'canonical' | 'derived' = 'derived';
   let tier: ProposalTier = 'suggested';
   let canonicalDate: string | null = null;
-  let note: string | null = null;
+  let note: ProposalNote | null = null;
   // Allow proposing an empty orchestra only when we deliberately clear a
   // misplaced singer out of the orchestra field (otherwise we never blank it).
   let allowOrqClear = false;
@@ -260,7 +266,7 @@ export function resolveSong(song: EnrichInput): Proposal | null {
       const ownGenre = styleToGenre(d.dancedStyle);
       if (ownGenre && g && ownGenre !== g) {
         tier = 'review';
-        note = `Title/folder suggests ${ownGenre}, catalog says ${g}`;
+        note = {code: 'styleMismatch', own: ownGenre, catalog: g};
       }
     }
   } else if (artistIsMisplacedSinger) {
@@ -268,7 +274,7 @@ export function resolveSong(song: EnrichInput): Proposal | null {
     // and leave the orchestra unknown (we can't recover it from the data). Flag
     // for review so the DJ can fill in the real orchestra if they know it.
     tier = 'review';
-    note = 'Looks like a singer, not an orchestra';
+    note = {code: 'singerNotOrchestra'};
     proposed.orq = '';
     allowOrqClear = true;
     // Move the name to the singer field — but not onto an instrumental track,
@@ -294,7 +300,7 @@ export function resolveSong(song: EnrichInput): Proposal | null {
       proposed.orq = '';
       allowOrqClear = true;
       tier = 'review';
-      note = junkArtist(current.orq) ? '“Instrumental” isn’t an orchestra' : 'Not an orchestra';
+      note = {code: junkArtist(current.orq) ? 'instrumentalNotOrchestra' : 'notOrchestra'};
     }
     if (!d.instrumental && d.voices.length && !current.singer) {
       proposed.singer = d.voices.join(SINGER_JOIN);

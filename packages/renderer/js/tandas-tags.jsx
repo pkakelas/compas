@@ -7,10 +7,10 @@ const { useState, useEffect, useRef, useMemo } = React;
  * Each group has a category (used for colour + grouping) and a list of common
  * choices. Anything the DJ types that isn't one of these becomes a 'custom' tag. */
 const TAG_PRESETS = [
-  { cat: "type", label: "Type", options: ["Tango", "Milonga", "Vals", "Cortina"] },
-  { cat: "age", label: "Age", options: ["20s", "30s", "40s", "50s", "60s"] },
+  { cat: "type", labelKey: "tags.catType", options: ["Tango", "Milonga", "Vals", "Cortina"] },
+  { cat: "age", labelKey: "tags.catAge", options: ["20s", "30s", "40s", "50s", "60s"] },
   {
-    cat: "orquesta", label: "Orquesta",
+    cat: "orquesta", labelKey: "tags.catOrquesta",
     options: [
       "D'Arienzo", "Di Sarli", "Pugliese", "Troilo", "Tanturi", "Canaro",
       "Fresedo", "Caló", "Biagi", "Laurenz", "D'Agostino", "De Angelis",
@@ -18,7 +18,7 @@ const TAG_PRESETS = [
     ],
   },
   {
-    cat: "mood", label: "Mood",
+    cat: "mood", labelKey: "tags.catMood",
     options: [
       "Rhythmic", "Lyrical", "Dramatic", "Romantic", "Energetic",
       "Melancholic", "Playful", "Smooth", "Nostalgic"
@@ -27,9 +27,13 @@ const TAG_PRESETS = [
 ];
 
 /* Human label for a category, used by the "add as…" create chips. */
-const CAT_LABELS = { custom: "Custom" };
-TAG_PRESETS.forEach((g) => { CAT_LABELS[g.cat] = g.label; });
-function catLabel(cat) { return CAT_LABELS[cat] || "Custom"; }
+const CAT_LABEL_KEYS = {};
+TAG_PRESETS.forEach((g) => { CAT_LABEL_KEYS[g.cat] = g.labelKey; });
+function catLabel(cat) { return CAT_LABEL_KEYS[cat] ? tr(CAT_LABEL_KEYS[cat]) : tr("tags.catCustom"); }
+
+/* The stored "type" tag label for a style. Preset vocabulary saved as data (and
+ * matched by the main process's tanda-tags.ts) — never translated. */
+const TYPE_TAG_LABELS = { tango: "Tango", vals: "Vals", milonga: "Milonga", cortina: "Cortina" };
 
 /* Stable identity for a tag, used for de-dupe + filter selection. */
 function tagKey(t) { return (t.cat || "custom") + "|" + (t.label || "").toLowerCase(); }
@@ -93,7 +97,7 @@ function suggestTandaTags(songs) {
   // Only the four core styles map to a "type" tag (Tango / Vals / Milonga / Cortina).
   const genres = [...new Set(list.map((s) => s.genre).filter(Boolean))];
   if (genres.length === 1 && isCoreStyle(genres[0])) {
-    add({ cat: "type", label: genreLabel(genres[0]) });
+    add({ cat: "type", label: TYPE_TAG_LABELS[genres[0]] });
   }
 
   const orqs = [...new Set(list.map((s) => s.orq).filter(Boolean))];
@@ -137,10 +141,10 @@ function TandaTagSuggest({ songs, tags, onApply, autoFill = true }) {
 
   return (
     <div className="tv-name-suggest">
-      <span className="tv-name-suggest-lbl">Suggested tags</span>
+      <span className="tv-name-suggest-lbl">{tr("tags.suggestedTags")}</span>
       <button type="button" className="tv-name-suggest-btn tv-tag-suggest-btn"
         onClick={() => { onApply(suggestion); lastAutoRef.current = suggestion; }}
-        title="Use suggested tags">
+        title={tr("tags.useSuggestedTags")}>
         <TagPills tags={suggestion} />
       </button>
     </div>
@@ -175,7 +179,7 @@ function TagField({ tags, onChange }) {
   // Visible preset groups (hide already-added + non-matching options).
   const groups = TAG_PRESETS.map((g) => ({
     cat: g.cat,
-    label: g.label,
+    label: tr(g.labelKey),
     items: g.options
       .filter((label) => !has(g.cat, label))
       .filter((label) => !q || label.toLowerCase().includes(q))
@@ -229,14 +233,14 @@ function TagField({ tags, onChange }) {
         {tags.map((t, i) => (
           <span key={tagKey(t) + i} className={"tv-tag cat-" + t.cat}>
             {t.label}
-            <button className="x" title="Remove tag"
+            <button className="x" title={tr("tags.removeTag")}
               onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); removeAt(i); }}>
               <I.x s={11} />
             </button>
           </span>
         ))}
         <input ref={inputRef} className="tv-tagfield-input" value={text}
-          placeholder={tags.length ? "Add tag…" : "Add tags — type, age, orquesta, mood, or your own…"}
+          placeholder={tags.length ? tr("tags.addTag") : tr("tags.addTagsHint")}
           onChange={(e) => { setText(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown} />
@@ -264,7 +268,7 @@ function TagField({ tags, onChange }) {
           ))}
           {createCats.length > 0 && (
             <div className="tv-tagmenu-group tv-tagmenu-creates">
-              <div className="tv-tagmenu-label">Add “{label}” as</div>
+              <div className="tv-tagmenu-label">{tr("tags.addAs", { label })}</div>
               <div className="tv-tagmenu-opts">
                 {createCats.map((it) => {
                   const idx = flat.indexOf(it);

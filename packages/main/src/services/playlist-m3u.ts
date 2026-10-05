@@ -28,6 +28,7 @@ import {looksLikeCortinaFolder} from './scan.js';
 import {buildLibraryIndex, findLibrarySong, type LibraryIndex} from './suggest-tandas.js';
 import {artistCore, surnameOf} from './tango-names.js';
 import {suggestTandaTags} from './tanda-tags.js';
+import {t} from '../i18n.js';
 import type {Library, Playlist, Song, Tanda, TandaTag} from '../modules/Database.js';
 
 const FORMAT_VERSION = 1;
@@ -88,9 +89,9 @@ export function writeM3u(playlist: Playlist, pathOf: (songId: string) => string 
 
 /** A filesystem-safe default filename for an exported playlist. */
 export function exportFilename(playlist: Playlist): string {
-  const raw = (playlist.name || '').trim() || 'Untitled playlist';
+  const raw = (playlist.name || '').trim() || t('untitledPlaylist');
   const safe = raw.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
-  return `${safe || 'Untitled playlist'}.m3u8`;
+  return `${safe || t('untitledPlaylist')}.m3u8`;
 }
 
 /* ============================== parsing ============================== */
@@ -562,7 +563,7 @@ export function buildImportPreview(
     });
   }
 
-  const baseName = (parsed.name || '').trim() || stemOf(opts.sourcePath) || 'Imported playlist';
+  const baseName = (parsed.name || '').trim() || stemOf(opts.sourcePath) || t('importedPlaylist');
   return {
     name: uniquePlaylistName(baseName, opts.existingPlaylists),
     sourcePath: opts.sourcePath,
