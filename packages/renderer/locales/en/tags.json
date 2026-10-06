@@ -1,0 +1,13 @@
+{
+  "catType": "Type",
+  "catAge": "Age",
+  "catOrquesta": "Orquesta",
+  "catMood": "Mood",
+  "catCustom": "Custom",
+  "suggestedTags": "Suggested tags",
+  "useSuggestedTags": "Use suggested tags",
+  "removeTag": "Remove tag",
+  "addTag": "Add tag…",
+  "addTagsHint": "Add tags — type, age, orquesta, mood, or your own…",
+  "addAs": "Add “{label}” as"
+}

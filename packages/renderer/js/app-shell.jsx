@@ -64,14 +64,14 @@ function UpdateModal({ update, onDismiss }) {
     <div className="tp-modal-scrim" onMouseDown={onDismiss}>
       <div className="tp-modal" role="alertdialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
         <div className="tp-modal-icon accent"><I.arrowDn s={20} /></div>
-        <div className="tp-modal-title">Update ready</div>
+        <div className="tp-modal-title">{tr("common.updateReady")}</div>
         <div className="tp-modal-msg">
-          Version {update.version} has been downloaded. Restart Compás to finish installing it.
+          {tr("common.updateDownloaded", { version: update.version })}
         </div>
         <div className="tp-modal-actions">
-          <button className="tp-modal-cancel" onClick={onDismiss} disabled={installing}>Later</button>
+          <button className="tp-modal-cancel" onClick={onDismiss} disabled={installing}>{tr("common.updateLater")}</button>
           <button className="tp-modal-confirm accent" onClick={restart} disabled={installing} autoFocus>
-            <I.arrowDn s={14} /> {installing ? "Restarting…" : "Restart & update"}
+            <I.arrowDn s={14} /> {installing ? tr("common.updateRestarting") : tr("common.updateRestart")}
           </button>
         </div>
       </div>
@@ -80,6 +80,11 @@ function UpdateModal({ update, onDismiss }) {
 }
 
 function AppShell() {
+  // Strings are resolved at render time, so re-rendering from the root on a
+  // language change retranslates every view in place — nothing remounts, and
+  // playback carries on.
+  I18N.useLocale();
+
   // Seed the theme from the saved preference (default: dark) so the very first
   // render already matches what index.html painted — no flash, no restore race.
   const [t, setTweak] = useTweaks((() => {

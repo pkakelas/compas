@@ -23,8 +23,8 @@ function ImportScreen() {
       <div className="tv-import">
         <div className="tv-scan">
           <div className="tv-scan-ic"><I.search s={26} /></div>
-          <h2>Reading your library…</h2>
-          <div className="tv-scan-count">Scanning every folder and reading tags — nothing is changed.</div>
+          <h2>{tr("tandasImport.readingLibrary")}</h2>
+          <div className="tv-scan-count">{tr("tandasImport.scanningHint")}</div>
           <div className="tv-scan-prog"><i style={{ width: "40%" }} className="indet" /></div>
         </div>
       </div>
@@ -40,20 +40,20 @@ function ImportScreen() {
           onDragLeave={() => setHot(false)}
           onDrop={onDrop}>
           <div className="tv-drop-ic"><I.folderOpen s={36} /></div>
-          <h2>Add your music</h2>
-          <p>Nothing is moved or copied.</p>
+          <h2>{tr("tandasImport.addYourMusic")}</h2>
+          <p>{tr("tandasImport.nothingMoved")}</p>
           <div className="tv-drop-actions">
             <button className="cta" onClick={(e) => { e.stopPropagation(); imp.begin(); }}>
-              <I.folder s={17} /> Choose a folder
+              <I.folder s={17} /> {tr("tandasImport.chooseFolder")}
             </button>
             <button className="cta secondary" onClick={(e) => { e.stopPropagation(); imp.beginPlaylist(); }}>
-              <I.note s={17} /> Import a playlist
+              <I.note s={17} /> {tr("tandasImport.importPlaylist")}
             </button>
           </div>
         </div>
         <div className="tv-assure">
-          <div><I.check s={15} /> Your folders stay as they are</div>
-          <div><I.check s={15} /> Playlists from VLC, Apple Music and DJ apps work</div>
+          <div><I.check s={15} /> {tr("tandasImport.foldersStay")}</div>
+          <div><I.check s={15} /> {tr("tandasImport.playlistsWork")}</div>
         </div>
       </div>
       {imp.modal}

@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {readFileSync, writeFileSync} from 'node:fs';
 import type {AppInitConfig} from '../AppInitConfig.js';
 import {APP_ICON_DATA_URL} from './appIcon.js';
+import {onLocaleChange, t} from '../i18n.js';
 
 // Persisted window placement, so relaunching reopens at the same size/position
 // the user left it. Stored as JSON next to the database in userData.
@@ -81,17 +82,17 @@ function buildAppMenu(): Menu {
     {role: 'fileMenu'},
     {role: 'editMenu'},
     {
-      label: 'View',
+      label: t('menuView'),
       submenu: [
         {role: 'reload'},
         {role: 'toggleDevTools'},
         {type: 'separator'},
-        {label: 'Zoom In', accelerator: 'CommandOrControl+Plus', click: () => sendZoom('in')},
+        {label: t('zoomIn'), accelerator: 'CommandOrControl+Plus', click: () => sendZoom('in')},
         // On most layouts "+" needs Shift; "=" is its unshifted twin, so bind both.
         // Hidden so the menu shows a single Zoom In entry; the accelerator still fires.
-        {label: 'Zoom In', accelerator: 'CommandOrControl+=', visible: false, acceleratorWorksWhenHidden: true, click: () => sendZoom('in')},
-        {label: 'Zoom Out', accelerator: 'CommandOrControl+-', click: () => sendZoom('out')},
-        {label: 'Actual Size', accelerator: 'CommandOrControl+0', click: () => sendZoom('reset')},
+        {label: t('zoomIn'), accelerator: 'CommandOrControl+=', visible: false, acceleratorWorksWhenHidden: true, click: () => sendZoom('in')},
+        {label: t('zoomOut'), accelerator: 'CommandOrControl+-', click: () => sendZoom('out')},
+        {label: t('actualSize'), accelerator: 'CommandOrControl+0', click: () => sendZoom('reset')},
         {type: 'separator'},
         {role: 'togglefullscreen'},
       ],
@@ -136,6 +137,9 @@ class WindowManager implements AppModule {
     // with Alt) but its accelerators — including Ctrl +/-/0 for text size — still
     // fire.
     Menu.setApplicationMenu(buildAppMenu());
+    // The menu's labels are baked in when it's built, so rebuild it whenever the
+    // renderer switches language.
+    onLocaleChange(() => Menu.setApplicationMenu(buildAppMenu()));
 
     await this.restoreOrCreateWindow(true);
     app.on('second-instance', () => this.restoreOrCreateWindow(true));

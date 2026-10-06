@@ -1,0 +1,10 @@
+{
+  "readingLibrary": "正在读取你的曲库…",
+  "scanningHint": "正在扫描所有文件夹并读取标签，不会更改任何内容。",
+  "addYourMusic": "添加你的音乐",
+  "nothingMoved": "不会移动或复制任何文件。",
+  "chooseFolder": "选择文件夹",
+  "importPlaylist": "导入播放列表",
+  "foldersStay": "你的文件夹保持原样",
+  "playlistsWork": "支持 VLC、Apple Music 和 DJ 软件的播放列表"
+}

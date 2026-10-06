@@ -14,6 +14,7 @@ const AUDIO_SCHEME = "compas-audio";
 window.compas = {
   getAppVersion: preload.getAppVersion,
   openExternal: preload.openExternal,
+  setLocale: preload.setLocale,
   getLibrary: preload.getLibrary,
   clearLibrary: preload.clearLibrary,
   pruneMissing: preload.pruneMissingLibrary,

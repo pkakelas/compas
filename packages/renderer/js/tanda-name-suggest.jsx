@@ -74,7 +74,7 @@ function suggestTandaName(songs, fallbackOrq) {
   const list = songs || [];
   if (!list.length) return "";
   const m = tandaMeta({ songs: list });
-  if (m.orq === "Empty tanda") return "";
+  if (m.empty) return "";
 
   let orq = m.orq;
   if (!orq && fallbackOrq) orq = fallbackOrq;
@@ -93,7 +93,7 @@ function suggestTandaName(songs, fallbackOrq) {
 /* Shown under the builder name field: auto-fills when empty, offers a one-click
  * apply when the DJ has typed something else. */
 function TandaNameSuggest({ songs, name, onApply, autoFill = true }) {
-  const suggestion = useMemo(() => suggestTandaName(songs), [songs]);
+  const suggestion = useMemo(() => suggestTandaName(songs), [songs, I18N.locale]);
   const trimmed = (name || "").trim();
   const applyRef = useRef(onApply);
   applyRef.current = onApply;
@@ -106,9 +106,9 @@ function TandaNameSuggest({ songs, name, onApply, autoFill = true }) {
 
   return (
     <div className="tv-name-suggest">
-      <span className="tv-name-suggest-lbl">Suggested</span>
+      <span className="tv-name-suggest-lbl">{tr("nameSuggest.suggested")}</span>
       <button type="button" className="tv-name-suggest-btn" onClick={() => onApply(suggestion)}
-        title="Use suggested name">
+        title={tr("nameSuggest.useSuggestedName")}>
         {suggestion}
       </button>
     </div>

@@ -175,6 +175,14 @@
 .tp-mono { font-family: var(--mono); font-feature-settings: "tnum"; }
 .tp-serif-it { font-family: var(--serif); font-style: italic; font-weight: 400; }
 
+/* ---- per-language type ----
+   The bundled fonts are Latin-only, so other scripts fall back to the system
+   UI font. Chinese, Japanese and Devanagari have neither capitals nor italics:
+   the tracked-out uppercase eyebrows and the italic serif accents turn into
+   gappy, fake-slanted text there, so both are neutralised. (<html lang> is
+   set by entries/i18n.js.) */
+html:lang(zh) *, html:lang(ja) *, html:lang(hi) * { letter-spacing: 0 !important; font-style: normal !important; }
+
 /* ---- genre + era tags ---- */
 .tp-tag {
   display: inline-flex; align-items: center; height: 22px; padding: 0 9px;
@@ -2143,7 +2151,8 @@ button.tp-nav {
 .tp-set-range::-moz-range-thumb {
   width: 16px; height: 16px; border-radius: 50%; background: var(--surface); border: 1px solid var(--accent);
 }
-.tp-set-range-val { font: 12.5px var(--mono); color: var(--ink-2); width: 46px; text-align: right; }
+/* min-width, not width: translated units ("4 min 30 s") are wider than "4m 30s". */
+.tp-set-range-val { font: 12.5px var(--mono); color: var(--ink-2); min-width: 46px; text-align: right; white-space: nowrap; }
 
 /* theme picker */
 .tp-set-themes { display: flex; gap: 12px; }

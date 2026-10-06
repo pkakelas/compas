@@ -1,0 +1,10 @@
+{
+  "readingLibrary": "Reading your library…",
+  "scanningHint": "Scanning every folder and reading tags — nothing is changed.",
+  "addYourMusic": "Add your music",
+  "nothingMoved": "Nothing is moved or copied.",
+  "chooseFolder": "Choose a folder",
+  "importPlaylist": "Import a playlist",
+  "foldersStay": "Your folders stay as they are",
+  "playlistsWork": "Playlists from VLC, Apple Music and DJ apps work"
+}

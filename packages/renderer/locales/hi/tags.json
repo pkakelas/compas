@@ -1,0 +1,13 @@
+{
+  "catType": "प्रकार",
+  "catAge": "दौर",
+  "catOrquesta": "Orquesta",
+  "catMood": "मूड",
+  "catCustom": "कस्टम",
+  "suggestedTags": "सुझाए गए टैग",
+  "useSuggestedTags": "सुझाए गए टैग इस्तेमाल करें",
+  "removeTag": "टैग हटाएँ",
+  "addTag": "टैग जोड़ें…",
+  "addTagsHint": "टैग जोड़ें — प्रकार, दौर, orquesta, मूड, या अपना कोई…",
+  "addAs": "“{label}” को इस रूप में जोड़ें"
+}

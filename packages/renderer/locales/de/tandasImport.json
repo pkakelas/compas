@@ -1,0 +1,10 @@
+{
+  "readingLibrary": "Deine Bibliothek wird eingelesen…",
+  "scanningHint": "Alle Ordner werden durchsucht und die Tags gelesen – nichts wird verändert.",
+  "addYourMusic": "Füge deine Musik hinzu",
+  "nothingMoved": "Nichts wird verschoben oder kopiert.",
+  "chooseFolder": "Ordner wählen",
+  "importPlaylist": "Playlist importieren",
+  "foldersStay": "Deine Ordner bleiben, wie sie sind",
+  "playlistsWork": "Playlists aus VLC, Apple Music und DJ-Apps funktionieren auch"
+}

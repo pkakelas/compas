@@ -1,0 +1,13 @@
+{
+  "catType": "Typ",
+  "catAge": "Epoche",
+  "catOrquesta": "Orquesta",
+  "catMood": "Stimmung",
+  "catCustom": "Eigene",
+  "suggestedTags": "Vorgeschlagene Tags",
+  "useSuggestedTags": "Vorgeschlagene Tags verwenden",
+  "removeTag": "Tag entfernen",
+  "addTag": "Tag hinzufügen…",
+  "addTagsHint": "Tags hinzufügen – Typ, Epoche, Orquesta, Stimmung oder eigene…",
+  "addAs": "„{label}“ hinzufügen als"
+}

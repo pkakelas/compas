@@ -28,6 +28,7 @@
     "start": "node packages/dev-mode.js",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "typecheck": "pnpm -r --if-present run typecheck",
+    "i18n:check": "node scripts/check-i18n.mjs",
     "pretest:e2e": "pnpm run build",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",

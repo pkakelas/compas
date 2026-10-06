@@ -37,14 +37,14 @@ function TopBar({ active = "Live", onNav, community = false, bell = null, commun
           style={{ WebkitMaskImage: `url("${BRAND_LOGO}")`, maskImage: `url("${BRAND_LOGO}")` }} />
         <div className="tp-brand-name">Comp<span className="acc">á</span>s</div>
       </div>
-      <div className="tp-navset" role="tablist" aria-label="Primary" onKeyDown={onKeyDown}>
+      <div className="tp-navset" role="tablist" aria-label={tr("common.navLabel")} onKeyDown={onKeyDown}>
         {navs.map((n, idx) => (
           <button key={n} type="button" role="tab"
             ref={(el) => { tabRefs.current[idx] = el; }}
             aria-selected={n === active} tabIndex={n === active ? 0 : -1}
             className={"tp-nav is-link" + (n === active ? " is-active" : "")}
             onClick={onNav ? () => onNav(n) : undefined}>
-            {n}
+            {tr("common.nav." + n)}
             {/* New notifications show on the Community tab itself, too. */}
             {n === "Community" && bell && bell.count > 0 && (
               <span className="tp-nav-n" aria-label={`${bell.count} new notifications`}>{bell.count > 9 ? "9+" : bell.count}</span>

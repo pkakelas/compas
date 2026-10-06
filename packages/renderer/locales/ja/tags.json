@@ -1,0 +1,13 @@
+{
+  "catType": "タイプ",
+  "catAge": "年代",
+  "catOrquesta": "Orquesta",
+  "catMood": "ムード",
+  "catCustom": "カスタム",
+  "suggestedTags": "タグの候補",
+  "useSuggestedTags": "候補のタグを使う",
+  "removeTag": "タグを削除",
+  "addTag": "タグを追加…",
+  "addTagsHint": "タグを追加（タイプ、年代、orquesta、ムードなど）…",
+  "addAs": "「{label}」を追加するカテゴリ"
+}

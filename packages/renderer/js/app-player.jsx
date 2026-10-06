@@ -206,24 +206,24 @@ function LibPlaylistCard({ pl, added, onAdd, drag, dragging }) {
     <div className={"tp-libcard" + (dragging ? " is-dragging" : "")} draggable={!!drag} {...drag}>
       <div className="tp-libcard-main">
         <div className="tp-libcard-top">
-          <span className="tp-libcard-orq">{pl.name || "Untitled playlist"}</span>
-          <span className="tp-tag is-plain sm">Playlist</span>
+          <span className="tp-libcard-orq">{pl.name || tr("player.untitledPlaylist")}</span>
+          <span className="tp-tag is-plain sm">{tr("player.playlistTag")}</span>
         </div>
         <div className="tp-libcard-songs">
           {pl.items.map((it, i) => (
             <span key={i} className="tp-libsong">
-              {it.type === "cortina" ? "“" + it.data.title + "”" : (it.data.name || tandaMeta(it.data).orq)}
+              {it.type === "cortina" ? tr("parts.quotedName", { name: it.data.title }) : (it.data.name || tandaMeta(it.data).orq)}
               {i < pl.items.length - 1 ? <span className="tp-dotsep">·</span> : null}
             </span>
           ))}
         </div>
         <div className="tp-libcard-meta">
-          {tandaCount} {tandaCount === 1 ? "tanda" : "tandas"}
-          {cortinaCount > 0 ? ` · ${cortinaCount} ${cortinaCount === 1 ? "cortina" : "cortinas"}` : ""}
+          {tr("player.tandaCount", { count: tandaCount })}
+          {cortinaCount > 0 ? " · " + tr("player.cortinaCount", { count: cortinaCount }) : ""}
           <span className="tp-dotsep">·</span><span className="tp-mono">{total}</span>
         </div>
       </div>
-      <button className={"tp-addbtn" + (added ? " is-added" : "")} onClick={onAdd} title="Add playlist to queue">
+      <button className={"tp-addbtn" + (added ? " is-added" : "")} onClick={onAdd} title={tr("player.addPlaylistToQueue")}>
         {added ? <I.check s={16} /> : <I.plus s={16} />}
       </button>
     </div>
@@ -241,13 +241,13 @@ function LibCortinaRow({ c, added, onAdd, preview, makeDrag, draggingId }) {
   return (
     <div className={"tp-cortrow" + (draggingId === c.id ? " is-dragging" : "")} draggable={!!makeDrag} {...drag}
       onClick={preview ? () => preview.toggle(c) : undefined}
-      title={previewTitle(preview, playing, "Audition this cortina")}>
+      title={previewTitle(preview, playing, tr("player.auditionCortina"))}>
       <span className="tp-cortrow-ic">{playing ? <EQ /> : (preview && preview.viaMonitor ? <span className="tp-cuebadge"><I.headphones s={14} /></span> : <I.curtain s={15} />)}</span>
       <div className="tp-flex1">
         <div className="tp-cortrow-title">{c.title}</div>
-        <div className="tp-cortrow-meta">{c.orq || "Cortina"}<span className="tp-dotsep">·</span><span className="tp-mono">{c.dur}</span></div>
+        <div className="tp-cortrow-meta">{c.orq || tr("common.genre.cortina")}<span className="tp-dotsep">·</span><span className="tp-mono">{c.dur}</span></div>
       </div>
-      <button className={"tp-addbtn sm" + (added ? " is-added" : "")} onClick={(e) => { e.stopPropagation(); onAdd(); }} title="Add cortina to queue">
+      <button className={"tp-addbtn sm" + (added ? " is-added" : "")} onClick={(e) => { e.stopPropagation(); onAdd(); }} title={tr("player.addCortinaToQueue")}>
         {added ? <I.check s={15} /> : <I.plus s={15} />}
       </button>
     </div>
@@ -262,31 +262,31 @@ function LibraryPanel({ tab, setTab, tandas, cortinas, playlists, onAddTanda, on
     const m = tandaMeta(t);
     const hay = ((t.name || "") + " " + m.orq + " " + m.singer + " " + t.songs.map((s) => s.title).join(" ")).toLowerCase();
     return (genre === "all" || tandaTypes(t).includes(genre)) && (q.trim() === "" || hay.includes(q.toLowerCase()));
-  }), [tandas, genre, q]);
+  }), [tandas, genre, q, I18N.locale]);
 
   const filteredPlaylists = useMemo(() => playlists.filter((p) => {
     const hay = ((p.name || "") + " " + p.items.map((it) =>
       it.type === "cortina" ? it.data.title : (it.data.name || tandaMeta(it.data).orq)).join(" ")).toLowerCase();
     return q.trim() === "" || hay.includes(q.toLowerCase());
-  }), [playlists, q]);
+  }), [playlists, q, I18N.locale]);
 
   const filteredCortinas = useMemo(() => (cortinas || []).filter((c) => {
     const hay = ((c.title || "") + " " + (c.orq || "") + " " + (c.folder || "")).toLowerCase();
     return q.trim() === "" || hay.includes(q.toLowerCase());
   }), [cortinas, q]);
 
-  const placeholder = tab === "tandas" ? "Search orchestras, singers, titles…"
-    : tab === "cortinas" ? "Search cortinas…" : "Search playlists…";
+  const placeholder = tab === "tandas" ? tr("player.searchTandas")
+    : tab === "cortinas" ? tr("player.searchCortinas") : tr("player.searchPlaylists");
 
   return (
     <div className="tp-lib">
       <div className="tp-lib-head">
-        <div className="tv-title">Add to queue</div>
+        <div className="tv-title">{tr("player.addToQueue")}</div>
         <div className="tp-tabs">
-          <button className={"tp-tab" + (tab === "library" ? " is-on" : "")} onClick={() => setTab("library")}>Songs</button>
-          <button className={"tp-tab" + (tab === "tandas" ? " is-on" : "")} onClick={() => setTab("tandas")}>Tandas</button>
-          <button className={"tp-tab" + (tab === "playlists" ? " is-on" : "")} onClick={() => setTab("playlists")}>Playlists</button>
-          <button className={"tp-tab" + (tab === "cortinas" ? " is-on" : "")} onClick={() => setTab("cortinas")}>Cortinas</button>
+          <button className={"tp-tab" + (tab === "library" ? " is-on" : "")} onClick={() => setTab("library")}>{tr("player.tabSongs")}</button>
+          <button className={"tp-tab" + (tab === "tandas" ? " is-on" : "")} onClick={() => setTab("tandas")}>{tr("player.tabTandas")}</button>
+          <button className={"tp-tab" + (tab === "playlists" ? " is-on" : "")} onClick={() => setTab("playlists")}>{tr("player.tabPlaylists")}</button>
+          <button className={"tp-tab" + (tab === "cortinas" ? " is-on" : "")} onClick={() => setTab("cortinas")}>{tr("player.tabCortinas")}</button>
         </div>
       </div>
 
@@ -306,7 +306,7 @@ function LibraryPanel({ tab, setTab, tandas, cortinas, playlists, onAddTanda, on
               <div className="tp-filters">
                 {["all", "tango", "vals", "milonga"].map(g => (
                   <button key={g} className={"tp-filter" + (genre === g ? " is-on" : "")} onClick={() => setGenre(g)}>
-                    {g === "all" ? "All" : GENRE_LABEL[g]}
+                    {g === "all" ? tr("common.all") : genreLabel(g)}
                   </button>
                 ))}
               </div>
@@ -316,7 +316,7 @@ function LibraryPanel({ tab, setTab, tandas, cortinas, playlists, onAddTanda, on
           <div className="tp-lib-scroll">
             {tab === "tandas" && filteredTandas.map((t) => (
               <TandaLibCard key={t.id} t={t} preview={preview} added={flash === "t:" + t.id}
-                onAdd={() => onAddTanda(t)} addTitle="Add tanda to queue"
+                onAdd={() => onAddTanda(t)} addTitle={tr("player.addTandaToQueue")}
                 drag={makeDrag(t, "tanda")} dragging={draggingId === "tanda:" + t.id} />
             ))}
             {tab === "cortinas" && filteredCortinas.map((c) => (
@@ -328,13 +328,13 @@ function LibraryPanel({ tab, setTab, tandas, cortinas, playlists, onAddTanda, on
                 drag={makeDrag(p, "playlist")} dragging={draggingId === "playlist:" + p.id} />
             ))}
             {tab === "tandas" && filteredTandas.length === 0 && (
-              <div className="tp-empty">{tandas.length ? "No tandas match." : "No tandas yet — build some in the Tandas view."}</div>
+              <div className="tp-empty">{tandas.length ? tr("player.noTandasMatch") : tr("player.noTandasYet")}</div>
             )}
             {tab === "cortinas" && filteredCortinas.length === 0 && (
-              <div className="tp-empty">{(cortinas && cortinas.length) ? "No cortinas match." : "No cortinas yet — flag a song or folder as a cortina (in the Library or a song’s editor)."}</div>
+              <div className="tp-empty">{(cortinas && cortinas.length) ? tr("player.noCortinasMatch") : tr("player.noCortinasYet")}</div>
             )}
             {tab === "playlists" && filteredPlaylists.length === 0 && (
-              <div className="tp-empty">{playlists.length ? "No playlists match." : "No playlists yet — build one in the Playlists view."}</div>
+              <div className="tp-empty">{playlists.length ? tr("player.noPlaylistsMatch") : tr("player.noPlaylistsYet")}</div>
             )}
           </div>
         </React.Fragment>
@@ -374,7 +374,7 @@ function QueueResizer({ width, min, max, onResize, onCommit }) {
     document.body.style.userSelect = "none";
   };
   return (
-    <div className="tv-resizer" onMouseDown={start} title="Drag to resize the queue">
+    <div className="tv-resizer" onMouseDown={start} title={tr("player.resizeQueue")}>
       <span className="grip" />
     </div>
   );
@@ -386,14 +386,14 @@ function QSong({ n, title, dur, state, playing, skip, onPlay, onSkip }) {
     <div className={"tp-songrow" + (isNow ? " is-now" : "") + (state === "done" ? " is-done" : "") + (skip ? " is-skip" : "") + (onPlay ? " is-clickable" : "")}
       onClick={onPlay ? (e) => { e.stopPropagation(); onPlay(); } : undefined}
       {...(onPlay ? clickKeys(onPlay) : {})}
-      title={onPlay ? "Play this song" : undefined}>
+      title={onPlay ? tr("player.playThisSong") : undefined}>
       <span className="n">{isNow && playing ? <EQ /> : <><span className="qn">{n}</span><I.play s={12} /></>}</span>
       <span className="tt"><div className="tp-song-title">{title}</div></span>
       <span className="tp-song-dur">{dur}</span>
       {onSkip && (
         <button className={"tp-song-skip" + (skip ? " is-on" : "")} disabled={isNow}
           onClick={(e) => { e.stopPropagation(); if (!isNow) onSkip(); }}
-          title={isNow ? "Can’t skip the song that’s playing" : skip ? "Play this song" : "Skip this song"}>
+          title={isNow ? tr("player.cantSkipPlaying") : skip ? tr("player.playThisSong") : tr("player.skipThisSong")}>
           <I.skip s={13} />
         </button>
       )}
@@ -424,25 +424,25 @@ function QueueTanda({ item, ix, now, playing, nowIx, onPlaySong, onSkipSong, onR
           scannable right column. Collapsed shows just this header; the whole
           header toggles the song list. */}
       <div className="tp-tanda-head" onClick={(e) => { e.stopPropagation(); setCollapsed((c) => !c); }}>
-        {!now && <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>}
-        <button className={"tp-tanda-caret" + (collapsed ? "" : " is-open")} title={collapsed ? "Show songs" : "Hide songs"}
+        {!now && <span className="tp-grip" title={tr("player.dragToReorder")}><I.grip s={15} /></span>}
+        <button className={"tp-tanda-caret" + (collapsed ? "" : " is-open")} title={collapsed ? tr("player.showSongs") : tr("player.hideSongs")}
           aria-expanded={!collapsed} onClick={(e) => { e.stopPropagation(); setCollapsed((c) => !c); }}>
           <I.chev s={13} />
         </button>
         <div className="tp-tanda-id">
           <div className="tp-tanda-line1">
-            {now && <span className="ix">NOW</span>}
+            {now && <span className="ix">{tr("player.nowBadge")}</span>}
             <span className="tp-tanda-name">{t.name || m.orq}</span>
             <GenreTag genre={m.genre} small />
           </div>
           <div className="tp-tanda-line2">
             {m.singer && <>{m.singer}<span className="tp-dotsep">·</span></>}
-            {playCount} {playCount === 1 ? "song" : "songs"}
+            {tr("player.songCount", { count: playCount })}
             {m.year && <><span className="tp-dotsep">·</span><span title={m.era || undefined}>{m.year}</span></>}
           </div>
         </div>
         <span className="tp-tanda-dur tp-mono">{m.total}</span>
-        {!now && <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove"><I.x s={14} /></button>}
+        {!now && <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title={tr("player.remove")}><I.x s={14} /></button>}
       </div>
       {!collapsed && t.songs.map((s, i) => (
         <QSong key={s.id} n={i + 1} title={songNameOnly ? cleanSongTitle(s) : s.title} dur={s.dur || "—"}
@@ -459,16 +459,16 @@ function QueueCortina({ item, now, playing, onPlay, onRemove, drag }) {
   const { className: dragCls = "", ...handlers } = drag;
   return (
     <div className={"tp-cortina tp-qrow" + (now ? " is-now" : "") + (onPlay ? "" : " is-locked") + " " + dragCls} {...handlers}
-      onClick={onPlay} title={onPlay ? undefined : "Live set locked — unlock to play"}>
+      onClick={onPlay} title={onPlay ? undefined : tr("player.lockedUnlockToPlay")}>
       <div className="curtain"></div>
-      <span className="tp-grip dark" title="Drag to reorder"><I.grip s={15} /></span>
+      <span className="tp-grip dark" title={tr("player.dragToReorder")}><I.grip s={15} /></span>
       <I.curtain s={17} />
       <div className="tp-flex1">
-        <div className="tp-cortina-label">{now ? (playing ? "Cortina · playing" : "Cortina · paused") : "Cortina"}</div>
-        <div className="tp-cortina-sub">“{c.title}” · {c.orq || "Cortina"}</div>
+        <div className="tp-cortina-label">{now ? (playing ? tr("player.cortinaPlaying") : tr("player.cortinaPaused")) : tr("common.genre.cortina")}</div>
+        <div className="tp-cortina-sub">{tr("parts.quotedName", { name: c.title })} · {c.orq || tr("common.genre.cortina")}</div>
       </div>
       <div className="tp-fade">{now && playing ? <EQ /> : <I.clock s={13} />} {c.dur}</div>
-      {onRemove && <button className="tp-qx dark" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove"><I.x s={14} /></button>}
+      {onRemove && <button className="tp-qx dark" onClick={(e) => { e.stopPropagation(); onRemove(); }} title={tr("player.remove")}><I.x s={14} /></button>}
     </div>
   );
 }
@@ -482,15 +482,15 @@ function QueueSong({ item, now, playing, onPlay, onRemove, drag }) {
   const { className: dragCls = "", ...handlers } = drag;
   return (
     <div className={"tp-songcard tp-qrow" + (now ? " is-now" : "") + (onPlay ? "" : " is-locked") + " " + dragCls} {...handlers}
-      onClick={onPlay} title={onPlay ? undefined : "Live set locked — unlock to play"}>
-      <span className="tp-grip" title="Drag to reorder"><I.grip s={15} /></span>
+      onClick={onPlay} title={onPlay ? undefined : tr("player.lockedUnlockToPlay")}>
+      <span className="tp-grip" title={tr("player.dragToReorder")}><I.grip s={15} /></span>
       <span className="tp-songcard-glyph">{now && playing ? <EQ /> : <I.note s={15} />}</span>
       <div className="tp-flex1">
         <div className="tp-songcard-title">{songNameOnly ? cleanSongTitle(s) : s.title}</div>
-        <div className="tp-songcard-sub">{s.orq || "Unknown"}{s.singer ? " · " + s.singer : ""}</div>
+        <div className="tp-songcard-sub">{s.orq || tr("player.unknownOrchestra")}{s.singer ? " · " + s.singer : ""}</div>
       </div>
       <div className="tp-fade"><I.clock s={13} /> {s.dur || "—"}</div>
-      {!now && <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove"><I.x s={14} /></button>}
+      {!now && <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title={tr("player.remove")}><I.x s={14} /></button>}
     </div>
   );
 }
@@ -499,9 +499,9 @@ function QueueSong({ item, now, playing, onPlay, onRemove, drag }) {
 // required, but a DJ usually wants one to clear the floor, so we flag the gap.
 function MissingCortinaHint() {
   return (
-    <div className="tp-nocort" title="No cortina between these tandas">
+    <div className="tp-nocort" title={tr("player.noCortinaBetween")}>
       <span className="tp-nocort-line" />
-      <span className="tp-nocort-tag"><I.curtain s={13} /> No cortina</span>
+      <span className="tp-nocort-tag"><I.curtain s={13} /> {tr("player.noCortina")}</span>
       <span className="tp-nocort-line" />
     </div>
   );
@@ -640,11 +640,10 @@ function DropGap({ open }) {
 // A friendly default name so the DJ can just hit Save: "Set · Jun 4".
 function defaultPlaylistName() {
   const d = new Date();
-  return `Set · ${d.toLocaleString("en-US", { month: "short" })} ${d.getDate()}`;
+  return tr("player.defaultPlaylistName", { date: d.toLocaleDateString(I18N.locale, { month: "short", day: "numeric" }) });
 }
 
-const LOCK_ON_TITLE = "Live set locked — the queue, the transport bar and the spacebar can’t change what’s playing. Click to unlock.";
-const LOCK_OFF_TITLE = "Lock the live set so a stray click can’t interrupt the current song.";
+const lockTitle = (locked) => locked ? tr("player.lockOnTitle") : tr("player.lockOffTitle");
 
 function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, onPlaySongAt, onSkipSong, onRemove, onReorder, onInsertSong, onInsertItem, onSavePlaylist, onClearQueue, onBrowse, locked, onToggleLock }) {
   const [saveOpen, setSaveOpen] = useState(false);
@@ -704,10 +703,10 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
   const handleClear = () => {
     if (!queue.length) return;
     ask({
-      title: "Clear the queue?",
-      message: `${tandaCount} ${tandaCount === 1 ? "tanda" : "tandas"} and the rest of the set will be removed. Your library and playlists aren't affected.`,
-      confirmLabel: "Clear queue",
-      onConfirm: () => { onClearQueue(); flash("Queue cleared"); },
+      title: tr("player.clearQueueTitle"),
+      message: tr("player.clearQueueMessage", { count: tandaCount }),
+      confirmLabel: tr("player.clearQueue"),
+      onConfirm: () => { onClearQueue(); flash(tr("player.queueCleared")); },
     });
   };
 
@@ -715,8 +714,8 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
     if (savingNow || !queue.length) return;
     setSavingNow(true);
     Promise.resolve(onSavePlaylist(saveName))
-      .then(() => { closeSave(); flash("Saved to Playlists"); })
-      .catch(() => { setSavingNow(false); flash("Couldn’t save playlist"); });
+      .then(() => { closeSave(); flash(tr("player.savedToPlaylists")); })
+      .catch(() => { setSavingNow(false); flash(tr("player.savePlaylistFailed")); });
   };
 
   let tIx = 0;
@@ -724,27 +723,27 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
     <div className="tp-queue" style={width ? { flex: `0 0 ${width}px`, width } : undefined}>
       <div className="tp-qhead">
         <div className="tp-qhead-l">
-          <div className="tv-title">Queue</div>
+          <div className="tv-title">{tr("player.queueTitle")}</div>
         </div>
         <div className="tp-qhead-r">
           <div className="tp-q-stat">
-            <span><b>{tandaCount}</b> tandas queued</span>
+            <span>{trx("player.tandasQueued", { count: tandaCount, b: (s) => <b>{s}</b> })}</span>
             <span className="tp-dotsep">·</span>
-            <span className="tp-mono">set {setTotal}</span>
+            <span className="tp-mono">{tr("player.setTotal", { total: setTotal })}</span>
           </div>
           <div className="tp-qhead-btns">
             <button className={"tp-lockq" + (locked ? " is-on" : "")} onClick={onToggleLock}
-              title={locked ? LOCK_ON_TITLE : LOCK_OFF_TITLE}
+              title={lockTitle(locked)}
               aria-pressed={locked}>
-              {locked ? <I.unlock s={14} /> : <I.lock s={14} />} {locked ? "unlock" : "lock"}
+              {locked ? <I.unlock s={14} /> : <I.lock s={14} />} {locked ? tr("player.unlock") : tr("player.lock")}
             </button>
             <button className="tp-savepl" onClick={openSave} disabled={!queue.length || saveOpen}
-              title={queue.length ? "Save this set as a playlist" : "Add tandas to save a playlist"}>
-              <I.plus s={14} /> Save as playlist
+              title={queue.length ? tr("player.saveSetAsPlaylist") : tr("player.addTandasToSave")}>
+              <I.plus s={14} /> {tr("player.saveAsPlaylist")}
             </button>
             <button className="tp-clearq" onClick={handleClear} disabled={!queue.length || locked}
-              title={!queue.length ? "Queue is already empty" : locked ? "Live set locked — unlock to clear the queue" : "Clear the whole queue"}>
-              <I.trash s={14} /> Clear queue
+              title={!queue.length ? tr("player.queueAlreadyEmpty") : locked ? tr("player.lockedUnlockToClear") : tr("player.clearWholeQueue")}>
+              <I.trash s={14} /> {tr("player.clearQueue")}
             </button>
           </div>
         </div>
@@ -753,19 +752,19 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
       {saveOpen && (
         <div className="tp-qsave">
           <label className="tp-qsave-field">
-            <span className="tp-qsave-eyebrow">Playlist name</span>
+            <span className="tp-qsave-eyebrow">{tr("player.playlistName")}</span>
             <input ref={saveInputRef} value={saveName}
               onChange={(e) => setSaveName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") commitSave();
                 else if (e.key === "Escape") closeSave();
               }}
-              placeholder="Name this set…" />
+              placeholder={tr("player.nameThisSet")} />
           </label>
           <button className="tp-btn primary" onClick={commitSave} disabled={savingNow}>
-            <I.check s={15} /> {savingNow ? "Saving…" : "Save"}
+            <I.check s={15} /> {savingNow ? tr("player.saving") : tr("player.save")}
           </button>
-          <button className="tp-btn ghost" onClick={closeSave}>Cancel</button>
+          <button className="tp-btn ghost" onClick={closeSave}>{tr("common.cancel")}</button>
         </div>
       )}
 
@@ -776,12 +775,12 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
           // opens that picker in the "Add to queue" panel on the left.
           <div className="pl-dock-empty">
             <div className="ic"><I.note s={24} /></div>
-            <h3>Start your set</h3>
-            <p>Begin with a song, a tanda or a playlist — tap + on the left, or drag one in.</p>
+            <h3>{tr("player.startYourSet")}</h3>
+            <p>{tr("player.startYourSetHint")}</p>
             <div className="tp-q-starts">
-              <button className="tp-btn pill sm" onClick={() => onBrowse("library")}>Songs</button>
-              <button className="tp-btn pill sm" onClick={() => onBrowse("tandas")}>Tandas</button>
-              <button className="tp-btn pill sm" onClick={() => onBrowse("playlists")}>Playlists</button>
+              <button className="tp-btn pill sm" onClick={() => onBrowse("library")}>{tr("player.tabSongs")}</button>
+              <button className="tp-btn pill sm" onClick={() => onBrowse("tandas")}>{tr("player.tabTandas")}</button>
+              <button className="tp-btn pill sm" onClick={() => onBrowse("playlists")}>{tr("player.tabPlaylists")}</button>
             </div>
           </div>
         )}
@@ -810,7 +809,7 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
         })}
         {queue.length > 0 && <DropGap open={dnd.gapOpen(queue.length)} />}
         {queue.length > 0 && (
-          <div className="tp-q-end">End of queue — drag more here, or add from the left</div>
+          <div className="tp-q-end">{tr("player.endOfQueue")}</div>
         )}
       </div>
       <Toast toast={toast} onDismiss={dismiss} />
@@ -852,7 +851,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, locked, o
   const barCls = "tp-nowbar" + (locked ? " is-locked" : "");
   const lockBtn = (
     <button className={"tp-vol-btn tp-nb-lock" + (locked ? " on" : "")} onClick={onToggleLock}
-      title={locked ? LOCK_ON_TITLE : LOCK_OFF_TITLE} aria-pressed={!!locked} aria-label="Lock the live set">
+      title={lockTitle(locked)} aria-pressed={!!locked} aria-label={tr("player.lockLiveSet")}>
       {locked ? <I.lock s={16} /> : <I.unlock s={16} />}
     </button>
   );
@@ -866,9 +865,9 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, locked, o
         <div className="tp-nb-meta">
           <div className="tp-nb-mark"><I.note s={16} /></div>
           <div style={{ minWidth: 0 }}>
-            <div className="tp-nb-title">{hasQueue ? "Ready to play" : "Nothing playing"}</div>
+            <div className="tp-nb-title">{hasQueue ? tr("player.readyToPlay") : tr("player.nothingPlaying")}</div>
             <div className="tp-nb-sub">
-              {!hasQueue ? "Add a tanda or cortina, then press play" : locked ? "Unlock, then press play to start the set" : "Press play to start the set"}
+              {!hasQueue ? tr("player.addThenPressPlay") : locked ? tr("player.unlockThenPressPlay") : tr("player.pressPlayToStart")}
             </div>
           </div>
         </div>
@@ -902,13 +901,13 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, locked, o
         <div className="tp-nb-meta">
           <div className="tp-nb-mark cortina"><I.curtain s={18} /></div>
           <div style={{ minWidth: 0 }}>
-            <div className="tp-nb-eyebrow">{snippetActive ? `Cortina · snippet ${cortinaSnippetSec}s` : "Cortina · floor clears"}</div>
-            <Marquee className="tp-nb-cortitle" text={"“" + c.title + "”"} />
+            <div className="tp-nb-eyebrow">{snippetActive ? tr("player.cortinaSnippet", { seconds: cortinaSnippetSec }) : tr("player.cortinaFloorClears")}</div>
+            <Marquee className="tp-nb-cortitle" text={tr("parts.quotedName", { name: c.title })} />
             <div className="tp-nb-sub">
-              {c.orq || "Cortina"}
+              {c.orq || tr("common.genre.cortina")}
               {snippetActive && (
-                <span className="tp-snippet-badge" title={`Playing the first ${cortinaSnippetSec}s, then fading to the next tanda`}>
-                  <I.fwd s={11} /> Auto-fade {fmtDur(snippetRemain)}
+                <span className="tp-snippet-badge" title={tr("player.snippetTitle", { seconds: cortinaSnippetSec })}>
+                  <I.fwd s={11} /> {tr("player.autoFade", { time: fmtDur(snippetRemain) })}
                 </span>
               )}
             </div>
@@ -929,7 +928,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, locked, o
           </button>
           <button className="tp-tbtn nb" onClick={onNext} disabled={locked}><I.next s={16} /></button>
           <button className="tp-chip warn" style={{ marginLeft: 6 }} onClick={onFadeToTanda} disabled={!upcoming}>
-            <I.fwd s={15} /> Fade to next tanda{upcoming ? <span className="tp-chip-tail"> · {tandaMeta(upcoming.data).orq}</span> : null}
+            <I.fwd s={15} /> {tr("player.fadeToNextTanda")}{upcoming ? <span className="tp-chip-tail"> · {tandaMeta(upcoming.data).orq}</span> : null}
           </button>
           <EqualizerControl {...eqProps} /><VolumeControl volume={volume} muted={muted} onVolume={onVolume} onToggleMute={onToggleMute} />
         </div>
@@ -941,7 +940,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, locked, o
   // and reads its orchestra straight off the song.
   const isTanda = now.type === "tanda";
   const song = songOf(now, nowIx);
-  const orq = isTanda ? tandaMeta(now.data).orq : ((song && song.orq) || "Unknown");
+  const orq = isTanda ? tandaMeta(now.data).orq : ((song && song.orq) || tr("player.unknownOrchestra"));
   const tandaSongs = isTanda ? (now.data.songs || []) : [];
   return (
     <div className={barCls}>
@@ -991,7 +990,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, locked, o
 // this single engine, so only one thing is ever audible.
 
 // Shown when a locked live set turns down a listen that would go out to the floor.
-const LOCKED_LISTEN_MSG = "Live set is locked — unlock it to listen through the main output.";
+const lockedListenMsg = () => tr("player.lockedListen");
 
 const PlayerContext = React.createContext(null);
 const usePlayer = () => React.useContext(PlayerContext);
@@ -1250,11 +1249,11 @@ function usePlayerEngine(mainDeviceId, playback) {
     if (song && song.id != null) {
       Promise.resolve(Store.removeSongIfMissing(song.id))
         .then((res) => flashError(res && res.removed
-          ? `“${song.title}” is no longer on disk — removed from your library.`
-          : `Couldn’t play “${song.title}”.`))
-        .catch(() => flashError(`Couldn’t play “${song.title}”.`));
+          ? tr("player.songMissingRemoved", { title: song.title })
+          : tr("player.couldntPlaySong", { title: song.title })))
+        .catch(() => flashError(tr("player.couldntPlaySong", { title: song.title })));
     } else {
-      flashError("Couldn’t play this track.");
+      flashError(tr("player.couldntPlayTrack"));
     }
     advance();
   }
@@ -1534,7 +1533,7 @@ function usePlayerEngine(mainDeviceId, playback) {
     if (!song) return;
     // This preview plays through the floor's own engine, so it would replace
     // the song the dancers are hearing.
-    if (locked) { flashError(LOCKED_LISTEN_MSG); return; }
+    if (locked) { flashError(lockedListenMsg()); return; }
     if (preview && preview.id === song.id) { setPlaying((p) => !p); return; }
     setPreview(song);
     setPlaying(true);
@@ -1719,9 +1718,9 @@ function useAudioDevices() {
   }, []);
 
   const labelFor = useCallback((id) => {
-    if (!id) return "System default";
+    if (!id) return tr("player.systemDefault");
     const m = outputs.find((o) => o.deviceId === id);
-    return m && m.label ? m.label : "Selected output";
+    return m && m.label ? m.label : tr("player.selectedOutput");
   }, [outputs]);
 
   // Cueing is only truly available once a distinct monitor card is chosen.
@@ -1895,7 +1894,7 @@ function PlayerProvider({ children }) {
     if (!songs || !songs.length) return;
     // Without a monitor card the cue engine shares the floor's output, so a
     // locked set refuses rather than play over the song that's on.
-    if (engine.locked && !devices.monitorReady) { engine.notify(LOCKED_LISTEN_MSG); return; }
+    if (engine.locked && !devices.monitorReady) { engine.notify(lockedListenMsg()); return; }
     engine.clearPreview();
     cueEngine.cueSongs(songs);
   }, [engine, cueEngine, devices.monitorReady]);
@@ -1988,8 +1987,8 @@ function VolumeControl({ volume, muted, onVolume, onToggleMute }) {
   const off = muted || volume <= 0;
   const pct = Math.round((off ? 0 : volume) * 100);
   return (
-    <div className="tp-nb-vol" title="Master output">
-      <button className="tp-vol-btn" onClick={onToggleMute} title={off ? "Unmute" : "Mute"}>
+    <div className="tp-nb-vol" title={tr("player.masterOutput")}>
+      <button className="tp-vol-btn" onClick={onToggleMute} title={off ? tr("player.unmute") : tr("player.mute")}>
         {off ? <I.volX s={16} /> : <I.vol s={16} />}
       </button>
       <input className="tp-vol-range" type="range" min="0" max="100" step="1" value={pct}
@@ -2018,20 +2017,20 @@ function EqualizerControl({ enabled, bands, onToggle, onBand, onReset }) {
       <button
         className={"tp-vol-btn tp-eq-btn" + (enabled ? " on" : "")}
         onClick={() => setOpen((o) => !o)}
-        title="Equalizer"
+        title={tr("player.equalizer")}
         aria-pressed={enabled}
         aria-expanded={open}
       >
         <I.sliders s={16} />
       </button>
       {open && (
-        <div className="tp-eq-pop" role="dialog" aria-label="Equalizer">
+        <div className="tp-eq-pop" role="dialog" aria-label={tr("player.equalizer")}>
           <div className="tp-eq-head">
             <label className="tp-eq-switch">
               <input type="checkbox" checked={enabled} onChange={(e) => onToggle(e.target.checked)} />
-              <span>Equalizer</span>
+              <span>{tr("player.equalizer")}</span>
             </label>
-            <button className="tp-eq-reset" onClick={onReset} title="Flatten all bands">Reset</button>
+            <button className="tp-eq-reset" onClick={onReset} title={tr("player.flattenBands")}>{tr("player.reset")}</button>
           </div>
           <div className={"tp-eq-bands" + (enabled ? "" : " dim")}>
             {EQ_BANDS.map((b, i) => {
@@ -2074,7 +2073,7 @@ function CueBar({ cue, monitorLabel }) {
       <div className="tp-cb-meta">
         <div className="tp-cb-mark"><I.headphones s={20} /></div>
         <div style={{ minWidth: 0 }}>
-          <div className="tp-cb-eyebrow">Pre-listen{monitorLabel ? " · " + monitorLabel : ""}</div>
+          <div className="tp-cb-eyebrow">{tr("player.preListen")}{monitorLabel ? " · " + monitorLabel : ""}</div>
           <div className="tp-cb-title">{songNameOnly ? cleanSongTitle(song) : song.title}</div>
           <div className="tp-cb-sub">{song.orq}{song.singer ? " · " + song.singer : ""}</div>
         </div>
@@ -2087,11 +2086,11 @@ function CueBar({ cue, monitorLabel }) {
       </div>
 
       <div className="tp-cb-ctrls">
-        <button className="tp-tbtn sm" onClick={cue.toggle} title={cue.playing ? "Pause preview" : "Play preview"}>
+        <button className="tp-tbtn sm" onClick={cue.toggle} title={cue.playing ? tr("player.pausePreview") : tr("player.playPreview")}>
           {cue.playing ? <I.pause s={18} /> : <I.play s={18} />}
         </button>
-        <button className="tp-tbtn sm ghost" onClick={cue.stop} title="Close pre-listen"><I.x s={16} /></button>
-        <div className="tp-nb-vol" title="Pre-listen volume">
+        <button className="tp-tbtn sm ghost" onClick={cue.stop} title={tr("player.closePreListen")}><I.x s={16} /></button>
+        <div className="tp-nb-vol" title={tr("player.preListenVolume")}>
           <span className="tp-vol-btn cue" aria-hidden="true">{off ? <I.volX s={15} /> : <I.headphones s={15} />}</span>
           <input className="tp-vol-range cue" type="range" min="0" max="100" step="1" value={pct}
             style={{ "--vfill": pct + "%" }}
@@ -2111,7 +2110,7 @@ function PlayerBar() {
         <div className="tp-error-toast" role="alert">
           <span className="ic"><I.curtain s={15} /></span>
           <span className="msg">{p.error}</span>
-          <button className="x" onClick={p.dismissError} title="Dismiss"><I.x s={14} /></button>
+          <button className="x" onClick={p.dismissError} title={tr("player.dismiss")}><I.x s={14} /></button>
         </div>
       )}
       <CueBar cue={p.cue} monitorLabel={p.devices.labelFor(p.devices.monitorDeviceId)} />
@@ -2141,16 +2140,18 @@ function AnalysisBanner() {
     <div className="tp-analyze-banner" role="status">
       <span className="tp-analyze-spinner" aria-hidden="true" />
       <div className="tp-analyze-text">
-        <div className="tp-analyze-title">Preparing your music</div>
+        <div className="tp-analyze-title">{tr("player.analysisTitle")}</div>
         <div className="tp-analyze-sub">
-          Leveling each song’s volume and trimming silence at the start and end so every
-          tanda plays evenly — you can keep using everything while this finishes.
+          {tr("player.analysisDescription")}
         </div>
         <div className="tp-analyze-bar"><div className="tp-analyze-bar-fill" style={{ width: pct + "%" }} /></div>
       </div>
       <div className="tp-analyze-count">
-        <span className="tp-mono">{remaining}</span>
-        <span className="tp-analyze-count-lbl">{remaining === 1 ? "song left" : "songs left"}</span>
+        {trx("player.analysisSongsLeft", {
+          count: remaining,
+          n: (s) => <span className="tp-mono">{s}</span>,
+          label: (s) => <span className="tp-analyze-count-lbl">{s}</span>,
+        })}
       </div>
     </div>
   );

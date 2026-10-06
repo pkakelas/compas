@@ -8,16 +8,20 @@
 const { useState, useEffect, useMemo, useRef } = React;
 
 const SO_TIERS = [
-  { id: "confirmed", title: "Verified matches", ic: "check", desc: "Matched to exact recordings in the tango catalogue — safe to apply.", preselected: true },
-  { id: "suggested", title: "Likely fixes", ic: "spark", desc: "Worked out from song titles and folder names.", preselected: true },
-  { id: "review", title: "Worth a quick check", ic: "search", desc: "Lower confidence — tick the ones that look right.", preselected: false },
+  { id: "confirmed", titleKey: "smartOrganize.tierConfirmedTitle", ic: "check", descKey: "smartOrganize.tierConfirmedDesc", preselected: true },
+  { id: "suggested", titleKey: "smartOrganize.tierSuggestedTitle", ic: "spark", descKey: "smartOrganize.tierSuggestedDesc", preselected: true },
+  { id: "review", titleKey: "smartOrganize.tierReviewTitle", ic: "search", descKey: "smartOrganize.tierReviewDesc", preselected: false },
 ];
-
-function soStyleLabel(g) {
-  return (window.GENRE_LABEL && window.GENRE_LABEL[g]) || (g ? g[0].toUpperCase() + g.slice(1) : "—");
+// A tier's translated tab title, by id (resolved at render time).
+function soTierTitle(id) {
+  const def = SO_TIERS.find((t) => t.id === id);
+  return def ? tr(def.titleKey) : "";
 }
 
-const SO_FIELD_LABEL = { orq: "Orchestra", singer: "Singer", year: "Year", genre: "Style" };
+function soStyleLabel(g) {
+  return g ? genreLabel(g) : "—";
+}
+
 const soIsEmpty = (v) => v == null || v === "";
 
 // Permanently-skipped suggestions. We key on the song id *and* the proposed
@@ -50,7 +54,7 @@ function soFmt(field, v) {
 function SoDiff({ field, from, to, edited, onEdit }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState("");
-  const label = SO_FIELD_LABEL[field];
+  const label = tr("smartOrganize.field." + field);
   const adding = soIsEmpty(from);
 
   const begin = (ev) => {
@@ -83,7 +87,7 @@ function SoDiff({ field, from, to, edited, onEdit }) {
         ) : (
           <input className="so-edit-input" autoFocus type={field === "year" ? "number" : "text"}
             value={val}
-            placeholder={field === "singer" ? "Instrumental" : ""}
+            placeholder={field === "singer" ? tr("smartOrganize.instrumental") : ""}
             onClick={(ev) => ev.stopPropagation()}
             onChange={(ev) => setVal(ev.target.value)}
             onKeyDown={(ev) => {
@@ -97,11 +101,11 @@ function SoDiff({ field, from, to, edited, onEdit }) {
   }
 
   const toDisplay = field === "singer" && soIsEmpty(to)
-    ? <em className="so-inst">Instrumental</em>
+    ? <em className="so-inst">{tr("smartOrganize.instrumental")}</em>
     : soFmt(field, to);
   const editableTo = (
     <button type="button" className={"so-to so-to-edit" + (edited ? " is-edited" : "")}
-      title="Click to edit" onClick={begin}>
+      title={tr("smartOrganize.clickToEdit")} onClick={begin}>
       {toDisplay}<I.pencil s={11} />
     </button>
   );
@@ -128,8 +132,8 @@ function SoRow({ p, checked, onToggle, rowEdits, onFieldEdit, onDismiss }) {
         <div className="so-row-top">
           <span className="so-row-title" title={p.title}>{p.title}</span>
           {p.source === "canonical" && (
-            <span className="so-badge" title={"Verified against the catalogue" + (p.canonicalDate ? " · " + p.canonicalDate : "")}>
-              <I.check s={10} /> Verified{p.canonicalDate ? " · " + p.canonicalDate : ""}
+            <span className="so-badge" title={p.canonicalDate ? tr("smartOrganize.verifiedTitleDate", { date: p.canonicalDate }) : tr("smartOrganize.verifiedTitle")}>
+              <I.check s={10} /> {p.canonicalDate ? tr("smartOrganize.verifiedDate", { date: p.canonicalDate }) : tr("smartOrganize.verified")}
             </span>
           )}
           {p.folderPath && <span className="so-row-folder">{p.folderPath}</span>}
@@ -140,10 +144,10 @@ function SoRow({ p, checked, onToggle, rowEdits, onFieldEdit, onDismiss }) {
               edited={f in e} onEdit={(v) => onFieldEdit(p.id, f, v)} />
           ))}
         </div>
-        {p.note && <div className="so-row-note"><I.tag s={11} /> {p.note}</div>}
+        {p.note && <div className="so-row-note"><I.tag s={11} /> {tr("smartOrganize.note." + p.note.code, p.note)}</div>}
       </div>
       <button type="button" className="so-skip"
-        title="Skip this suggestion — don't show it again"
+        title={tr("smartOrganize.skipTitle")}
         onClick={(ev) => { ev.stopPropagation(); onDismiss(p); }}>
         <I.eyeOff s={14} />
       </button>
@@ -164,7 +168,7 @@ function soFieldCounts(list) {
   for (const p of list) for (const f of p.changes) c[f] = (c[f] || 0) + 1;
   return ["orq", "singer", "year", "genre"]
     .filter((f) => c[f])
-    .map((f) => ({ field: f, label: SO_FIELD_LABEL[f].toLowerCase(), count: c[f] }));
+    .map((f) => ({ field: f, count: c[f] }));
 }
 
 function SoTier({ def, list, cap, onShowMore, selected, edits, onFieldEdit, onToggleTier, onToggleOne, onDismissOne }) {
@@ -182,21 +186,21 @@ function SoTier({ def, list, cap, onShowMore, selected, edits, onFieldEdit, onTo
       <div className={"so-digest tier-" + def.id}>
         <span className="so-digest-ic"><Ic s={15} /></span>
         <div className="so-digest-body">
-          <span className="so-digest-desc">{def.desc}</span>
+          <span className="so-digest-desc">{tr(def.descKey)}</span>
           {fields.length > 0 && (
             <span className="so-digest-counts">
               {fields.map((f, i) => (
                 <React.Fragment key={f.field}>
                   {i > 0 && <span className="so-digest-sep">·</span>}
-                  <b>{f.count}</b> {f.label}{f.count === 1 ? "" : "s"}
+                  {trx("smartOrganize.fieldCount." + f.field, { count: f.count, b: (s) => <b>{s}</b> })}
                 </React.Fragment>
               ))}
             </span>
           )}
         </div>
-        <label className="so-digest-sel" title={all ? "Deselect all" : "Select all"}>
+        <label className="so-digest-sel" title={all ? tr("smartOrganize.deselectAll") : tr("smartOrganize.selectAll")}>
           <SoTierCheck all={all} some={some} onChange={() => onToggleTier(list)} />
-          <span className="so-digest-selall">{all ? "Deselect all" : "Select all"}</span>
+          <span className="so-digest-selall">{all ? tr("smartOrganize.deselectAll") : tr("smartOrganize.selectAll")}</span>
           <span className="so-digest-selcount">{selCount}/{list.length}</span>
         </label>
       </div>
@@ -208,7 +212,11 @@ function SoTier({ def, list, cap, onShowMore, selected, edits, onFieldEdit, onTo
       </div>
       {list.length > cap && (
         <button className="so-more" onClick={onShowMore}>
-          Show {Math.min(200, list.length - cap)} more <span className="so-more-rest">({list.length - cap} hidden)</span>
+          {trx("smartOrganize.showMore", {
+            count: Math.min(200, list.length - cap),
+            hidden: list.length - cap,
+            rest: (s) => <span className="so-more-rest">{s}</span>,
+          })}
         </button>
       )}
     </section>
@@ -356,8 +364,8 @@ function SmartOrganizeModal({ onClose, onApplied }) {
       return (
         <div className="so-center">
           <div className="so-spinner" aria-hidden="true" />
-          <h3>Reading your library…</h3>
-          <p>Matching your songs against the tango catalogue to fill in orchestras, singers, years and styles. Nothing is changed yet.</p>
+          <h3>{tr("smartOrganize.scanningTitle")}</h3>
+          <p>{tr("smartOrganize.scanningBody")}</p>
         </div>
       );
     }
@@ -365,9 +373,9 @@ function SmartOrganizeModal({ onClose, onApplied }) {
       return (
         <div className="so-center">
           <div className="so-ic err"><I.x s={22} /></div>
-          <h3>Something went wrong</h3>
-          <p>Smart Organize couldn’t finish. Your library is unchanged.</p>
-          <button className="tp-btn primary" onClick={onClose}>Close</button>
+          <h3>{tr("smartOrganize.errorTitle")}</h3>
+          <p>{tr("smartOrganize.errorBody")}</p>
+          <button className="tp-btn primary" onClick={onClose}>{tr("smartOrganize.close")}</button>
         </div>
       );
     }
@@ -375,9 +383,9 @@ function SmartOrganizeModal({ onClose, onApplied }) {
       return (
         <div className="so-center">
           <div className="so-ic ok"><I.check s={22} /></div>
-          <h3>Everything looks tidy</h3>
-          <p>We didn’t find any metadata worth changing. Your orchestras, singers, years and styles are already consistent.</p>
-          <button className="tp-btn primary" onClick={onClose}>Close</button>
+          <h3>{tr("smartOrganize.emptyTitle")}</h3>
+          <p>{tr("smartOrganize.emptyBody")}</p>
+          <button className="tp-btn primary" onClick={onClose}>{tr("smartOrganize.close")}</button>
         </div>
       );
     }
@@ -385,9 +393,9 @@ function SmartOrganizeModal({ onClose, onApplied }) {
       return (
         <div className="so-center">
           <div className="so-ic ok"><I.check s={22} /></div>
-          <h3>Updated {appliedCount} song{appliedCount === 1 ? "" : "s"}</h3>
-          <p>Changes are saved in Compás. Your audio files on disk were not modified.</p>
-          <button className="tp-btn primary" onClick={onClose}>Done</button>
+          <h3>{tr("smartOrganize.doneTitle", { count: appliedCount })}</h3>
+          <p>{tr("smartOrganize.doneBody")}</p>
+          <button className="tp-btn primary" onClick={onClose}>{tr("smartOrganize.done")}</button>
         </div>
       );
     }
@@ -405,7 +413,7 @@ function SmartOrganizeModal({ onClose, onApplied }) {
               className={"so-tab" + (tab === def.id ? " on" : "")}
               onClick={() => setTab(def.id)}
             >
-              {def.title}
+              {tr(def.titleKey)}
               <span className={"so-tab-count tier-" + def.id}>{groups[def.id].length}</span>
             </button>
           ))}
@@ -413,13 +421,13 @@ function SmartOrganizeModal({ onClose, onApplied }) {
         <div className="so-toolbar">
           <label className="so-search">
             <I.search s={15} />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by title, orchestra, folder…" />
-            {q && <button className="so-search-x" onClick={() => setQ("")} title="Clear"><I.x s={12} /></button>}
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr("smartOrganize.filterPlaceholder")} />
+            {q && <button className="so-search-x" onClick={() => setQ("")} title={tr("smartOrganize.clearFilter")}><I.x s={12} /></button>}
           </label>
         </div>
         <div className="so-scroll">
           {activeList.length === 0 ? (
-            <div className="so-empty-filter">{q ? "Nothing matches your filter in this tab." : "Nothing here."}</div>
+            <div className="so-empty-filter">{q ? tr("smartOrganize.noFilterMatches") : tr("smartOrganize.nothingHere")}</div>
           ) : (
             <SoTier
               def={activeDef}
@@ -443,29 +451,29 @@ function SmartOrganizeModal({ onClose, onApplied }) {
 
   return (
     <div className="so-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget && phase !== "applying") onClose(); }}>
-      <div className="so-modal" role="dialog" aria-modal="true" aria-label="Smart Organize">
+      <div className="so-modal" role="dialog" aria-modal="true" aria-label={tr("smartOrganize.title")}>
         <header className="so-head">
           <div className="so-head-l">
             <span className="so-head-ic"><I.spark s={17} /></span>
             <div>
-              <div className="so-head-title">Smart Organize</div>
-              <div className="so-head-sub">Fill in missing orchestras, singers, years &amp; styles</div>
+              <div className="so-head-title">{tr("smartOrganize.title")}</div>
+              <div className="so-head-sub">{tr("smartOrganize.subtitle")}</div>
             </div>
           </div>
-          <button className="so-x" onClick={onClose} disabled={phase === "applying"} title="Close"><I.x s={16} /></button>
+          <button className="so-x" onClick={onClose} disabled={phase === "applying"} title={tr("smartOrganize.close")}><I.x s={16} /></button>
         </header>
 
         <div className="so-body">{body()}</div>
 
         {showFooter && (
           <footer className="so-foot">
-            <div className="so-foot-note"><I.check s={13} /> Saved in Compás only — your files are never modified.</div>
+            <div className="so-foot-note"><I.check s={13} /> {tr("smartOrganize.footNote")}</div>
             <div className="so-foot-actions">
-              <button className="tp-btn" onClick={onClose} disabled={phase === "applying"}>Cancel</button>
+              <button className="tp-btn" onClick={onClose} disabled={phase === "applying"}>{tr("common.cancel")}</button>
               <button className="tp-btn primary" onClick={apply} disabled={phase === "applying" || tabSelectedCount === 0}>
                 {phase === "applying"
-                  ? "Applying…"
-                  : <>Apply {tabSelectedCount} change{tabSelectedCount === 1 ? "" : "s"}</>}
+                  ? tr("smartOrganize.applying")
+                  : tr("smartOrganize.applyChanges", { count: tabSelectedCount })}
               </button>
             </div>
           </footer>
@@ -473,18 +481,18 @@ function SmartOrganizeModal({ onClose, onApplied }) {
 
         {applied && (
           <div className="so-applied-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) dismissApplied(); }}>
-            <div className="so-applied" role="dialog" aria-modal="true" aria-label="Changes applied">
+            <div className="so-applied" role="dialog" aria-modal="true" aria-label={tr("smartOrganize.appliedLabel")}>
               <div className="so-ic ok"><I.check s={22} /></div>
-              <h3>Applied {applied.count} change{applied.count === 1 ? "" : "s"}</h3>
+              <h3>{tr("smartOrganize.appliedTitle", { count: applied.count })}</h3>
               <p>
                 {applied.nextTab
-                  ? <>Saved in Compás. Next up: <b>{(SO_TIERS.find((t) => t.id === applied.nextTab) || {}).title}</b>.</>
-                  : "Saved in Compás. Your audio files on disk were not modified."}
+                  ? trx("smartOrganize.appliedNext", { tier: soTierTitle(applied.nextTab), b: (s) => <b>{s}</b> })
+                  : tr("smartOrganize.appliedSaved")}
               </p>
               <button className="tp-btn primary" onClick={dismissApplied}>
                 {applied.nextTab
-                  ? <>Continue to {(SO_TIERS.find((t) => t.id === applied.nextTab) || {}).title}</>
-                  : "Done"}
+                  ? tr("smartOrganize.continueTo", { tier: soTierTitle(applied.nextTab) })
+                  : tr("smartOrganize.done")}
               </button>
             </div>
           </div>

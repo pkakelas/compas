@@ -21,13 +21,15 @@ function eraForYear(year) {
 /* ---------- tanda meta ---------- */
 function tandaMeta(t) {
   const songs = t.songs || [];
-  if (!songs.length) return { orq: "Empty tanda", genre: "tango", singer: "", year: "", era: "", total: "0:00" };
+  // `empty` flags the no-songs case, so callers needn't compare `orq` against a
+  // (translated) label.
+  if (!songs.length) return { orq: tr("parts.emptyTanda"), empty: true, genre: "tango", singer: "", year: "", era: "", total: "0:00" };
   const orqs = [...new Set(songs.map((s) => s.orq))];
-  const orq = orqs.length === 1 ? orqs[0] : "Mixed orchestras";
+  const orq = orqs.length === 1 ? orqs[0] : tr("parts.mixedOrchestras");
   const genres = [...new Set(songs.map((s) => s.genre))];
   const genre = genres.length === 1 ? genres[0] : "tango";
   const singers = [...new Set(songs.map((s) => s.singer).filter(Boolean))];
-  const singer = singers.length === 1 ? singers[0] : singers.length > 1 ? "Various singers" : "";
+  const singer = singers.length === 1 ? singers[0] : singers.length > 1 ? tr("parts.variousSingers") : "";
   const years = songs.map((s) => s.year).filter(Boolean);
   // Show the exact year, or a span when a tanda mixes recordings; the era is
   // keyed off the earliest recording in the set.
@@ -55,9 +57,10 @@ function tandaLabel(t) {
 
 /* Comma-joined, quoted tanda names with a "+N more" tail past `max`. */
 function tandaNames(list, max = 2) {
-  const names = list.map((t) => `“${tandaLabel(t)}”`);
-  if (names.length <= max) return names.join(", ");
-  return names.slice(0, max).join(", ") + ` +${names.length - max} more`;
+  const names = list.map((t) => tr("parts.quotedName", { name: tandaLabel(t) }));
+  const sep = tr("common.listSeparator");
+  if (names.length <= max) return names.join(sep);
+  return tr("parts.namesAndMore", { names: names.slice(0, max).join(sep), count: names.length - max });
 }
 
 /* Spells out how deleting a folder ripples into the DJ's tandas: which sets get
@@ -65,18 +68,19 @@ function tandaNames(list, max = 2) {
  * remove-folder confirmation so the consequence is clear before they commit. */
 function TandaImpact({ emptied, shrunk }) {
   const e = emptied.length;
+  const b = (s) => <strong>{s}</strong>;
   return (
     <>
       {e > 0 && (
         <div>
-          <strong>{e} tanda{e === 1 ? "" : "s"}</strong> ({tandaNames(emptied)}) will be left
-          empty and removed from your collection.
+          {trx("parts.impactEmptied", { count: e, names: tandaNames(emptied), b })}
         </div>
       )}
       {shrunk > 0 && (
         <div>
-          {e > 0 ? "Another " : ""}<strong>{shrunk} tanda{shrunk === 1 ? "" : "s"}</strong> will
-          lose {shrunk === 1 ? "a song" : "songs"} but stay.
+          {e > 0
+            ? trx("parts.impactShrunkAnother", { count: shrunk, b })
+            : trx("parts.impactShrunk", { count: shrunk, b })}
         </div>
       )}
     </>
@@ -127,7 +131,7 @@ function TandaLibCard({ t, preview, onAdd, added, addTitle, drag, dragging }) {
     <div className={"tp-tandax" + (open ? " is-open" : "") + (dragging ? " is-dragging" : "")} draggable={!!drag} {...drag}>
       <div ref={headRef} className="tp-tandax-head">
         <button className={"tp-tandax-caret" + (open ? " is-open" : "")} onClick={toggle}
-          title={open ? "Hide songs" : "Show songs"} aria-expanded={open}>
+          title={open ? tr("parts.hideSongs") : tr("parts.showSongs")} aria-expanded={open}>
           <I.chev s={14} />
         </button>
         <div className="tp-tandax-main" onClick={toggle}>
@@ -138,13 +142,13 @@ function TandaLibCard({ t, preview, onAdd, added, addTitle, drag, dragging }) {
           </div>
           <div className="tp-libcard-meta">
             {m.singer ? <>{m.singer}<span className="tp-dotsep">·</span></> : null}
-            {t.songs.length} {t.songs.length === 1 ? "song" : "songs"}
+            {tr("parts.songCount", { count: t.songs.length })}
             <span className="tp-dotsep">·</span><span className="tp-mono">{m.total}</span>
           </div>
         </div>
         {onAdd && (
           <button className={"tp-addbtn" + (added ? " is-added" : "")}
-            onClick={(e) => { e.stopPropagation(); onAdd(); }} title={addTitle || "Add tanda"}>
+            onClick={(e) => { e.stopPropagation(); onAdd(); }} title={addTitle || tr("parts.addTanda")}>
             {added ? <I.check s={16} /> : <I.plus s={16} />}
           </button>
         )}
@@ -243,15 +247,15 @@ function SongEditRow({ s, onClose }) {
   return (
     <div className="tv-song-edit" onKeyDown={onKey} onClick={(e) => e.stopPropagation()}>
       <div className="tv-song-edit-grid">
-        <label className="f wide"><span>Title</span>
-          <input autoFocus value={draft.title} onChange={set("title")} placeholder="Title" /></label>
-        <label className="f"><span>Orchestra</span>
-          <CreatableCombo value={draft.orq} onChange={setVal("orq")} options={orqOptions} placeholder="Orchestra" /></label>
-        <label className="f"><span>Singer</span>
-          <CreatableCombo value={draft.singer} onChange={setVal("singer")} options={singerOptions} placeholder="Instrumental" /></label>
-        <label className="f"><span>Year</span>
+        <label className="f wide"><span>{tr("parts.title")}</span>
+          <input autoFocus value={draft.title} onChange={set("title")} placeholder={tr("parts.title")} /></label>
+        <label className="f"><span>{tr("parts.orchestra")}</span>
+          <CreatableCombo value={draft.orq} onChange={setVal("orq")} options={orqOptions} placeholder={tr("parts.orchestra")} /></label>
+        <label className="f"><span>{tr("parts.singer")}</span>
+          <CreatableCombo value={draft.singer} onChange={setVal("singer")} options={singerOptions} placeholder={tr("parts.instrumental")} /></label>
+        <label className="f"><span>{tr("parts.year")}</span>
           <input value={draft.year} onChange={set("year")} inputMode="numeric" placeholder="—" maxLength={4} /></label>
-        <label className="f"><span>Genre</span>
+        <label className="f"><span>{tr("parts.genre")}</span>
           <select value={draft.genre} onChange={set("genre")}>
             {(() => {
               const base = window.STYLE_TYPES || ["tango", "vals", "milonga", "cortina"];
@@ -262,22 +266,22 @@ function SongEditRow({ s, onClose }) {
               return opts.map((g) => <option key={g} value={g}>{label(g)}</option>);
             })()}
           </select></label>
-        <label className="f wide"><span>Album</span>
-          <input value={draft.album} onChange={set("album")} placeholder="Album" /></label>
+        <label className="f wide"><span>{tr("parts.album")}</span>
+          <input value={draft.album} onChange={set("album")} placeholder={tr("parts.album")} /></label>
         <label className="tv-song-edit-cortina">
           <input type="checkbox" checked={draft.isCortina}
             onChange={(e) => setDraft((d) => ({ ...d, isCortina: e.target.checked }))} />
           <span className="tv-cort-text">
-            <span className="tv-cort-title"><I.curtain s={14} /> Use as cortina</span>
-            <span className="tv-cort-hint">A floor-clearer between tandas — kept separate from its genre.</span>
+            <span className="tv-cort-title"><I.curtain s={14} /> {tr("parts.useAsCortina")}</span>
+            <span className="tv-cort-hint">{tr("parts.cortinaHint")}</span>
           </span>
         </label>
       </div>
       <div className="tv-song-edit-foot">
-        {err && <span className="tv-song-edit-err">Couldn’t save — please try again.</span>}
-        <button className="tv-song-edit-cancel" onClick={onClose} disabled={saving}>Cancel</button>
+        {err && <span className="tv-song-edit-err">{tr("parts.saveFailed")}</span>}
+        <button className="tv-song-edit-cancel" onClick={onClose} disabled={saving}>{tr("common.cancel")}</button>
         <button className="tv-song-edit-save" onClick={save} disabled={saving}>
-          {saving ? "Saving…" : <><I.check s={14} /> Save</>}
+          {saving ? tr("parts.saving") : <><I.check s={14} /> {tr("parts.save")}</>}
         </button>
       </div>
     </div>
@@ -335,11 +339,11 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
   };
   useEffect(() => () => { if (clickTimer.current) clearTimeout(clickTimer.current); }, []);
   const rowTitle = library
-    ? (isPreview && isPlaying ? "Pause" : "Play preview")
-    : (inBuilder ? "Already in the tanda" : "Double-click to add to tanda · click to play preview");
+    ? (isPreview && isPlaying ? tr("common.pause") : tr("parts.playPreview"))
+    : (inBuilder ? tr("parts.alreadyInTanda") : tr("parts.addOrPreviewHint"));
   // Flat song list (`columns`): the style gets its own tag, and on wide
   // screens orchestra / singer each get a column instead of the sub-line.
-  const singerText = s.singer ? s.singer : (isInstrumental(s) ? <i className="tv-inst">Instrumental</i> : "");
+  const singerText = s.singer ? s.singer : (isInstrumental(s) ? <i className="tv-inst">{tr("parts.instrumental")}</i> : "");
   const genreCell = <span className="gn">{s.genre ? <GenreTag genre={s.genre} small /> : null}</span>;
   const row = (
     <div className={"tv-song clickable" + (columns ? " cols " + columns : "") + (isCort ? " cortina" : "") + (inBuilder ? " in-builder" : "") + (dragging ? " dragging" : "") + (isPreview ? " playing" : "") + (editing ? " editing" : "") + (selected ? " selected" : "")}
@@ -348,9 +352,9 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
       onClick={handleClick}
       onDoubleClick={library ? undefined : handleDoubleClick}
       onContextMenu={library && onContext ? (e) => onContext(e, s) : undefined}
-      title={isPreview && isPlaying ? "Pause" : rowTitle}>
+      title={isPreview && isPlaying ? tr("common.pause") : rowTitle}>
       <button className={"play" + (isPreview && isPlaying ? " on" : "") + (previewViaMonitor ? " monitor" : "")} onClick={(e) => { e.stopPropagation(); onPreview(); }}
-        title={isPreview && isPlaying ? "Pause" : previewViaMonitor ? "Pre-listen in headphones" : "Play preview"}>
+        title={isPreview && isPlaying ? tr("common.pause") : previewViaMonitor ? tr("common.preListenHeadphones") : tr("parts.playPreview")}>
         {isPreview && isPlaying ? <I.pause s={14} /> : (previewViaMonitor ? <I.headphones s={14} /> : <I.play s={14} />)}
       </button>
       {columns === "wide" ? (
@@ -375,12 +379,12 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
       <span className="du">{s.dur}</span>
       {!library ? (
         <button className={"add" + (inBuilder ? " in" : "")} onClick={(e) => { e.stopPropagation(); onAdd(); }}
-          title={inBuilder ? "Already in the tanda" : "Add to tanda"}>
+          title={inBuilder ? tr("parts.alreadyInTanda") : tr("parts.addToTanda")}>
           {inBuilder ? <I.check s={15} /> : <I.plus s={15} />}
         </button>
       ) : (
         <button className={"edit" + (editing ? " on" : "")} onClick={(e) => { e.stopPropagation(); editing ? closeEdit() : startEdit(); }}
-          title="Edit song details">
+          title={tr("parts.editSongDetails")}>
           <I.pencil s={14} />
         </button>
       )}
@@ -412,7 +416,8 @@ function _norm(v) { return v == null ? "" : String(v).toLowerCase(); }
 
 // An instrumental recording carries no singer credit. We surface it as its own
 // label in listings and as a pickable value in the singer filter. (Cortinas are
-// excluded — they're interludes, not instrumental tango.)
+// excluded — they're interludes, not instrumental tango.) This constant is the
+// filter value (an id); what's shown is tr("parts.instrumental").
 const INSTRUMENTAL = "Instrumental";
 function isInstrumental(song) { return !song.isCortina && !(song.singer || "").trim(); }
 
@@ -665,21 +670,24 @@ function useDebounced(value, delay) {
 
 /* ---------- sort ---------- */
 const SORTS = [
-  { key: "relevance", label: "Best match" },
-  { key: "title", label: "Title A–Z" },
-  { key: "orq", label: "Orchestra A–Z" },
-  { key: "singer", label: "Singer A–Z" },
-  { key: "genre", label: "Style" },
-  { key: "year_desc", label: "Year (new→old)" },
-  { key: "year_asc", label: "Year (old→new)" },
-  { key: "dur_desc", label: "Longest first" },
+  { key: "relevance", labelKey: "parts.sortRelevance" },
+  { key: "title", labelKey: "parts.sortTitle" },
+  { key: "orq", labelKey: "parts.sortOrchestra" },
+  { key: "singer", labelKey: "parts.sortSinger" },
+  { key: "genre", labelKey: "parts.sortStyle" },
+  { key: "year_desc", labelKey: "parts.sortYearDesc" },
+  { key: "year_asc", labelKey: "parts.sortYearAsc" },
+  { key: "dur_desc", labelKey: "parts.sortLongest" },
 ];
 
-// Sort order for the style dropdown, keyed by the shared genreLabel() output.
-const GENRE_ORDER = { Tango: 0, Vals: 1, Milonga: 2, Cortina: 3 };
+// Sort order for the style dropdown, keyed by style id — not by the shared
+// genreLabel() output, which is translated. A custom value typed with a leading
+// capital ("Tango") ranks like its preset, as it did when keyed by label.
+const GENRE_ORDER = { tango: 0, vals: 1, milonga: 2, cortina: 3 };
+function genreOrder(g) { return GENRE_ORDER[g[0].toLowerCase() + g.slice(1)] ?? 99; }
 
 function cmpStr(a, b) { return _norm(a).localeCompare(_norm(b)); }
-function genreRank(g) { return g ? (GENRE_ORDER[genreLabel(g)] ?? 99) : 100; }
+function genreRank(g) { return g ? genreOrder(g) : 100; }
 function songSecs(s) { return s.durationSec != null ? s.durationSec : secOf(s.dur); }
 
 // The comparator for a chosen sort. "relevance" keeps the search engine's
@@ -732,7 +740,7 @@ function buildFilterOptions(songs, filters = EMPTY_SEARCH, includeCortinas = tru
     orchestras: [...orqs].sort(cmp),
     singers: [...singers].sort((a, b) => a === INSTRUMENTAL ? -1 : b === INSTRUMENTAL ? 1 : cmp(a, b)),
     genres: [...genres].sort((a, b) =>
-      ((GENRE_ORDER[genreLabel(a)] ?? 99) - (GENRE_ORDER[genreLabel(b)] ?? 99)) || cmp(genreLabel(a), genreLabel(b)))
+      (genreOrder(a) - genreOrder(b)) || cmp(genreLabel(a), genreLabel(b)))
       .map((g) => ({ value: g, label: genreLabel(g) })),
     years: [...years].sort((a, b) => parseInt(b, 10) - parseInt(a, 10)),
   };
@@ -776,8 +784,22 @@ function normalizePickOptions(options) {
   });
 }
 
-/* Searchable filter dropdown — shared by orchestra, singer, style and year. */
-function SearchableSelect({ placeholder, value, onChange, options, disabled, allLabel }) {
+/* The facets a SearchableSelect can filter on, with the copy each one shows:
+ * its name, the "all" reset row, the clear button, the in-panel search and the
+ * empty list. Whole messages per facet (never a noun dropped into a template),
+ * resolved with tr() when rendered. */
+const PICK_FACETS = {
+  orq: { labelKey: "parts.orchestra", allKey: "parts.allOrchestras", clearKey: "parts.clearOrchestra", searchKey: "parts.searchOrchestra", emptyKey: "parts.noOrchestrasYet" },
+  singer: { labelKey: "parts.singer", allKey: "parts.allSingers", clearKey: "parts.clearSinger", searchKey: "parts.searchSinger", emptyKey: "parts.noSingersYet" },
+  genre: { labelKey: "parts.style", allKey: "parts.allStyles", clearKey: "parts.clearStyle", searchKey: "parts.searchStyle", emptyKey: "parts.noStylesYet" },
+  year: { labelKey: "parts.year", allKey: "parts.allYears", clearKey: "parts.clearYear", searchKey: "parts.searchYear", emptyKey: "parts.noYearsYet" },
+  type: { labelKey: "parts.type", allKey: "parts.allTypes", clearKey: "parts.clearType", searchKey: "parts.searchType", emptyKey: "parts.noTypesYet" },
+  mood: { labelKey: "parts.mood", allKey: "parts.allMoods", clearKey: "parts.clearMood", searchKey: "parts.searchMood", emptyKey: "parts.noMoodsYet" },
+};
+
+/* Searchable filter dropdown — shared by orchestra, singer, style and year.
+ * `facet` (a PICK_FACETS id) picks its copy. */
+function SearchableSelect({ facet, value, onChange, options, disabled }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -785,9 +807,11 @@ function SearchableSelect({ placeholder, value, onChange, options, disabled, all
   const searchRef = useRef(null);
   const menuRef = useRef(null);
 
+  const copy = PICK_FACETS[facet];
+  const placeholder = tr(copy.labelKey);
   const normalized = useMemo(() => normalizePickOptions(options), [options]);
   const showSearch = normalized.length > PICK_SEARCH_MIN;
-  const resetLabel = allLabel || ("All " + placeholder.toLowerCase() + "s");
+  const resetLabel = tr(copy.allKey);
   const selectedLabel = value
     ? (normalized.find((o) => o.value === value)?.label || value)
     : placeholder;
@@ -871,7 +895,7 @@ function SearchableSelect({ placeholder, value, onChange, options, disabled, all
           <span className="tv-pick-chev"><I.arrowDn s={13} /></span>
         </button>
         {value ? (
-          <button type="button" className="tv-pick-clear" onClick={clear} title={`Clear ${placeholder.toLowerCase()}`}>
+          <button type="button" className="tv-pick-clear" onClick={clear} title={tr(copy.clearKey)}>
             <I.x s={11} />
           </button>
         ) : null}
@@ -883,7 +907,7 @@ function SearchableSelect({ placeholder, value, onChange, options, disabled, all
             <label className="tv-pick-search">
               <I.search s={14} />
               <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={onListKey} placeholder={`Search ${placeholder.toLowerCase()}…`} />
+                onKeyDown={onListKey} placeholder={tr(copy.searchKey)} />
             </label>
           ) : null}
           <div className="tv-pick-list" role="listbox">
@@ -896,7 +920,7 @@ function SearchableSelect({ placeholder, value, onChange, options, disabled, all
               </button>
             ))}
             {!items.length ? (
-              <div className="tv-pick-empty">{q ? "No matches" : `No ${placeholder.toLowerCase()}s yet`}</div>
+              <div className="tv-pick-empty">{q ? tr("parts.noMatches") : tr(copy.emptyKey)}</div>
             ) : null}
           </div>
         </div>
@@ -986,7 +1010,6 @@ function BulkValuePicker({ field, options, count, onPick, onBack }) {
   const [active, setActive] = useState(0);
   const searchRef = useRef(null);
   const isSinger = field === "singer";
-  const noun = isSinger ? "singer" : "orchestra";
 
   useEffect(() => { requestAnimationFrame(() => searchRef.current && searchRef.current.focus()); }, []);
   useEffect(() => { setActive(0); }, [query]);
@@ -1002,12 +1025,12 @@ function BulkValuePicker({ field, options, count, onPick, onBack }) {
   // Clear row first, then a "use what I typed" row when the query isn't already
   // an exact existing value, then the matching library values.
   const rows = useMemo(() => {
-    const r = [{ value: "", label: isSinger ? "Instrumental (no singer)" : "No orchestra", clear: true }];
+    const r = [{ value: "", label: isSinger ? tr("parts.bulkNoSinger") : tr("parts.bulkNoOrchestra"), clear: true }];
     const exact = q && (options || []).some((o) => _norm(o) === _norm(q));
-    if (q && !exact) r.push({ value: q, label: `Use “${q}”`, custom: true });
+    if (q && !exact) r.push({ value: q, label: tr("parts.bulkUseTyped", { value: q }), custom: true });
     for (const o of filtered) r.push({ value: o, label: o });
     return r;
-  }, [filtered, q, options, isSinger]);
+  }, [filtered, q, options, isSinger, I18N.locale]);
 
   const onKey = (e) => {
     if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => (rows.length ? (a + 1) % rows.length : 0)); }
@@ -1019,14 +1042,14 @@ function BulkValuePicker({ field, options, count, onPick, onBack }) {
   return (
     <div className="tv-ctx-picker">
       <div className="tv-ctx-pickhead">
-        <button className="tv-ctx-back" onClick={onBack} title="Back"><I.chev s={14} /></button>
-        <span className="ttl">Set {noun}</span>
+        <button className="tv-ctx-back" onClick={onBack} title={tr("parts.back")}><I.chev s={14} /></button>
+        <span className="ttl">{isSinger ? tr("parts.setSinger") : tr("parts.setOrchestra")}</span>
         <span className="ct">{count}</span>
       </div>
       <label className="tv-pick-search">
         <I.search s={14} />
         <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onKey}
-          placeholder={`Search or type a ${noun}…`} />
+          placeholder={isSinger ? tr("parts.bulkSearchSinger") : tr("parts.bulkSearchOrchestra")} />
       </label>
       <div className="tv-pick-list" role="listbox">
         {rows.map((o, i) => (
@@ -1038,7 +1061,7 @@ function BulkValuePicker({ field, options, count, onPick, onBack }) {
           </button>
         ))}
         {filtered.length === 0 && !q ? (
-          <div className="tv-pick-empty">No {noun}s yet — type one above.</div>
+          <div className="tv-pick-empty">{isSinger ? tr("parts.bulkNoSingersYet") : tr("parts.bulkNoOrchestrasYet")}</div>
         ) : null}
       </div>
     </div>
@@ -1055,6 +1078,11 @@ function SongSearchBar({ filters, onChange, options, sort, setSort, searching, c
   const hasFilters = !!(filters.orq || filters.singer || filters.genre || filters.year);
   const anyDropdown = hasFilters;
   const sorts = searching ? SORTS : SORTS.filter((s) => s.key !== "relevance");
+  // INSTRUMENTAL is the "no singer" filter value; list it under its translated label.
+  const singerOptions = useMemo(
+    () => options.singers.map((s) => (s === INSTRUMENTAL ? { value: s, label: tr("parts.instrumental") } : s)),
+    [options.singers, I18N.locale],
+  );
 
   return (
     <div className="tv-searchbar">
@@ -1062,53 +1090,53 @@ function SongSearchBar({ filters, onChange, options, sort, setSort, searching, c
         <I.search s={15} />
         <input ref={inputRef} value={filters.text}
           onChange={(e) => set("text", e.target.value)}
-          placeholder="Search title, orchestra, singer…" />
+          placeholder={tr("parts.searchSongs")} />
         {filters.text ? (
-          <button type="button" className="tv-search-clear" onClick={clearText} title="Clear search">
+          <button type="button" className="tv-search-clear" onClick={clearText} title={tr("parts.clearSearch")}>
             <I.x s={13} />
           </button>
         ) : null}
       </label>
       <div className="tv-search-toolbar">
         <div className="tv-search-filters">
-          <SearchableSelect placeholder="Orchestra" allLabel="All orchestras" value={filters.orq}
+          <SearchableSelect facet="orq" value={filters.orq}
             onChange={(v) => set("orq", v)} options={options.orchestras}
             disabled={anyDropdown && options.orchestras.length === 0} />
-          <SearchableSelect placeholder="Singer" allLabel="All singers" value={filters.singer}
-            onChange={(v) => set("singer", v)} options={options.singers}
+          <SearchableSelect facet="singer" value={filters.singer}
+            onChange={(v) => set("singer", v)} options={singerOptions}
             disabled={anyDropdown && options.singers.length === 0} />
-          <SearchableSelect placeholder="Style" allLabel="All styles" value={filters.genre}
+          <SearchableSelect facet="genre" value={filters.genre}
             onChange={(v) => set("genre", v)} options={options.genres}
             disabled={anyDropdown && options.genres.length === 0} />
-          <SearchableSelect placeholder="Year" allLabel="All years" value={filters.year}
+          <SearchableSelect facet="year" value={filters.year}
             onChange={(v) => set("year", v)} options={options.years}
             disabled={anyDropdown && options.years.length === 0} />
           {hasFilters ? (
-            <button type="button" className="tv-search-reset" onClick={clearFilters}>Clear filters</button>
+            <button type="button" className="tv-search-reset" onClick={clearFilters}>{tr("parts.clearFilters")}</button>
           ) : null}
         </div>
         <div className="tv-search-actions">
           {setLayout ? (
-            <div className="tv-layout" role="radiogroup" aria-label="Library view">
-              <button type="button" role="radio" aria-label="Folders" aria-checked={layout === "folders"} data-on={layout === "folders" ? "1" : "0"}
-                onClick={() => setLayout("folders")} title="Browse by folder">
-                <I.folder s={14} /> <span className="lb">Folders</span>
+            <div className="tv-layout" role="radiogroup" aria-label={tr("parts.libraryView")}>
+              <button type="button" role="radio" aria-label={tr("parts.folders")} aria-checked={layout === "folders"} data-on={layout === "folders" ? "1" : "0"}
+                onClick={() => setLayout("folders")} title={tr("parts.browseByFolder")}>
+                <I.folder s={14} /> <span className="lb">{tr("parts.folders")}</span>
               </button>
-              <button type="button" role="radio" aria-label="Songs" aria-checked={layout === "list"} data-on={layout === "list" ? "1" : "0"}
-                onClick={() => setLayout("list")} title="One list of songs with orchestra, singer, style and year">
-                <I.note s={14} /> <span className="lb">Songs</span>
+              <button type="button" role="radio" aria-label={tr("parts.songs")} aria-checked={layout === "list"} data-on={layout === "list" ? "1" : "0"}
+                onClick={() => setLayout("list")} title={tr("parts.songListHint")}>
+                <I.note s={14} /> <span className="lb">{tr("parts.songs")}</span>
               </button>
             </div>
           ) : null}
           {showCollapse ? (
             <button type="button" className="tv-collapse" onClick={onCollapse}
-              title={collapseOpen ? "Collapse all folders" : "Expand all folders"}>
-              <I.chev s={12} /> <span className="lb">{collapseOpen ? "Collapse" : "Expand"}</span>
+              title={collapseOpen ? tr("parts.collapseAllFolders") : tr("parts.expandAllFolders")}>
+              <I.chev s={12} /> <span className="lb">{collapseOpen ? tr("parts.collapse") : tr("parts.expand")}</span>
             </button>
           ) : null}
           <label className="tv-sort">
-            <select value={sort} onChange={(e) => setSort(e.target.value)} title="Sort songs" aria-label="Sort">
-              {sorts.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            <select value={sort} onChange={(e) => setSort(e.target.value)} title={tr("parts.sortSongs")} aria-label={tr("parts.sort")}>
+              {sorts.map((s) => <option key={s.key} value={s.key}>{tr(s.labelKey)}</option>)}
             </select>
           </label>
           {countLabel ? <span className="tv-count">{countLabel}</span> : null}
@@ -1146,7 +1174,7 @@ function folderAllCortina(node) {
 // Small marker shown on cortina songs/folders so a DJ can spot floor-clearers
 // at a glance — reuses the curtain icon from the Live tab.
 function CortinaBadge() {
-  return <span className="tv-cortina-badge" title="Cortina"><I.curtain s={15} /></span>;
+  return <span className="tv-cortina-badge" title={tr("common.genre.cortina")}><I.curtain s={15} /></span>;
 }
 
 function FolderRowFlat({ node, depth, isOpen, onToggle, onContext }) {
@@ -1188,12 +1216,12 @@ function useLibraryLayout() {
 // Column headers for the wide song list. Clicking one sorts by it (year
 // toggles direction); the active column is highlighted.
 const LIST_COLS = [
-  { key: "title", label: "Title", sort: "title" },
-  { key: "orq", label: "Orchestra", sort: "orq" },
-  { key: "singer", label: "Singer", sort: "singer" },
-  { key: "genre", label: "Style", sort: "genre" },
-  { key: "yr", label: "Year", sort: "year_asc" },
-  { key: "du", label: "Time", sort: "dur_desc" },
+  { key: "title", labelKey: "parts.title", sort: "title" },
+  { key: "orq", labelKey: "parts.orchestra", sort: "orq" },
+  { key: "singer", labelKey: "parts.singer", sort: "singer" },
+  { key: "genre", labelKey: "parts.style", sort: "genre" },
+  { key: "yr", labelKey: "parts.year", sort: "year_asc" },
+  { key: "du", labelKey: "parts.time", sort: "dur_desc" },
 ];
 function SongListHead({ sort, setSort }) {
   return (
@@ -1204,7 +1232,7 @@ function SongListHead({ sort, setSort }) {
         const next = c.key === "yr" && sort === "year_asc" ? "year_desc" : c.sort;
         return (
           <button key={c.key} type="button" className={"c-" + c.key + (on ? " on" : "")} onClick={() => setSort(next)}>
-            {c.label}{c.key === "yr" && on ? (sort === "year_asc" ? " ↑" : " ↓") : ""}
+            {tr(c.labelKey)}{c.key === "yr" && on ? (sort === "year_asc" ? " ↑" : " ↓") : ""}
           </button>
         );
       })}
@@ -1226,7 +1254,7 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
   // starts with every folder closed; otherwise the top-level folders open.
   const collapseDefault = useCollapseFoldersByDefault();
   const [openSet, setOpenSet] = useState(() => collapseDefault ? new Set() : new Set(tree.map((n) => n.path)));
-  const filterOptions = useMemo(() => buildFilterOptions(songs, filters, includeCortinas), [songs, filters, includeCortinas]);
+  const filterOptions = useMemo(() => buildFilterOptions(songs, filters, includeCortinas), [songs, filters, includeCortinas, I18N.locale]);
   const setFiltersSafe = (next) => setFilters(sanitizeFilters(next, songs, includeCortinas));
 
   // Seed the open state once the tree has loaded (it arrives async). With
@@ -1287,7 +1315,7 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
       if (cmp) list.sort(cmp);
       const h = listCols === "wide" ? ROW_H.listSong : ROW_H.song;
       const rows = list.map((s) => ({ kind: "song", key: "s:" + s.id, song: s, depth: 0, h }));
-      return { rows, songCount: rows.length, groupCount: 0, openable: [], noun: "songs" };
+      return { rows, songCount: rows.length, groupCount: 0, openable: [] };
     }
     const rows = [];
     const openable = [];
@@ -1310,7 +1338,7 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
     walk(pruned, 0);
     const songCount = pruned.reduce((a, n) => a + countSongs(n), 0);
     const folderCount = rows.reduce((a, r) => a + (r.kind === "folder" ? 1 : 0), 0);
-    return { rows, songCount, groupCount: folderCount, openable, noun: "folders" };
+    return { rows, songCount, groupCount: folderCount, openable };
   }, [tree, songs, query, sort, openSet, searching, isList, listCols]);
 
   const rows = model.rows;
@@ -1388,10 +1416,10 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
   const toggleAll = () => setOpenSet(anyOpen ? new Set() : new Set(model.openable));
 
   const countLabel = model.songCount === 0
-    ? (searching ? "No matches" : "")
+    ? (searching ? tr("parts.noMatches") : "")
     : searching || isList
-      ? `${model.songCount} song${model.songCount === 1 ? "" : "s"}`
-      : `${model.songCount} song${model.songCount === 1 ? "" : "s"} · ${model.groupCount} ${model.noun}`;
+      ? tr("parts.songCount", { count: model.songCount })
+      : `${tr("parts.songCount", { count: model.songCount })} · ${tr("parts.folderCount", { count: model.groupCount })}`;
 
   const renderRow = (r) => {
     if (r.kind === "folder") {
@@ -1426,7 +1454,7 @@ function LibraryBrowser({ filters, setFilters, query, preview, onFolderContext, 
       <div className="tv-treewrap">
         <div className="tv-tree-scroll" ref={scrollRef}>
           {rows.length === 0 ? (
-            <div className="tp-empty">{searching ? "Nothing matches your search." : isList ? "No songs in your library yet." : "No folders in your library yet."}</div>
+            <div className="tp-empty">{searching ? tr("parts.nothingMatches") : isList ? tr("parts.noSongsInLibrary") : tr("parts.noFoldersInLibrary")}</div>
           ) : (
             <>
               {showListHead && <SongListHead sort={sort} setSort={setSort} />}
@@ -1480,7 +1508,7 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, library
   // Distinct orchestras/singers already in the library, for the bulk set-value
   // pickers (the DJ can also type a new one). INSTRUMENTAL isn't a real singer
   // name — it's the "no singer" state, offered as the picker's clear row.
-  const bulkOpts = useMemo(() => buildFilterOptions(songs), [songs]);
+  const bulkOpts = useMemo(() => buildFilterOptions(songs), [songs, I18N.locale]);
   const { ask, modal } = useConfirm();
 
   // Clamp to the viewport so the menu never opens off the right/bottom edge.
@@ -1529,10 +1557,10 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, library
     const shrunk = affected.length - emptied.length;
     closeMenu();
     ask({
-      title: "Remove this folder?",
+      title: tr("parts.removeFolderTitle"),
       message: (
         <>
-          <div>Remove {n} song{n === 1 ? "" : "s"} from your library? Your files stay on disk.</div>
+          <div>{tr("parts.removeSongsFromLibrary", { count: n })}</div>
           {affected.length > 0 && (
             <div className="tp-modal-note">
               <TandaImpact emptied={emptied} shrunk={shrunk} />
@@ -1540,7 +1568,7 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, library
           )}
         </>
       ),
-      confirmLabel: "Remove folder",
+      confirmLabel: tr("parts.removeFolder"),
       onConfirm: () => Store.deleteFolder(node),
     });
   };
@@ -1558,13 +1586,13 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, library
     const shrunk = affected.length - emptied.length;
     closeMenu();
     ask({
-      title: n === 1 ? "Delete this song?" : `Delete ${n} songs?`,
+      title: n === 1 ? tr("parts.deleteSongTitle") : tr("parts.deleteSongsTitle", { count: n }),
       message: (
         <>
           <div>
             {n === 1 && oneTitle
-              ? <>Remove “{oneTitle}” from your library? Your file stays on disk.</>
-              : <>Remove {n} songs from your library? Your files stay on disk.</>}
+              ? tr("parts.removeSongNamed", { title: oneTitle })
+              : tr("parts.removeSongsFromLibrary", { count: n })}
           </div>
           {affected.length > 0 && (
             <div className="tp-modal-note">
@@ -1573,7 +1601,7 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, library
           )}
         </>
       ),
-      confirmLabel: n === 1 ? "Delete song" : `Delete ${n} songs`,
+      confirmLabel: n === 1 ? tr("parts.deleteSong") : tr("parts.deleteSongs", { count: n }),
       onConfirm: () => { Store.deleteSongs(list); clearSelection(); },
     });
   };
@@ -1617,13 +1645,13 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, library
           <div className="tv-ctx-head">
             <span className="fic"><I.folder s={14} /></span>
             <span className="nm" title={menu.node.name}>{menu.node.name}</span>
-            <span className="ct">{menuCount} song{menuCount === 1 ? "" : "s"}</span>
+            <span className="ct">{tr("parts.songCount", { count: menuCount })}</span>
           </div>
           <button className="tv-ctx-item" onClick={() => { const n = menu.node; closeMenu(); Store.setFolderCortina(n, !folderIsCortina); }}>
-            <I.curtain s={15} /> {folderIsCortina ? "Unmark as cortinas" : "Mark folder as cortinas"}
+            <I.curtain s={15} /> {folderIsCortina ? tr("parts.unmarkAsCortinas") : tr("parts.markFolderAsCortinas")}
           </button>
           <button className="tv-ctx-item del" onClick={() => requestDelete(menu.node)}>
-            <I.trash s={15} /> Remove folder from library
+            <I.trash s={15} /> {tr("parts.removeFolderFromLibrary")}
           </button>
         </>
       ) : multi ? (
@@ -1645,9 +1673,9 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, library
         <>
           <div className="tv-ctx-head">
             <span className="fic"><I.note s={14} /></span>
-            <span className="nm">{songIds.length} songs selected</span>
+            <span className="nm">{tr("parts.songsSelected", { count: songIds.length })}</span>
           </div>
-          <div className="tv-ctx-label">Set genre</div>
+          <div className="tv-ctx-label">{tr("parts.setGenre")}</div>
           <div className="tv-ctx-genres">
             {genreOpts.map((g) => (
               <button key={g} className="tv-ctx-genre"
@@ -1657,16 +1685,16 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, library
             ))}
           </div>
           <button className="tv-ctx-item" onClick={() => setBulkField("orq")}>
-            <I.wave s={15} /> Set orchestra…
+            <I.wave s={15} /> {tr("parts.menuSetOrchestra")}
           </button>
           <button className="tv-ctx-item" onClick={() => setBulkField("singer")}>
-            <I.note s={15} /> Set singer…
+            <I.note s={15} /> {tr("parts.menuSetSinger")}
           </button>
           <button className="tv-ctx-item" onClick={() => { const ids = songIds; closeMenu(); Store.setSongCortina(ids, !selAllCortina); }}>
-            <I.curtain s={15} /> {selAllCortina ? "Unmark as cortinas" : "Mark as cortinas"}
+            <I.curtain s={15} /> {selAllCortina ? tr("parts.unmarkAsCortinas") : tr("parts.markAsCortinas")}
           </button>
           <button className="tv-ctx-item del" onClick={() => requestDeleteSongs(songIds)}>
-            <I.trash s={15} /> Delete {songIds.length} songs
+            <I.trash s={15} /> {tr("parts.deleteSongs", { count: songIds.length })}
           </button>
         </>
         )
@@ -1677,13 +1705,13 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, library
             <span className="nm" title={menu.song.title}>{menu.song.title}</span>
           </div>
           <button className="tv-ctx-item" onClick={() => { const id = menu.song.id; closeMenu(); setEditingId(id); }}>
-            <I.pencil s={15} /> Edit song
+            <I.pencil s={15} /> {tr("parts.editSong")}
           </button>
           <button className="tv-ctx-item" onClick={() => { const sg = menu.song; closeMenu(); Store.setSongCortina([sg.id], !sg.isCortina); }}>
-            <I.curtain s={15} /> {menu.song.isCortina ? "Unmark as cortina" : "Flag as cortina"}
+            <I.curtain s={15} /> {menu.song.isCortina ? tr("parts.unmarkAsCortina") : tr("parts.flagAsCortina")}
           </button>
           <button className="tv-ctx-item del" onClick={() => requestDeleteSongs([menu.song.id], menu.song.title)}>
-            <I.trash s={15} /> Delete song
+            <I.trash s={15} /> {tr("parts.deleteSong")}
           </button>
         </>
       )}
@@ -1780,7 +1808,7 @@ function buildTandaFilterOptions(tandas, filters = EMPTY_TANDA_SEARCH) {
     orchestras: [...orqs].sort(cmp),
     singers: [...singers].sort(cmp),
     types: [...types].sort((a, b) =>
-      ((GENRE_ORDER[genreLabel(a)] ?? 99) - (GENRE_ORDER[genreLabel(b)] ?? 99)) || cmp(genreLabel(a), genreLabel(b)))
+      (genreOrder(a) - genreOrder(b)) || cmp(genreLabel(a), genreLabel(b)))
       .map((v) => ({ value: v, label: genreLabel(v) })),
     years: [...years].sort((a, b) => parseInt(b, 10) - parseInt(a, 10)),
     moods: [...moods].sort(cmp),
@@ -1860,32 +1888,32 @@ function TandaSearchBar({ filters, onChange, options, countLabel }) {
         <I.search s={15} />
         <input ref={inputRef} value={filters.text}
           onChange={(e) => set("text", e.target.value)}
-          placeholder="Search tandas by name, orchestra, singer…" />
+          placeholder={tr("parts.searchTandas")} />
         {filters.text ? (
-          <button type="button" className="tv-search-clear" onClick={clearText} title="Clear search">
+          <button type="button" className="tv-search-clear" onClick={clearText} title={tr("parts.clearSearch")}>
             <I.x s={13} />
           </button>
         ) : null}
       </label>
       <div className="tv-search-toolbar">
         <div className="tv-search-filters">
-          <SearchableSelect placeholder="Orchestra" allLabel="All orchestras" value={filters.orq}
+          <SearchableSelect facet="orq" value={filters.orq}
             onChange={(v) => set("orq", v)} options={options.orchestras}
             disabled={hasFilters && options.orchestras.length === 0} />
-          <SearchableSelect placeholder="Singer" allLabel="All singers" value={filters.singer}
+          <SearchableSelect facet="singer" value={filters.singer}
             onChange={(v) => set("singer", v)} options={options.singers}
             disabled={hasFilters && options.singers.length === 0} />
-          <SearchableSelect placeholder="Type" allLabel="All types" value={filters.type}
+          <SearchableSelect facet="type" value={filters.type}
             onChange={(v) => set("type", v)} options={options.types}
             disabled={hasFilters && options.types.length === 0} />
-          <SearchableSelect placeholder="Year" allLabel="All years" value={filters.year}
+          <SearchableSelect facet="year" value={filters.year}
             onChange={(v) => set("year", v)} options={options.years}
             disabled={hasFilters && options.years.length === 0} />
-          <SearchableSelect placeholder="Mood" allLabel="All moods" value={filters.mood}
+          <SearchableSelect facet="mood" value={filters.mood}
             onChange={(v) => set("mood", v)} options={options.moods}
             disabled={hasFilters && options.moods.length === 0} />
           {hasFilters ? (
-            <button type="button" className="tv-search-reset" onClick={clearFilters}>Clear filters</button>
+            <button type="button" className="tv-search-reset" onClick={clearFilters}>{tr("parts.clearFilters")}</button>
           ) : null}
         </div>
         <div className="tv-search-actions">
@@ -1930,8 +1958,8 @@ function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, on
         <div className="tv-tcard-orq">
           {suggested && (
             <div className={"tv-suggest-pill" + (t.saved ? " is-saved" : "")}
-              title={t.saved ? "Already in your tandas" : "Suggested from songs in your library — save it to keep, or dismiss it"}>
-              {t.saved ? "Saved" : "Suggested"}
+              title={t.saved ? tr("parts.alreadyInYourTandas") : tr("parts.suggestedHint")}>
+              {t.saved ? tr("parts.saved") : tr("parts.suggested")}
             </div>
           )}
           <div className="o">{displayName}</div>
@@ -1961,26 +1989,26 @@ function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, on
         })}
       </div>
       <div className="tv-tcard-foot">
-        <div className="tv-tcard-total">{t.songs.length} songs · <b>{m.total}</b></div>
+        <div className="tv-tcard-total">{tr("parts.cardSongCount", { count: t.songs.length })} · <b>{m.total}</b></div>
         {onPlay && (
           <button className="tv-tcbtn pl-play" onClick={(e) => { e.stopPropagation(); onPlay(t); }} disabled={!t.songs.length}
-            title={viaMonitor ? "Pre-listen to full tanda in headphones" : "Play this tanda"}>
-            {viaMonitor ? <I.headphones s={13} /> : <I.play s={13} />} Play tanda
+            title={viaMonitor ? tr("parts.preListenFullTanda") : tr("parts.playThisTanda")}>
+            {viaMonitor ? <I.headphones s={13} /> : <I.play s={13} />} {tr("parts.playTanda")}
           </button>
         )}
         {suggested ? (
           <>
             {t.saved ? (
-              <span className="tv-tcbtn save is-saved" title="Already in your tandas"><I.check s={14} /> Saved</span>
+              <span className="tv-tcbtn save is-saved" title={tr("parts.alreadyInYourTandas")}><I.check s={14} /> {tr("parts.saved")}</span>
             ) : (
-              <button className="tv-tcbtn save" onClick={() => onSave(t)} title="Save this tanda to your collection"><I.check s={14} /> Save</button>
+              <button className="tv-tcbtn save" onClick={() => onSave(t)} title={tr("parts.saveTandaHint")}><I.check s={14} /> {tr("parts.save")}</button>
             )}
-            <button className="tv-tcbtn del" onClick={() => onDismiss(t)} title="Dismiss this suggestion"><I.x s={15} /></button>
+            <button className="tv-tcbtn del" onClick={() => onDismiss(t)} title={tr("parts.dismissSuggestion")}><I.x s={15} /></button>
           </>
         ) : (
           <>
-            <button className="tv-tcbtn" onClick={() => onEdit(t)}><I.pencil s={14} /> Edit</button>
-            <button className="tv-tcbtn del" onClick={() => onDelete(t)} title="Delete tanda"><I.trash s={15} /></button>
+            <button className="tv-tcbtn" onClick={() => onEdit(t)}><I.pencil s={14} /> {tr("parts.edit")}</button>
+            <button className="tv-tcbtn del" onClick={() => onDelete(t)} title={tr("parts.deleteTanda")}><I.trash s={15} /></button>
           </>
         )}
       </div>
@@ -2006,36 +2034,36 @@ function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave
         <div className="tv-litem-id">
           {suggested && (
             <span className={"tv-suggest-pill" + (t.saved ? " is-saved" : "")}
-              title={t.saved ? "Already in your tandas" : "Suggested from songs in your library — save it to keep, or dismiss it"}>
-              {t.saved ? "Saved" : "Suggested"}
+              title={t.saved ? tr("parts.alreadyInYourTandas") : tr("parts.suggestedHint")}>
+              {t.saved ? tr("parts.saved") : tr("parts.suggested")}
             </span>
           )}
           <div className="tv-litem-name">{displayName}</div>
           {sub && <div className="tv-litem-sub">{sub}</div>}
           {t.tags && t.tags.length > 0 && <TagPills tags={t.tags} />}
         </div>
-        <div className="tv-litem-meta">{t.songs.length} {t.songs.length === 1 ? "song" : "songs"} · <b>{m.total}</b></div>
+        <div className="tv-litem-meta">{tr("parts.songCount", { count: t.songs.length })} · <b>{m.total}</b></div>
         <div className="tv-litem-actions">
           {onPlay && (
             <button className="tv-tcbtn pl-play" onClick={(e) => { e.stopPropagation(); onPlay(t); }} disabled={!t.songs.length}
-              title={viaMonitor ? "Pre-listen to full tanda in headphones" : "Play this tanda"}>
-              {viaMonitor ? <I.headphones s={13} /> : <I.play s={13} />} Play
+              title={viaMonitor ? tr("parts.preListenFullTanda") : tr("parts.playThisTanda")}>
+              {viaMonitor ? <I.headphones s={13} /> : <I.play s={13} />} {tr("parts.play")}
             </button>
           )}
           {suggested ? (
             <>
               {t.saved ? (
-                <span className="tv-tcbtn save is-saved" title="Already in your tandas"><I.check s={14} /> Saved</span>
+                <span className="tv-tcbtn save is-saved" title={tr("parts.alreadyInYourTandas")}><I.check s={14} /> {tr("parts.saved")}</span>
               ) : (
-                <button className="tv-tcbtn save" onClick={() => onSave(t)} title="Save this tanda to your collection"><I.check s={14} /> Save</button>
+                <button className="tv-tcbtn save" onClick={() => onSave(t)} title={tr("parts.saveTandaHint")}><I.check s={14} /> {tr("parts.save")}</button>
               )}
-              <button className="tv-tcbtn del" onClick={() => onDismiss(t)} title="Dismiss this suggestion"><I.x s={15} /></button>
+              <button className="tv-tcbtn del" onClick={() => onDismiss(t)} title={tr("parts.dismissSuggestion")}><I.x s={15} /></button>
             </>
           ) : (
             <>
               <TandaShareButton t={t} onShare={onShare} onUnshare={onUnshare} />
-              <button className="tv-tcbtn" onClick={() => onEdit(t)}><I.pencil s={14} /> Edit</button>
-              <button className="tv-tcbtn del" onClick={() => onDelete(t)} title="Delete tanda"><I.trash s={15} /></button>
+              <button className="tv-tcbtn" onClick={() => onEdit(t)}><I.pencil s={14} /> {tr("parts.edit")}</button>
+              <button className="tv-tcbtn del" onClick={() => onDelete(t)} title={tr("parts.deleteTanda")}><I.trash s={15} /></button>
             </>
           )}
         </div>
@@ -2070,13 +2098,13 @@ function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew
   useEffect(() => { setFilters(EMPTY_TANDA_SEARCH); }, [tab]);
   const debouncedText = useDebounced(filters.text, 150);
   const dropFilters = [filters.orq, filters.singer, filters.type, filters.year, filters.mood];
-  const options = useMemo(() => buildTandaFilterOptions(source, filters), [source, ...dropFilters]);
+  const options = useMemo(() => buildTandaFilterOptions(source, filters), [source, ...dropFilters, I18N.locale]);
   const setFiltersSafe = (next) => setFilters(sanitizeTandaFilters(next, source));
   const activeFilters = useMemo(() => ({ ...filters, text: debouncedText }), [debouncedText, ...dropFilters]);
-  const filtered = useMemo(() => searchTandas(source, activeFilters), [source, activeFilters]);
+  const filtered = useMemo(() => searchTandas(source, activeFilters), [source, activeFilters, I18N.locale]);
   const searching = tandaSearchActive(activeFilters);
   const countLabel = searching
-    ? (filtered.length ? `${filtered.length} tanda${filtered.length === 1 ? "" : "s"}` : "No matches")
+    ? (filtered.length ? tr("parts.tandaCount", { count: filtered.length }) : tr("parts.noMatches"))
     : "";
 
   // Pinned, non-scrolling header (same class the library search uses) so the
@@ -2087,7 +2115,7 @@ function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew
     </div>
   );
   const noMatch = (
-    <div className="tp-empty">No tandas match your search.</div>
+    <div className="tp-empty">{tr("parts.noTandasMatch")}</div>
   );
 
   // ---- Suggestions tab ----
@@ -2097,8 +2125,8 @@ function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew
         <div className="tv-manage">
           <div className="tv-empty-manage">
             <div className="ic"><I.spark s={26} /></div>
-            <h3>No suggestions yet</h3>
-            <p>We build these by matching classic tandas against your library. Import more music — or run Smart Organize so we can read your orchestras and years — and they'll show up here.</p>
+            <h3>{tr("parts.noSuggestionsTitle")}</h3>
+            <p>{tr("parts.noSuggestionsBody")}</p>
           </div>
         </div>
       );
@@ -2127,12 +2155,12 @@ function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew
       <div className="tv-manage">
         <div className="tv-empty-manage">
           <div className="ic"><I.scissor s={26} /></div>
-          <h3>No tandas yet</h3>
-          <p>Build your first tanda from the songs you imported{suggs.length ? ", or start from a suggestion" : ""}.</p>
+          <h3>{tr("parts.noTandasTitle")}</h3>
+          <p>{suggs.length ? tr("parts.buildFirstTandaOrSuggestion") : tr("parts.buildFirstTanda")}</p>
           <div className="tv-empty-actions">
-            <button className="tp-btn primary lg" onClick={onNew}><I.plus s={17} /> Build a tanda</button>
+            <button className="tp-btn primary lg" onClick={onNew}><I.plus s={17} /> {tr("parts.buildTanda")}</button>
             {suggs.length > 0 && (
-              <button className="tp-btn lg" onClick={onBrowseSuggestions}><I.spark s={16} /> Browse {suggs.length} suggestion{suggs.length === 1 ? "" : "s"}</button>
+              <button className="tp-btn lg" onClick={onBrowseSuggestions}><I.spark s={16} /> {tr("parts.browseSuggestions", { count: suggs.length })}</button>
             )}
           </div>
         </div>
@@ -2147,7 +2175,7 @@ function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew
           {filtered.length ? (
             <div className="tv-list">
               {filtered.map((t) => <TandaListItem key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} onPlay={onPlay} onShare={onShare} onUnshare={onUnshare} preview={preview} />)}
-              {!searching && <button className="tv-newrow" onClick={onNew}><I.plus s={17} /> New tanda</button>}
+              {!searching && <button className="tv-newrow" onClick={onNew}><I.plus s={17} /> {tr("parts.newTanda")}</button>}
             </div>
           ) : noMatch}
         </div>
@@ -2164,7 +2192,7 @@ function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew
             {!searching && (
               <button className="tv-newcard" onClick={onNew}>
                 <span className="ic"><I.plus s={22} /></span>
-                <span className="lb">New tanda</span>
+                <span className="lb">{tr("parts.newTanda")}</span>
               </button>
             )}
           </div>
