@@ -129,16 +129,18 @@ test('the profile picture can be one of the drawn ones, or an uploaded photo', a
   await expect(card.locator('img.cm-avatar')).toHaveAttribute('src', new RegExp(`/storage/v1/object/public/avatars/${ME}\\.jpg\\?v=\\d+$`));
   const stored = stub.uploads.get(`${ME}.jpg`)!;
   expect(stored.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff])); // a JPEG
-  expect(stub.profiles.get(ME)?.avatar_url).toContain(`/avatars/${ME}.jpg`);
+  // What is stored is "an upload", not a URL: the app builds that itself.
+  expect(stub.profiles.get(ME)?.avatar_url).toMatch(/^upload:\d+$/);
   // Everywhere the DJ appears, it is the photo now.
   await gotoView(page, 'Community');
   await expect(page.locator('.cm-me img.cm-avatar')).toBeVisible();
   await page.getByRole('button', {name: 'Edit profile'}).click();
 
-  // And it can be taken down again.
+  // And it can be taken down again — the file too, not just the link to it.
   await card.getByRole('button', {name: 'Remove photo'}).click();
   await expect(own).toHaveAttribute('data-preset', /^\d+$/);
   expect(stub.profiles.get(ME)?.avatar_url).toBeNull();
+  expect(stub.uploads.has(`${ME}.jpg`)).toBe(false);
 });
 
 test('the session survives a restart and is not stored in clear', async () => {

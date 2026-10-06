@@ -347,6 +347,14 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
         res.writeHead(200, {'content-type': 'image/jpeg'});
         return res.end(bytes);
       }
+      // remove(): DELETE …/object/avatars with {prefixes: [names]}; only your own file goes.
+      if (req.method === 'DELETE' && rest === 'avatars') {
+        const me = bearerUser(req);
+        if (!me) return json(res, 401, {statusCode: '401', error: 'Unauthorized', message: 'unauthorized'});
+        const names = Array.isArray(body.prefixes) ? (body.prefixes as unknown[]).map(String) : [];
+        const removed = names.filter(n => n === `${me}.jpg` && uploads.delete(n));
+        return json(res, 200, removed.map(name => ({name, bucket_id: 'avatars'})));
+      }
       if ((req.method === 'POST' || req.method === 'PUT') && rest.startsWith('avatars/')) {
         const me = bearerUser(req);
         if (!me) return json(res, 401, {statusCode: '401', error: 'Unauthorized', message: 'unauthorized'});
@@ -369,6 +377,7 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
         const author = eq(url, 'author_id');
         const onlyId = eq(url, 'id');
         const followedOnly = eq(url, 'author_followed') === 'true';
+        const savedOnly = eq(url, 'viewer_saved') === 'true';
         const kind = eq(url, 'kind');
         const ids = inList(url, 'id');
         // "orq_keys=cs.{pugliese}" → posts whose keys contain it.
@@ -381,6 +390,7 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
           .filter(p => !blocks.has(`${me}|${p.author_id}`))
           .filter(p => !author || p.author_id === author)
           .filter(p => !followedOnly || follows.has(`${me}|${p.author_id}`))
+          .filter(p => !savedOnly || saves.has(`${p.id}|${me}`))
           .filter(p => !kind || p.kind === kind)
           .filter(p => !onlyId || p.id === onlyId)
           .filter(p => !ids || ids.includes(p.id))
@@ -492,7 +502,9 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
       if (table === 'posts' && req.method === 'DELETE') {
         const id = eq(url, 'id');
         const i = posts.findIndex(p => p.id === id && p.author_id === me);
-        if (i >= 0) posts.splice(i, 1);
+        const gone = i >= 0 ? posts.splice(i, 1) : [];
+        // With `select`, like PostgREST, answer with the rows actually deleted.
+        if (url.searchParams.get('select')) return json(res, 200, gone.map(p => ({id: p.id})));
         return json(res, 204);
       }
       if ((table === 'post_likes' || table === 'saves') && req.method !== 'GET') {
@@ -518,6 +530,15 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
       if ((table === 'comments' || table === 'posts') && /profiles\(/.test(url.searchParams.get('select') ?? '')) {
         return json(res, 300, {code: 'PGRST201', message: 'Could not embed because more than one relationship was found'});
       }
+      // Plain id lookups: does a post exist, which of these did I write.
+      if (table === 'posts' && req.method === 'GET' && url.searchParams.get('select') === 'id') {
+        const one = eq(url, 'id');
+        const ids = inList(url, 'id');
+        const author = eq(url, 'author_id');
+        return json(res, 200, posts
+          .filter(p => (!one || p.id === one) && (!ids || ids.includes(p.id)) && (!author || p.author_id === author))
+          .map(p => ({id: p.id})));
+      }
       // The feed's comment preview: each post with its newest few comments.
       if (table === 'posts' && req.method === 'GET') {
         const ids = inList(url, 'id') ?? [];
@@ -526,7 +547,7 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
           id,
           comments: comments
             .filter(c => c.post_id === id && !blocks.has(`${me}|${c.author_id}`))
-            .sort((x, y) => y.created_at.localeCompare(x.created_at))
+            .sort((x, y) => y.created_at.localeCompare(x.created_at) || y.id.localeCompare(x.id))
             .slice(0, perPost)
             .map(commentRow),
         })));
@@ -534,12 +555,16 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
       // One page of a post's comments, newest first.
       if (table === 'comments' && req.method === 'GET') {
         const postId = eq(url, 'post_id');
-        const before = url.searchParams.get('created_at')?.replace(/^lt\./, '');
+        // The cursor, as the app sends it:
+        //   or=(created_at.lt."T",and(created_at.eq."T",id.lt.ID))
+        const cursor = /^\(created_at\.lt\."([^"]+)",and\(created_at\.eq\."[^"]+",id\.lt\.([\w-]+)\)\)$/.exec(url.searchParams.get('or') ?? '');
         const limit = Number(url.searchParams.get('limit') ?? 100);
+        // Timestamps compared as instants (the cursor may be written with +00:00).
+        const ms = (t: string) => Date.parse(t);
         const rows = comments
           .filter(c => c.post_id === postId && !blocks.has(`${me}|${c.author_id}`))
-          .filter(c => !before || c.created_at < before)
-          .sort((x, y) => y.created_at.localeCompare(x.created_at))
+          .filter(c => !cursor || ms(c.created_at) < ms(cursor[1]) || (ms(c.created_at) === ms(cursor[1]) && c.id < cursor[2]))
+          .sort((x, y) => y.created_at.localeCompare(x.created_at) || y.id.localeCompare(x.id))
           .slice(0, limit)
           .map(commentRow);
         return json(res, 200, rows);
@@ -558,9 +583,11 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
       }
       if (table === 'comments' && req.method === 'DELETE') {
         const id = eq(url, 'id');
-        for (let i = comments.length - 1; i >= 0; i--) {
-          const c = comments[i];
-          if ((c.id === id && c.author_id === me) || c.parent_id === id) comments.splice(i, 1);
+        // Your own comment only — and then its replies too, as the real cascade does.
+        if (comments.some(c => c.id === id && c.author_id === me)) {
+          for (let i = comments.length - 1; i >= 0; i--) {
+            if (comments[i].id === id || comments[i].parent_id === id) comments.splice(i, 1);
+          }
         }
         return json(res, 204);
       }

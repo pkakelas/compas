@@ -8,9 +8,11 @@ import {
   startCommunityStub,
   STUB_ACCOUNT,
   STUB_ANON_KEY,
+  STUB_LUCIA,
   STUB_LUCIA_POST,
   STUB_MARTA,
   STUB_MARTA_POST,
+  STUB_NEW_ACCOUNT,
   type CommunityStub,
 } from './helpers/community-stub.js';
 
@@ -318,7 +320,9 @@ test('likes, comments and replies reach the backend', async () => {
 });
 
 test('a long conversation loads a page at a time and scrolls inside the post', async () => {
-  // 30 more comments on the question, from the other DJ.
+  // 30 more comments on the question, from the other DJ. Ten of them (3–12)
+  // were made in the same instant, and the first page ends among them: none
+  // may be skipped on the way to the next page.
   const base = Date.parse('2026-01-01T12:00:00Z');
   for (let i = 1; i <= 30; i++) {
     stub.comments.push({
@@ -327,7 +331,7 @@ test('a long conversation loads a page at a time and scrolls inside the post', a
       parent_id: null,
       author_id: STUB_MARTA,
       body: `Bulk comment ${i}.`,
-      created_at: new Date(base + i * 60_000).toISOString(),
+      created_at: new Date(base + (i >= 3 && i <= 12 ? 12 : i) * 60_000).toISOString(),
     });
   }
   await page.getByRole('button', {name: 'Refresh'}).click();
@@ -348,6 +352,7 @@ test('a long conversation loads a page at a time and scrolls inside the post', a
   await lucia.getByRole('button', {name: 'View 8 earlier comments'}).click();
   await expect(lucia.locator('.cm-comment')).toHaveCount(31);
   await expect(lucia.locator('.cm-comment').first()).toContainText('A light vals');
+  for (let i = 1; i <= 30; i++) await expect(lucia.getByText(`Bulk comment ${i}.`, {exact: true})).toHaveCount(1);
   await expect(lucia.getByRole('button', {name: /earlier comment/})).toHaveCount(0);
 
   // Back to the single seeded comment for the tests that follow.
@@ -355,6 +360,34 @@ test('a long conversation loads a page at a time and scrolls inside the post', a
   stub.comments.splice(0, stub.comments.length, ...keep);
   await page.getByRole('button', {name: 'Refresh'}).click();
   await expect(lucia.getByRole('button', {name: /^Comment/})).toHaveText(/Comment\s*1$/);
+  await expect(lucia.locator('.cm-comment')).toHaveCount(1);
+});
+
+test('deleting a comment shows the count the backend has afterwards', async () => {
+  const lucia = post(STUB_LUCIA_POST);
+  await lucia.getByLabel('Write a comment').fill('I go for a milonga.');
+  await lucia.getByRole('button', {name: 'Post comment'}).click();
+  await expect(lucia.getByRole('button', {name: /^Comment/})).toHaveText(/Comment\s*2$/);
+  const mine = stub.comments.find(c => c.body === 'I go for a milonga.')!;
+
+  // Meanwhile, unseen here: Marta answers it twice, and Lucía adds a comment.
+  const later = (n: number) => new Date(Date.now() + n * 1000).toISOString();
+  stub.comments.push(
+    {id: 'eeeeeeee-eeee-4eee-8eee-000000000001', post_id: STUB_LUCIA_POST, parent_id: mine.id, author_id: STUB_MARTA, body: 'Brave.', created_at: later(1)},
+    {id: 'eeeeeeee-eeee-4eee-8eee-000000000002', post_id: STUB_LUCIA_POST, parent_id: mine.id, author_id: STUB_MARTA, body: 'Which one?', created_at: later(2)},
+    {id: 'eeeeeeee-eeee-4eee-8eee-000000000003', post_id: STUB_LUCIA_POST, parent_id: null, author_id: STUB_LUCIA, body: 'Thanks all!', created_at: later(3)},
+  );
+
+  // Deleting mine takes Marta's replies with it; the count is the backend's
+  // (the seeded comment and Lucía's), not a guess from what was loaded.
+  await lucia.locator('.cm-comment', {hasText: 'I go for a milonga.'}).getByRole('button', {name: 'Delete'}).click();
+  await page.getByRole('alertdialog').getByRole('button', {name: 'Delete comment'}).click();
+  await expect(lucia.getByRole('button', {name: /^Comment/})).toHaveText(/Comment\s*2$/);
+  expect(stub.comments.filter(c => c.post_id === STUB_LUCIA_POST).map(c => c.body)).toEqual(['A light vals. Nothing heavy.', 'Thanks all!']);
+
+  // Back to the single seeded comment for the tests that follow.
+  stub.comments.splice(stub.comments.findIndex(c => c.body === 'Thanks all!'), 1);
+  await page.getByRole('button', {name: 'Refresh'}).click();
   await expect(lucia.locator('.cm-comment')).toHaveCount(1);
 });
 
@@ -585,4 +618,37 @@ test('a tanda can be added to a post from the composer', async () => {
   await expect(first).toContainText('Trying this as an opener on Friday.');
   expect(myPost()).toMatchObject({kind: 'tanda', note: 'Trying this as an opener on Friday.'});
   await expect(page.locator('.cm-attached')).toHaveCount(0);
+});
+
+test('another account on this computer sees its own "Shared" markers', async () => {
+  // Test DJ's tanda is shared (by the test above). Someone else signs in here…
+  await gotoView(page, 'Tandas');
+  await expect(page.getByRole('button', {name: 'Shared', exact: true})).toBeVisible();
+  await gotoView(page, 'Settings');
+  await page.getByRole('button', {name: 'Sign out'}).click();
+  await gotoView(page, 'Community');
+  await page.getByRole('button', {name: 'Create an account'}).click();
+  await page.getByLabel('Email').fill(STUB_NEW_ACCOUNT.email);
+  await page.getByLabel('Password').fill(STUB_NEW_ACCOUNT.password);
+  await page.getByRole('button', {name: 'Create account', exact: true}).click();
+  await page.getByLabel('Confirmation code').fill(STUB_NEW_ACCOUNT.code);
+  await page.getByRole('button', {name: 'Confirm email'}).click();
+  await expect(page.locator('.cm-me-name')).toHaveText('New DJ');
+
+  // …and sees the tanda as not shared: Test DJ's post isn't theirs to take down.
+  await gotoView(page, 'Tandas');
+  await expect(page.getByRole('button', {name: 'Share', exact: true})).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Shared', exact: true})).toHaveCount(0);
+
+  // Back as Test DJ, the marker is there again, still pointing at their post.
+  await gotoView(page, 'Settings');
+  await page.getByRole('button', {name: 'Sign out'}).click();
+  await gotoView(page, 'Community');
+  await page.getByLabel('Email').fill(STUB_ACCOUNT.email);
+  await page.getByLabel('Password').fill(STUB_ACCOUNT.password);
+  await page.getByRole('button', {name: 'Sign in', exact: true}).click();
+  await expect(page.locator('.cm-me-name')).toHaveText('Test DJ');
+  await gotoView(page, 'Tandas');
+  await expect(page.getByRole('button', {name: 'Shared', exact: true})).toBeVisible();
+  expect(myPost()).toBeDefined();
 });

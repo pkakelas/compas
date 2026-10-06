@@ -315,6 +315,11 @@ const Store = {
     ]);
     _set({ tandas: tandas || [], playlists: playlists || [] });
   },
+  // Re-read the tandas (e.g. another Community account signed in, and with it
+  // a different set of "Shared" markers).
+  async reloadTandas() {
+    _set({ tandas: (await window.compas.listTandas()) || [] });
+  },
   // Optimistic local replacement used by the undo flow (no DB round-trip).
   setTandasLocal(tandas) {
     _set({ tandas });

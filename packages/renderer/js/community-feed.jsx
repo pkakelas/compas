@@ -202,7 +202,9 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
   const loadEarlier = async () => {
     if (loadingOlder) return;
     setLoadingOlder(true);
-    const res = await CommunityStore.comments(post.id, loaded.length ? loaded[0].createdAt : null);
+    // The cursor is the oldest comment shown, by time and id (two comments can
+    // share a timestamp).
+    const res = await CommunityStore.comments(post.id, loaded.length ? { createdAt: loaded[0].createdAt, id: loaded[0].id } : null);
     setLoadingOlder(false);
     if (!res.ok) { flash(res.error); return; }
     onChange(post.id, (p) => ({
@@ -238,14 +240,16 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
         : "It will be removed for everyone.",
       confirmLabel: "Delete comment",
       onConfirm: async () => {
-        const res = await CommunityStore.deleteComment(c.id);
+        const res = await CommunityStore.deleteComment(c.id, post.id);
         if (!res.ok) { flash(res.error); return; }
         onChange(post.id, (p) => {
+          // The backend's count after the delete: it also knows about the
+          // replies that went with the comment but were never loaded here.
           const gone = p.comments.filter((x) => x.id === c.id || x.parentId === c.id).length;
           return {
             ...p,
             comments: p.comments.filter((x) => x.id !== c.id && x.parentId !== c.id),
-            commentCount: Math.max(0, p.commentCount - gone),
+            commentCount: typeof res.commentCount === "number" ? res.commentCount : Math.max(0, p.commentCount - gone),
           };
         });
       },
@@ -746,9 +750,13 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
 
   const loadMore = async () => {
     if (loadingMore) return;
+    // Every new list (other scope, filter, order…) bumps `request`; a page
+    // that arrives after that belongs to the old list and is dropped.
+    const mine = request.current;
     setLoadingMore(true);
     const res = await CommunityStore.feed({ ...query(), offset: nextOffset });
     setLoadingMore(false);
+    if (mine !== request.current) return;
     if (res.ok) {
       setPosts((cur) => cur.concat(res.posts.filter((p) => !cur.some((c) => c.id === p.id))));
       setHasMore(res.hasMore); setNextOffset(res.nextOffset);

@@ -14,7 +14,10 @@ import {
 import {buildSharedTanda, matchSharedTanda, type MatchedTanda} from '../services/community-share.js';
 import {buildLibraryIndex} from '../services/suggest-tandas.js';
 import {
+  claimLegacyShares,
   clearSharedPost,
+  listLegacyShares,
+  setShareAccount,
   getLibrary,
   listCollectionTandas,
   setTandaSharedPost,
@@ -44,13 +47,8 @@ const COMMENT_PAGE = 20;
 const FOLLOW_PAGE = 30;
 // Profile pictures are stored this size, as JPEG.
 const AVATAR_SIZE = 256;
-// A picture reference as the backend accepts it: https (or a loopback http
-// backend, as the tests use), or one of the presets.
-const avatarRef = (v: unknown): string | null =>
-  typeof v === 'string' && v.length <= 2000
-  && (v.startsWith('https://') || /^http:\/\/(127\.0\.0\.1|localhost)[:/]/.test(v) || /^preset:\d{1,2}$/.test(v))
-    ? v
-    : null;
+// Turns a DJ's stored picture into what the renderer shows (CommunityService.avatarUrl).
+type AvatarOf = (userId: string, value: unknown) => string | null;
 
 /** A comment as the renderer shows it. */
 type FeedComment = {
@@ -81,7 +79,7 @@ type FeedPost = {
   comments: FeedComment[];
 };
 
-function toFeedComment(row: CommentRow, userId: string): FeedComment {
+function toFeedComment(row: CommentRow, userId: string, avatarOf: AvatarOf): FeedComment {
   return {
     id: row.id,
     parentId: row.parent_id,
@@ -92,7 +90,7 @@ function toFeedComment(row: CommentRow, userId: string): FeedComment {
       id: row.author_id,
       handle: str(row.author?.handle, 24),
       name: str(row.author?.display_name, 60) || 'DJ',
-      avatar: avatarRef(row.author?.avatar_url),
+      avatar: avatarOf(row.author_id, row.author?.avatar_url),
     },
   };
 }
@@ -107,14 +105,33 @@ export class CommunityModule implements AppModule {
   async enable({app}: ModuleContext): Promise<void> {
     await app.whenReady();
 
+    // "Shared" on a tanda is per account: follow whoever is signed in, and
+    // file any share recorded before that under the account that made it.
+    let account: string | null = null;
+    const followAccount = async (state: CommunityState): Promise<void> => {
+      const id = state.user?.id ?? null;
+      if (id === account) return;
+      account = id;
+      setShareAccount(id);
+      if (!id) return;
+      const legacy = listLegacyShares();
+      if (legacy.length) claimLegacyShares(id, await community.ownPostIds(legacy.map(l => l.postId)));
+    };
     const broadcast = (state: CommunityState): void => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) win.webContents.send('community:changed', state);
-      }
+      void followAccount(state).finally(() => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) win.webContents.send('community:changed', state);
+        }
+      });
     };
     const community = new CommunityService(app.getPath('userData'), broadcast);
+    const avatarOf: AvatarOf = (userId, value) => community.avatarUrl(userId, value);
 
-    ipcMain.handle('community:state', (): Promise<CommunityState> => community.getState());
+    ipcMain.handle('community:state', async (): Promise<CommunityState> => {
+      const state = await community.getState();
+      await followAccount(state);
+      return state;
+    });
 
     // Google sign-in happens in the system browser; bring Compás back to the
     // front once it finishes so the DJ isn't left looking at a browser tab.
@@ -293,7 +310,7 @@ export class CommunityModule implements AppModule {
                 handle: str(r.author_handle, 24),
                 name: str(r.author_name, 60) || 'DJ',
                 city: str(r.author_city, 60) || null,
-                avatar: avatarRef(r.author_avatar),
+                avatar: avatarOf(r.author_id, r.author_avatar),
               },
               tanda,
               localTandaId: localByPost.get(r.id) ?? null,
@@ -307,7 +324,7 @@ export class CommunityModule implements AppModule {
         const loaded = await community.listCommentPreviews(posts.map(p => p.id), COMMENT_PREVIEW);
         if (loaded.ok) {
           const byPost = new Map(posts.map(p => [p.id, p] as const));
-          for (const row of loaded.rows) byPost.get(row.post_id)?.comments.push(toFeedComment(row, state.user?.id ?? ''));
+          for (const row of loaded.rows) byPost.get(row.post_id)?.comments.push(toFeedComment(row, state.user?.id ?? '', avatarOf));
           // They arrive newest first; a conversation reads oldest first.
           for (const p of posts) p.comments.sort((x, y) => x.createdAt.localeCompare(y.createdAt));
         }
@@ -328,7 +345,7 @@ export class CommunityModule implements AppModule {
         key: `${r.kind}:${r.comment_id ?? `${r.post_id}:${r.actor_id}`}`,
         kind: r.kind === 'like' || r.kind === 'reply' || r.kind === 'welcome' || r.kind === 'follow' ? r.kind : 'comment',
         createdAt: r.created_at,
-        actor: {id: r.actor_id, name: str(r.actor_name, 60) || 'DJ', avatar: avatarRef(r.actor_avatar)},
+        actor: {id: r.actor_id, name: str(r.actor_name, 60) || 'DJ', avatar: avatarOf(r.actor_id, r.actor_avatar)},
         postId: r.post_id,
         postKind: r.post_kind === 'question' ? 'question' : 'tanda',
         postTitle: str(r.post_title, 120),
@@ -364,12 +381,16 @@ export class CommunityModule implements AppModule {
       const id = uuid(postId);
       if (!id) return BAD_REQUEST;
       const state = await community.getState();
-      const cursor = typeof before === 'string' ? before.slice(0, 40) : null;
+      // The oldest comment already shown: its time and id.
+      const b = before as {createdAt?: unknown; id?: unknown} | null;
+      const at = typeof b?.createdAt === 'string' && !Number.isNaN(Date.parse(b.createdAt)) ? b.createdAt.slice(0, 40) : null;
+      const cursorId = uuid(b?.id);
+      const cursor = at && cursorId ? {createdAt: at, id: cursorId} : null;
       const page = await community.listCommentsPage(id, cursor, COMMENT_PAGE + 1);
       if (!page.ok) return page;
       const comments = page.rows
         .slice(0, COMMENT_PAGE)
-        .map(row => toFeedComment(row, state.user?.id ?? ''))
+        .map(row => toFeedComment(row, state.user?.id ?? '', avatarOf))
         .reverse();
       return {ok: true, comments, hasMore: page.rows.length > COMMENT_PAGE};
     });
@@ -384,12 +405,13 @@ export class CommunityModule implements AppModule {
         const state = await community.getState();
         const added = await community.addComment(id, text, uuid(parentId));
         if (!added.ok) return added;
-        return {ok: true, comment: toFeedComment(added.row, state.user?.id ?? '')};
+        return {ok: true, comment: toFeedComment(added.row, state.user?.id ?? '', avatarOf)};
       },
     );
-    ipcMain.handle('community:deleteComment', (_event, commentId: unknown) => {
+    ipcMain.handle('community:deleteComment', (_event, commentId: unknown, postId: unknown) => {
       const id = uuid(commentId);
-      return id ? community.deleteComment(id) : BAD_REQUEST;
+      const post = uuid(postId);
+      return id && post ? community.deleteComment(id, post) : BAD_REQUEST;
     });
 
     // Deleting a post that one of the DJ's tandas was shared as also unmarks
@@ -444,7 +466,7 @@ export class CommunityModule implements AppModule {
           followed: !!r.viewer_follows,
           followsYou: !!r.follows_viewer,
           mine: r.id === got.userId,
-          avatar: avatarRef(r.avatar_url),
+          avatar: avatarOf(r.id, r.avatar_url),
         },
       };
     });
@@ -474,7 +496,7 @@ export class CommunityModule implements AppModule {
           city: str(r.profile!.city, 60) || null,
           followed: followed.has(r.profile!.id),
           mine: r.profile!.id === page.userId,
-          avatar: avatarRef(r.profile!.avatar_url),
+          avatar: avatarOf(r.profile!.id, r.profile!.avatar_url),
         }));
       return {ok: true, people, hasMore: page.rows.length > FOLLOW_PAGE, nextOffset: from + FOLLOW_PAGE};
     });

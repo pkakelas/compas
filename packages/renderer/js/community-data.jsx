@@ -21,8 +21,12 @@ function _cmApply(s) {
   const was = _cmState.user && _cmState.user.id;
   _cmSet({ loaded: true, configured: !!s.configured, user: s.user || null });
   const now = _cmState.user && _cmState.user.id;
-  // A different account (or none): its notifications, not the last one's.
-  if (now !== was) { if (now) _cmRefreshUnread(); else _cmSet({ unread: 0 }); }
+  // A different account (or none): its notifications, not the last one's, and
+  // its own "Shared" markers on the tandas.
+  if (now !== was) {
+    if (now) _cmRefreshUnread(); else _cmSet({ unread: 0 });
+    if (window.Store && Store.reloadTandas) Store.reloadTandas();
+  }
 }
 function _cmApi() { return window.compas && window.compas.community; }
 
@@ -116,7 +120,7 @@ const CommunityStore = {
   save: (postId, on) => _cmData("save", postId, on),
   comments: (postId, before) => _cmData("comments", postId, before || null),
   comment: (postId, body, parentId) => _cmData("comment", postId, body, parentId || null),
-  deleteComment: (commentId) => _cmData("deleteComment", commentId),
+  deleteComment: (commentId, postId) => _cmData("deleteComment", commentId, postId),
   report: (target, reason) => _cmData("report", target, reason),
   block: (userId) => _cmData("block", userId),
   profile: (userId) => _cmData("profile", userId),

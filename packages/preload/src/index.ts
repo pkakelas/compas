@@ -389,7 +389,7 @@ function communitySave(postId: string, on: boolean) {
 
 /** Earlier comments of a post, a page at a time. `before` is the created_at of
  *  the oldest comment already shown. Resolves to `{ok, comments, hasMore}`. */
-function communityComments(postId: string, before: string | null) {
+function communityComments(postId: string, before: {createdAt: string; id: string} | null) {
   return ipcRenderer.invoke('community:comments', postId, before);
 }
 
@@ -398,8 +398,8 @@ function communityComment(postId: string, body: string, parentId: string | null)
   return ipcRenderer.invoke('community:comment', postId, body, parentId);
 }
 
-function communityDeleteComment(commentId: string) {
-  return ipcRenderer.invoke('community:deleteComment', commentId);
+function communityDeleteComment(commentId: string, postId: string) {
+  return ipcRenderer.invoke('community:deleteComment', commentId, postId);
 }
 
 /** Delete one of the DJ's own posts. Resolves to `{ok, tandas}`. */

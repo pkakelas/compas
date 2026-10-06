@@ -183,6 +183,15 @@ function migrate(d: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_tanda_tags_label ON tanda_tags(label);
 
+    -- Community: the post each tanda was shared as, per account — two DJs who
+    -- sign in on the same computer each see only their own "Shared".
+    CREATE TABLE IF NOT EXISTS tanda_shares (
+      tanda_id INTEGER NOT NULL REFERENCES tandas(id) ON DELETE CASCADE,
+      user_id  TEXT NOT NULL,
+      post_id  TEXT NOT NULL,
+      PRIMARY KEY (tanda_id, user_id)
+    );
+
     CREATE TABLE IF NOT EXISTS library_roots (
       path     TEXT PRIMARY KEY,
       added_at INTEGER NOT NULL
@@ -221,7 +230,9 @@ function migrate(d: Database.Database): void {
   // playlist uses them.
   addColumns(d, 'tandas', [
     ['in_collection', 'INTEGER NOT NULL DEFAULT 1'],
-    // Community: id of the post a tanda was shared as (see services/community.ts).
+    // Community: id of the post a tanda was shared as, from before shares were
+    // kept per account (tanda_shares). Read once, then moved there by
+    // claimLegacyShares for the account that wrote the post.
     ['shared_post_id', 'TEXT'],
   ]);
   const addedSongColumns = addColumns(d, 'songs', [
@@ -606,6 +617,15 @@ export function getLibrary(): Library {
   return {tree, songs, totalSongs: songs.length, totalFolders, roots};
 }
 
+// The Community account signed in on this computer (null when none): the
+// "Shared" markers listTandas reports are this account's.
+let shareAccount: string | null = null;
+
+/** Set whose "Shared" markers listTandas reports. */
+export function setShareAccount(userId: string | null): void {
+  shareAccount = userId;
+}
+
 export function listTandas(): Tanda[] {
   const d = getDb();
   const tandaRows = d.prepare('SELECT * FROM tandas ORDER BY created_at').all() as {
@@ -624,13 +644,21 @@ export function listTandas(): Tanda[] {
   const tagStmt = d.prepare(
     'SELECT cat, label FROM tanda_tags WHERE tanda_id = ? ORDER BY position',
   );
+  const shares = new Map<number, string>();
+  if (shareAccount) {
+    const rows = d.prepare('SELECT tanda_id, post_id FROM tanda_shares WHERE user_id = ?').all(shareAccount) as {
+      tanda_id: number;
+      post_id: string;
+    }[];
+    for (const r of rows) shares.set(r.tanda_id, r.post_id);
+  }
   return tandaRows.map(t => ({
     id: String(t.id),
     name: t.name,
     songs: (songStmt.all(t.id) as SongRow[]).map(rowToSong),
     tags: tagStmt.all(t.id) as TandaTag[],
     inCollection: t.in_collection !== 0,
-    sharedPostId: t.shared_post_id ?? null,
+    sharedPostId: shares.get(t.id) ?? null,
   }));
 }
 
@@ -639,14 +667,49 @@ export function listCollectionTandas(): Tanda[] {
   return listTandas().filter(t => t.inCollection);
 }
 
-/** Record (or, with null, clear) the Community post a tanda was shared as. */
+/** Record (or, with null, clear) the post a tanda was shared as by the
+ *  signed-in account. */
 export function setTandaSharedPost(id: string, postId: string | null): void {
-  getDb().prepare('UPDATE tandas SET shared_post_id = ? WHERE id = ?').run(postId, Number(id));
+  if (!shareAccount) return;
+  const d = getDb();
+  if (postId) {
+    d.prepare('INSERT OR REPLACE INTO tanda_shares (tanda_id, user_id, post_id) VALUES (?, ?, ?)').run(
+      Number(id),
+      shareAccount,
+      postId,
+    );
+  } else {
+    d.prepare('DELETE FROM tanda_shares WHERE tanda_id = ? AND user_id = ?').run(Number(id), shareAccount);
+  }
 }
 
 /** Forget a Community post that no longer exists, whichever tanda pointed at it. */
 export function clearSharedPost(postId: string): void {
-  getDb().prepare('UPDATE tandas SET shared_post_id = NULL WHERE shared_post_id = ?').run(postId);
+  getDb().prepare('DELETE FROM tanda_shares WHERE post_id = ?').run(postId);
+}
+
+/** Shares recorded before they were kept per account: tanda id → post id. */
+export function listLegacyShares(): {tandaId: string; postId: string}[] {
+  const rows = getDb()
+    .prepare('SELECT id, shared_post_id FROM tandas WHERE shared_post_id IS NOT NULL')
+    .all() as {id: number; shared_post_id: string}[];
+  return rows.map(r => ({tandaId: String(r.id), postId: r.shared_post_id}));
+}
+
+/** File legacy shares under the account that wrote them (`owned` holds the
+ *  post ids that are the signed-in account's), and drop the old column's
+ *  value for those — the rest wait for their own account to sign in. */
+export function claimLegacyShares(userId: string, owned: Set<string>): void {
+  const d = getDb();
+  const insert = d.prepare('INSERT OR IGNORE INTO tanda_shares (tanda_id, user_id, post_id) VALUES (?, ?, ?)');
+  const clear = d.prepare('UPDATE tandas SET shared_post_id = NULL WHERE id = ?');
+  d.transaction(() => {
+    for (const {tandaId, postId} of listLegacyShares()) {
+      if (!owned.has(postId)) continue;
+      insert.run(Number(tandaId), userId, postId);
+      clear.run(Number(tandaId));
+    }
+  })();
 }
 
 /** Keep a playlist-only tanda in "My tandas". */

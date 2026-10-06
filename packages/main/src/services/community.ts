@@ -251,11 +251,19 @@ function debug(...args: unknown[]): void {
 
 const HANDLE_RE = /^[a-z0-9_]{3,24}$/;
 
-/** The picture an identity provider (Google) gave for the account, if any. */
+// Where a profile picture may come from (the backend enforces the same rule,
+// supabase/migrations/…_avatar_sources.sql): one of the app's drawn pictures,
+// the DJ's own upload, or a Google photo.
+const PRESET_RE = /^preset:\d{1,2}$/;
+const UPLOAD_RE = /^upload:(\d{1,20})$/;
+const GOOGLE_PHOTO_RE = /^https:\/\/lh\d{1,2}\.googleusercontent\.com\/[A-Za-z0-9_/=.~-]+$/;
+const isGooglePhoto = (v: unknown): v is string => typeof v === 'string' && v.length <= 2000 && GOOGLE_PHOTO_RE.test(v);
+
+/** The picture Google gave for the account, if any. */
 function googlePicture(meta: Record<string, unknown> | undefined): string | null {
   for (const key of ['avatar_url', 'picture']) {
     const v = meta?.[key];
-    if (typeof v === 'string' && v.startsWith('https://') && v.length <= 2000) return v;
+    if (isGooglePhoto(v)) return v;
   }
   return null;
 }
@@ -325,6 +333,20 @@ export class CommunityService {
     this.#onChange = onChange;
   }
 
+  /** What to show for a DJ's stored picture: a drawn one ("preset:<n>"), a
+   *  photo URL, or null (the app draws one from the id). An upload is only
+   *  ever the DJ's own file on this backend: its URL is built here from the
+   *  profile id, never taken from the database. */
+  avatarUrl(userId: string, value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    if (PRESET_RE.test(value) || isGooglePhoto(value)) return value;
+    const upload = UPLOAD_RE.exec(value);
+    if (upload && this.#config && /^[0-9a-f-]{36}$/i.test(userId)) {
+      return `${this.#config.url.replace(/\/+$/, '')}/storage/v1/object/public/avatars/${userId}.jpg?v=${upload[1]}`;
+    }
+    return null;
+  }
+
   #client(): SupabaseClient | null {
     if (!this.#config) return null;
     if (this.#clientInstance) return this.#clientInstance;
@@ -379,7 +401,7 @@ export class CommunityService {
         displayName: this.#profile?.displayName ?? null,
         city: this.#profile?.city ?? null,
         bio: this.#profile?.bio ?? null,
-        avatar: this.#profile?.avatar ?? null,
+        avatar: this.avatarUrl(authUser.id, this.#profile?.avatar),
         googleAvatar: googlePicture(authUser.user_metadata),
       },
     };
@@ -567,7 +589,7 @@ export class CommunityService {
     if (!userId) return {ok: false, error: 'Sign in first.'};
     // Only a preset, or the picture Google gave this very account.
     const google = googlePicture(session.session?.user.user_metadata);
-    const avatar = value && /^preset:\d{1,2}$/.test(value) ? value : value && value === google ? value : null;
+    const avatar = value && PRESET_RE.test(value) ? value : value && value === google ? value : null;
     if (value && !avatar) return {ok: false, error: 'That picture can’t be used.'};
     return this.#saveAvatar(client, userId, avatar);
   }
@@ -583,12 +605,25 @@ export class CommunityService {
     const name = `${userId}.jpg`;
     const {error} = await client.storage.from('avatars').upload(name, jpeg, {contentType: 'image/jpeg', upsert: true});
     if (error) return {ok: false, error: friendly(error, 'Couldn’t upload the picture. Try again.')};
-    // A new version under the same name: the query string makes caches fetch it.
-    const url = client.storage.from('avatars').getPublicUrl(name).data.publicUrl + '?v=' + Date.now();
-    return this.#saveAvatar(client, userId, url);
+    // A new version under the same name: the version goes in the URL, so caches
+    // fetch the new picture.
+    return this.#saveAvatar(client, userId, `upload:${Date.now()}`);
+  }
+
+  /** Remove the DJ's uploaded photo from the public bucket. Nothing there is
+   *  fine; a failure is reported, so a photo is never left behind silently. */
+  async #removeUpload(client: SupabaseClient, userId: string): Promise<{ok: true} | {ok: false; error: string}> {
+    const {error} = await client.storage.from('avatars').remove([`${userId}.jpg`]);
+    if (error) return {ok: false, error: friendly(error, 'Couldn’t remove your photo. Try again.')};
+    return {ok: true};
   }
 
   async #saveAvatar(client: SupabaseClient, userId: string, avatar: string | null): Promise<CommunityResult> {
+    // Moving away from an uploaded photo deletes the file, not just the link to it.
+    if (!avatar?.startsWith('upload:') && this.#profile?.userId === userId && this.#profile.avatar?.startsWith('upload:')) {
+      const removed = await this.#removeUpload(client, userId);
+      if (!removed.ok) return removed;
+    }
     const {data: row, error} = await client
       .from('profiles')
       .update({avatar_url: avatar})
@@ -603,10 +638,16 @@ export class CommunityService {
     return {ok: true, state};
   }
 
-  /** Permanently delete the account and everything it posted, then sign out. */
+  /** Permanently delete the account and everything it posted, then sign out.
+   *  An uploaded photo is removed first: it lives in a public bucket, outside
+   *  what deleting the account's rows takes with it. */
   async deleteAccount(): Promise<CommunityResult> {
     const client = this.#client();
     if (!client) return NOT_CONFIGURED;
+    const userId = await this.#userId(client);
+    if (!userId) return {ok: false, error: 'Sign in first.'};
+    const removed = await this.#removeUpload(client, userId);
+    if (!removed.ok) return removed;
     const {error} = await client.rpc('delete_my_account');
     if (error) return {ok: false, error: friendly(error, 'Couldn’t delete the account. Try again.')};
     await client.auth.signOut({scope: 'local'});
@@ -634,13 +675,29 @@ export class CommunityService {
   }
 
   /** Delete one of the signed-in DJ's own posts. A post that is already gone
-   *  counts as deleted. */
+   *  counts as deleted; one that is still there afterwards belongs to another
+   *  account (the rules let a DJ delete only their own), and says so. */
   async deletePost(id: string): Promise<Outcome<object>> {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
-    const {error} = await client.from('posts').delete().eq('id', id);
+    const {data, error} = await client.from('posts').delete().eq('id', id).select('id');
     if (error) return {ok: false, error: friendly(error, 'Couldn’t delete that post. Try again.')};
+    if ((data ?? []).length === 0) {
+      const {data: still, error: checkError} = await client.from('posts').select('id').eq('id', id).limit(1);
+      if (checkError) return {ok: false, error: friendly(checkError, 'Couldn’t delete that post. Try again.')};
+      if ((still ?? []).length > 0) return {ok: false, error: 'That post was shared from another Community account.'};
+    }
     return {ok: true};
+  }
+
+  /** Which of these posts the signed-in DJ wrote. */
+  async ownPostIds(ids: string[]): Promise<Set<string>> {
+    const client = this.#client();
+    if (!client || ids.length === 0) return new Set();
+    const userId = await this.#userId(client);
+    if (!userId) return new Set();
+    const {data} = await client.from('posts').select('id').in('id', ids).eq('author_id', userId);
+    return new Set((data ?? []).map(r => r.id as string));
   }
 
   /** One page of the feed: `limit` posts starting at `offset` in the chosen
@@ -663,24 +720,14 @@ export class CommunityService {
     const userId = await this.#userId(client);
     if (!userId) return {ok: false, error: 'Sign in first.'};
 
-    let savedIds: string[] | null = null;
-    if (opts.scope === 'saved') {
-      const {data: saved, error: savedError} = await client
-        .from('saves')
-        .select('post_id')
-        .order('created_at', {ascending: false})
-        .limit(200);
-      if (savedError) return {ok: false, error: friendly(savedError, 'Couldn’t load your saved posts.')};
-      savedIds = (saved ?? []).map(r => r.post_id as string);
-      if (savedIds.length === 0) return {ok: true, rows: [], userId};
-    }
-
     const run = (sort: FeedSort) => {
       let query = client.from('feed_posts').select('*');
       if (opts.scope === 'mine') query = query.eq('author_id', userId);
       if (opts.scope === 'following') query = query.eq('author_followed', true);
       if (opts.author) query = query.eq('author_id', opts.author);
-      if (savedIds) query = query.in('id', savedIds);
+      // Saved posts are filtered by the view itself, so they page like any other
+      // list, however many there are.
+      if (opts.scope === 'saved') query = query.eq('viewer_saved', true);
       if (opts.kind) query = query.eq('kind', opts.kind);
       if (opts.orq) query = query.contains('orq_keys', [opts.orq]);
       if (opts.id) query = query.eq('id', opts.id);
@@ -777,20 +824,33 @@ export class CommunityService {
       .select(`id, comments!post_id(${COMMENT_COLUMNS})`)
       .in('id', postIds)
       .order('created_at', {referencedTable: 'comments', ascending: false})
+      .order('id', {referencedTable: 'comments', ascending: false})
       .limit(perPost, {referencedTable: 'comments'});
     if (error) return {ok: false, error: friendly(error, 'Couldn’t load comments.')};
     const rows = ((data ?? []) as unknown as {comments: CommentRow[] | null}[]).flatMap(p => p.comments ?? []);
     return {ok: true, rows};
   }
 
-  /** One page of a post's comments, newest first, older than `before` (the
-   *  created_at of the oldest comment already shown). */
-  async listCommentsPage(postId: string, before: string | null, limit: number): Promise<Outcome<{rows: CommentRow[]}>> {
+  /** One page of a post's comments, newest first, before `before` (the oldest
+   *  comment already shown). Ordered by time and then id, and the cursor has
+   *  both, so comments made in the same instant are neither skipped nor
+   *  repeated across pages. */
+  async listCommentsPage(
+    postId: string,
+    before: {createdAt: string; id: string} | null,
+    limit: number,
+  ): Promise<Outcome<{rows: CommentRow[]}>> {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
     let query = client.from('comments').select(COMMENT_COLUMNS).eq('post_id', postId);
-    if (before) query = query.lt('created_at', before);
-    const {data, error} = await query.order('created_at', {ascending: false}).limit(limit);
+    if (before) {
+      const at = `"${before.createdAt}"`;
+      query = query.or(`created_at.lt.${at},and(created_at.eq.${at},id.lt.${before.id})`);
+    }
+    const {data, error} = await query
+      .order('created_at', {ascending: false})
+      .order('id', {ascending: false})
+      .limit(limit);
     if (error) return {ok: false, error: friendly(error, 'Couldn’t load comments.')};
     return {ok: true, rows: (data ?? []) as unknown as CommentRow[]};
   }
@@ -807,12 +867,17 @@ export class CommunityService {
     return {ok: true, row: data as unknown as CommentRow};
   }
 
-  async deleteComment(id: string): Promise<Outcome<object>> {
+  /** Delete a comment (and with it, its replies). Resolves to the post's
+   *  comment count afterwards — the backend's own, since replies not loaded
+   *  here go too — or null if it couldn't be read. */
+  async deleteComment(id: string, postId: string): Promise<Outcome<{commentCount: number | null}>> {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
     const {error} = await client.from('comments').delete().eq('id', id);
     if (error) return {ok: false, error: friendly(error, 'Couldn’t delete that comment. Try again.')};
-    return {ok: true};
+    const {data} = await client.from('feed_posts').select('comment_count').eq('id', postId).limit(1);
+    const count = Number(data?.[0]?.comment_count);
+    return {ok: true, commentCount: Number.isFinite(count) ? Math.max(0, count) : null};
   }
 
   /** Like/unlike or save/unsave a post. Repeating the current state is fine. */
