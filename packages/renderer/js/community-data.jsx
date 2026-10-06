@@ -96,6 +96,8 @@ const CommunityStore = {
   signOut: () => _cmCall("signOut"),
   updateProfile: (input) => _cmCall("updateProfile", input),
   deleteAccount: () => _cmCall("deleteAccount"),
+  avatarSet: (value) => _cmCall("avatarSet", value),
+  avatarPick: () => _cmCall("avatarPick"),
 
   sharePreview: (tandaId, includeTags) => _cmData("sharePreview", tandaId, includeTags),
   shareTanda: (tandaId, note, includeTags) => _cmDataTandas("share", tandaId, note, includeTags),
@@ -117,6 +119,9 @@ const CommunityStore = {
   deleteComment: (commentId) => _cmData("deleteComment", commentId),
   report: (target, reason) => _cmData("report", target, reason),
   block: (userId) => _cmData("block", userId),
+  profile: (userId) => _cmData("profile", userId),
+  follow: (userId, on) => _cmData("follow", userId, on),
+  follows: (userId, which, offset) => _cmData("follows", userId, which, offset || 0),
 };
 
 /* Switch the app to another top-level view from anywhere (AppBody listens). */
@@ -139,12 +144,61 @@ function communityAgo(iso) {
   return new Date(then).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
-/* A steady colour for each DJ's avatar, picked from their id, so people are
-   recognisable down the feed without photos. */
-function communityAvatarClass(id) {
+/* ---------- profile pictures ----------
+   A DJ's picture is a photo (their Google photo, or one they uploaded — an
+   https URL) or one of the pictures the app draws itself ("preset:<n>"). With
+   nothing chosen, the app picks one of those from the DJ's id, so everyone has
+   a steady, recognisable picture from the start. */
+const CM_AVATAR_COUNT = 16;
+const CM_AVATAR_PALETTES = [
+  ["#C8463F", "#F7E8DA"], ["#2F5D8A", "#DCE9F5"], ["#3B7D5D", "#E3F1E6"], ["#C98B2C", "#FBF1DC"],
+  ["#6C4B9F", "#EEE7F8"], ["#1F7B8D", "#DDF2F5"], ["#B94B7B", "#F9E4EE"], ["#454C56", "#E7E9ED"],
+];
+function communityPresetFor(id, avatar) {
+  const m = /^preset:(\d{1,2})$/.exec(avatar || "");
+  if (m && Number(m[1]) < CM_AVATAR_COUNT) return Number(m[1]);
   let h = 0;
   for (const ch of String(id || "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return "av-" + (h % 6);
+  return h % CM_AVATAR_COUNT;
+}
+/* One of the drawn pictures: a colour and a motif — a record, a moon, dots,
+   or waves. */
+function CommunityPresetArt({ k }) {
+  const [bg, fg] = CM_AVATAR_PALETTES[k % CM_AVATAR_PALETTES.length];
+  const motif = (k + Math.floor(k / CM_AVATAR_PALETTES.length)) % 4;
+  return (
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+      <circle cx="32" cy="32" r="32" fill={bg} />
+      {motif === 0 && (
+        <g fill="none" stroke={fg} strokeWidth="3.5">
+          <circle cx="32" cy="32" r="22" /><circle cx="32" cy="32" r="13" /><circle cx="32" cy="32" r="4" fill={fg} stroke="none" />
+        </g>
+      )}
+      {motif === 1 && <><circle cx="40" cy="27" r="20" fill={fg} /><circle cx="25" cy="42" r="9" fill={bg} /></>}
+      {motif === 2 && (
+        <g fill={fg}>
+          {[16, 32, 48].map((x) => [16, 32, 48].map((y) => <circle key={x + "-" + y} cx={x} cy={y} r={x === 32 && y === 32 ? 6.5 : 4} />))}
+        </g>
+      )}
+      {motif === 3 && (
+        <g fill="none" stroke={fg} strokeWidth="3.5" strokeLinecap="round">
+          {[20, 32, 44].map((y) => <path key={y} d={`M-4 ${y} q8 -7 16 0 t16 0 t16 0 t16 0`} />)}
+        </g>
+      )}
+    </svg>
+  );
+}
+/* The picture itself, at one of three sizes ("sm", "", "lg"). A photo that
+   fails to load falls back to the drawn picture. */
+function CommunityAvatar({ id, avatar, size, className }) {
+  const [broken, setBroken] = React.useState(false);
+  React.useEffect(() => { setBroken(false); }, [avatar]);
+  const cls = "cm-avatar" + (size ? " " + size : "") + (className ? " " + className : "");
+  if (avatar && /^https?:\/\//.test(avatar) && !broken) {
+    return <img className={cls + " is-photo"} src={avatar} alt="" draggable={false} onError={() => setBroken(true)} />;
+  }
+  const k = communityPresetFor(id, avatar);
+  return <span className={cls} data-preset={k} aria-hidden="true"><CommunityPresetArt k={k} /></span>;
 }
 
 function useCommunity() {
@@ -162,4 +216,4 @@ function communityInitials(user) {
   return letters.toUpperCase();
 }
 
-Object.assign(window, { CommunityStore, useCommunity, communityInitials, navigateTo, communityAgo, communityAvatarClass });
+Object.assign(window, { CommunityStore, useCommunity, communityInitials, navigateTo, communityAgo, CommunityAvatar, CommunityPresetArt, communityPresetFor, CM_AVATAR_COUNT });

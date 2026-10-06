@@ -11,7 +11,7 @@ export const STUB_ANON_KEY = 'stub-anon-key';
 export const STUB_ACCOUNT = {email: 'dj@example.test', password: 'stub-password-1'};
 export const STUB_NEW_ACCOUNT = {email: 'new-dj@example.test', password: 'stub-password-2', code: '123456'};
 
-type Profile = {id: string; handle: string; display_name: string; city: string | null};
+type Profile = {id: string; handle: string; display_name: string; city: string | null; bio?: string | null; avatar_url?: string | null};
 
 export type StubPost = {
   id: string;
@@ -51,24 +51,30 @@ export type CommunityStub = {
   saves: Set<string>;
   /** "blockerId|blockedId" pairs. */
   blocks: Set<string>;
+  /** "followerId|followeeId" pairs, and when each started (ISO time). */
+  follows: Set<string>;
+  followedAt: Map<string, string>;
   reports: Record<string, unknown>[];
+  /** Files in the `avatars` bucket, by name ("<user id>.jpg"). */
+  uploads: Map<string, Buffer>;
   close(): Promise<void>;
 };
 
 const b64url = (v: unknown): string => Buffer.from(JSON.stringify(v)).toString('base64url');
 
-function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+function readRaw(req: IncomingMessage): Promise<Buffer> {
   return new Promise(resolve => {
-    let raw = '';
-    req.on('data', c => (raw += c));
-    req.on('end', () => {
-      try {
-        resolve(raw ? JSON.parse(raw) : {});
-      } catch {
-        resolve({});
-      }
-    });
+    const chunks: Buffer[] = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
   });
+}
+function parseBody(raw: Buffer): Record<string, unknown> {
+  try {
+    return raw.length ? JSON.parse(raw.toString('utf8')) : {};
+  } catch {
+    return {};
+  }
 }
 
 export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promise<CommunityStub> {
@@ -87,11 +93,15 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
   const likes = new Set<string>();
   const saves = new Set<string>();
   const blocks = new Set<string>();
+  const follows = new Set<string>();
+  // When each follow started ("followerId|followeeId" → ISO time).
+  const followedAt = new Map<string, string>();
   // When each user last looked at their notifications.
   const seenAt = new Map<string, string>();
   // When each like was given ("postId|userId" → ISO time).
   const likedAt = new Map<string, string>();
   const reports: Record<string, unknown>[] = [];
+  const uploads = new Map<string, Buffer>();
   let nextId = 0;
   const newId = () => `cccccccc-cccc-4ccc-8ccc-${String(++nextId).padStart(12, '0')}`;
   if (opts.seedFeed) {
@@ -162,7 +172,7 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
       const [postId, userId] = key.split('|');
       const p = posts.find(x => x.id === postId);
       if (!p || p.author_id !== me || userId === me || blocks.has(`${me}|${userId}`)) continue;
-      rows.push({kind: 'like', created_at: likedAt.get(key) ?? '2026-01-01T00:00:00.000Z', actor_id: userId, actor_name: name(userId),
+      rows.push({kind: 'like', created_at: likedAt.get(key) ?? '2026-01-01T00:00:00.000Z', actor_id: userId, actor_name: name(userId), actor_avatar: profiles.get(userId)?.avatar_url ?? null,
         post_id: p.id, post_kind: p.kind, post_title: title(p), comment_id: null, body: null});
     }
     for (const c of comments) {
@@ -171,11 +181,17 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
       const parent = c.parent_id ? comments.find(x => x.id === c.parent_id) : null;
       const kind = p.author_id === me ? 'comment' : parent?.author_id === me ? 'reply' : null;
       if (!kind) continue;
-      rows.push({kind, created_at: c.created_at, actor_id: c.author_id, actor_name: name(c.author_id),
+      rows.push({kind, created_at: c.created_at, actor_id: c.author_id, actor_name: name(c.author_id), actor_avatar: profiles.get(c.author_id)?.avatar_url ?? null,
         post_id: p.id, post_kind: p.kind, post_title: title(p), comment_id: c.id, body: c.body.slice(0, 140)});
     }
+    for (const key of follows) {
+      const [follower, followee] = key.split('|');
+      if (followee !== me || blocks.has(`${me}|${follower}`)) continue;
+      rows.push({kind: 'follow', created_at: followedAt.get(key) ?? '2026-01-01T00:00:00.000Z', actor_id: follower, actor_name: name(follower), actor_avatar: profiles.get(follower)?.avatar_url ?? null,
+        post_id: null, post_kind: null, post_title: null, comment_id: null, body: null});
+    }
     // Every DJ's first notification, from Compás itself, dated when they joined.
-    rows.push({kind: 'welcome', created_at: '2025-12-31T00:00:00.000Z', actor_id: me, actor_name: 'Compás',
+    rows.push({kind: 'welcome', created_at: '2025-12-31T00:00:00.000Z', actor_id: me, actor_name: 'Compás', actor_avatar: null,
       post_id: null, post_kind: null, post_title: null, comment_id: null, body: null});
     return rows.sort((x, y) => String(y.created_at).localeCompare(String(x.created_at)));
   };
@@ -191,11 +207,29 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
       viewer_liked: likes.has(`${p.id}|${me}`),
       viewer_saved: saves.has(`${p.id}|${me}`),
       orq_keys: orqKeys(p),
+      author_followed: follows.has(`${me}|${p.author_id}`),
+      author_avatar: a?.avatar_url ?? null,
     };
   };
+  // What the real `profile_cards` view returns for one DJ.
+  const profileCard = (pr: Profile, me: string) => ({
+    id: pr.id,
+    handle: pr.handle,
+    display_name: pr.display_name,
+    city: pr.city,
+    bio: pr.bio ?? null,
+    created_at: '2026-01-01T00:00:00.000Z',
+    tanda_count: posts.filter(p => p.author_id === pr.id && p.kind === 'tanda').length,
+    post_count: posts.filter(p => p.author_id === pr.id).length,
+    follower_count: [...follows].filter(k => k.endsWith('|' + pr.id)).length,
+    following_count: [...follows].filter(k => k.startsWith(pr.id + '|')).length,
+    viewer_follows: follows.has(`${me}|${pr.id}`),
+    follows_viewer: follows.has(`${pr.id}|${me}`),
+    avatar_url: pr.avatar_url ?? null,
+  });
   const commentRow = (c: StubComment) => {
     const a = profiles.get(c.author_id);
-    return {...c, author: a ? {handle: a.handle, display_name: a.display_name} : null};
+    return {...c, author: a ? {handle: a.handle, display_name: a.display_name, avatar_url: a.avatar_url ?? null} : null};
   };
 
   const userJson = (email: string, id: string) => ({
@@ -234,7 +268,8 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
   const server: Server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://stub');
     const route = `${req.method} ${url.pathname}`;
-    const body = req.method === 'GET' ? {} : await readBody(req);
+    const raw = req.method === 'GET' ? Buffer.alloc(0) : await readRaw(req);
+    const body = parseBody(raw);
     const wantsObject = (req.headers.accept ?? '').includes('vnd.pgrst.object');
 
     if (route === 'POST /auth/v1/token') {
@@ -303,6 +338,26 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
       return json(res, 204);
     }
 
+    // ---- the `avatars` storage bucket: public to read, your own file to write ----
+    if (url.pathname.startsWith('/storage/v1/object/')) {
+      const rest = url.pathname.slice('/storage/v1/object/'.length);
+      if (req.method === 'GET' && rest.startsWith('public/avatars/')) {
+        const bytes = uploads.get(rest.slice('public/avatars/'.length));
+        if (!bytes) return json(res, 404, {statusCode: '404', error: 'not_found', message: 'Object not found'});
+        res.writeHead(200, {'content-type': 'image/jpeg'});
+        return res.end(bytes);
+      }
+      if ((req.method === 'POST' || req.method === 'PUT') && rest.startsWith('avatars/')) {
+        const me = bearerUser(req);
+        if (!me) return json(res, 401, {statusCode: '401', error: 'Unauthorized', message: 'unauthorized'});
+        const name = rest.slice('avatars/'.length);
+        if (name !== `${me}.jpg`) return json(res, 403, {statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy'});
+        if (req.headers['content-type'] !== 'image/jpeg') return json(res, 415, {statusCode: '415', error: 'invalid_mime_type', message: 'mime type not supported'});
+        uploads.set(name, raw);
+        return json(res, 200, {Key: `avatars/${name}`, Id: name});
+      }
+    }
+
     // ---- posts, likes, saves, comments (signed-in only, like the real rules) ----
     if (url.pathname.startsWith('/rest/v1/')) {
       const me = bearerUser(req);
@@ -313,6 +368,7 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
       if (table === 'feed_posts' && req.method === 'GET') {
         const author = eq(url, 'author_id');
         const onlyId = eq(url, 'id');
+        const followedOnly = eq(url, 'author_followed') === 'true';
         const kind = eq(url, 'kind');
         const ids = inList(url, 'id');
         // "orq_keys=cs.{pugliese}" → posts whose keys contain it.
@@ -324,6 +380,7 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
         const rows = posts
           .filter(p => !blocks.has(`${me}|${p.author_id}`))
           .filter(p => !author || p.author_id === author)
+          .filter(p => !followedOnly || follows.has(`${me}|${p.author_id}`))
           .filter(p => !kind || p.kind === kind)
           .filter(p => !onlyId || p.id === onlyId)
           .filter(p => !ids || ids.includes(p.id))
@@ -345,6 +402,50 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
           })
           .slice(offset, offset + limit);
         return json(res, 200, rows);
+      }
+      if (table === 'profile_cards' && req.method === 'GET') {
+        const id = eq(url, 'id');
+        const pr = id ? profiles.get(id) : undefined;
+        const rows = pr ? [profileCard(pr, me)] : [];
+        if (wantsObject) return rows.length ? json(res, 200, rows[0]) : json(res, 200, null);
+        return json(res, 200, rows);
+      }
+      if (table === 'follows' && req.method === 'GET') {
+        const select = url.searchParams.get('select') ?? '';
+        const person = (id: string) => {
+          const pr = profiles.get(id);
+          return pr ? {id: pr.id, handle: pr.handle, display_name: pr.display_name, city: pr.city, avatar_url: pr.avatar_url ?? null} : null;
+        };
+        const offset = Number(url.searchParams.get('offset') ?? 0);
+        const limit = Number(url.searchParams.get('limit') ?? 100);
+        const entries = [...follows].map(k => {
+          const [follower, followee] = k.split('|');
+          return {follower, followee, created_at: followedAt.get(k) ?? '2026-01-01T00:00:00.000Z'};
+        }).sort((x, y) => y.created_at.localeCompare(x.created_at));
+        // Followers of a DJ, embedded through the follower; whom they follow,
+        // through the followee; or just the ids the signed-in DJ follows.
+        if (/profiles!follower_id/.test(select)) {
+          const followee = eq(url, 'followee_id');
+          return json(res, 200, entries.filter(e => e.followee === followee).slice(offset, offset + limit)
+            .map(e => ({created_at: e.created_at, profile: person(e.follower)})));
+        }
+        if (/profiles!followee_id/.test(select)) {
+          const follower = eq(url, 'follower_id');
+          return json(res, 200, entries.filter(e => e.follower === follower).slice(offset, offset + limit)
+            .map(e => ({created_at: e.created_at, profile: person(e.followee)})));
+        }
+        return json(res, 200, entries.filter(e => e.follower === me).map(e => ({followee_id: e.followee})));
+      }
+      if (table === 'follows' && req.method === 'POST') {
+        const key = `${me}|${body.followee_id}`;
+        if (follows.has(key)) return json(res, 409, {code: '23505', message: 'duplicate key value violates unique constraint'});
+        follows.add(key);
+        followedAt.set(key, new Date().toISOString());
+        return json(res, 201);
+      }
+      if (table === 'follows' && req.method === 'DELETE') {
+        if (eq(url, 'follower_id') === me) follows.delete(`${me}|${eq(url, 'followee_id')}`);
+        return json(res, 204);
       }
       if (table === 'my_notifications' && req.method === 'GET') {
         return json(res, 200, notificationsFor(me).slice(0, Number(url.searchParams.get('limit') ?? 100)));
@@ -488,7 +589,10 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
     likes,
     saves,
     blocks,
+    follows,
+    followedAt,
     reports,
+    uploads,
     close: () =>
       new Promise<void>(resolve => {
         server.closeAllConnections();

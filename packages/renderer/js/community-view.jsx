@@ -193,7 +193,7 @@ function CommunityAccountCard({ onOpenCommunity, jump }) {
   const community = useCommunity();
   const user = community.user;
   const formRef = React.useRef(null);
-  const [form, setForm] = React.useState({ displayName: "", handle: "", city: "" });
+  const [form, setForm] = React.useState({ displayName: "", handle: "", city: "", bio: "" });
   const [busy, setBusy] = React.useState(null); // "save" | "signout" | "delete" | null
   const [error, setError] = React.useState("");
   const [saved, setSaved] = React.useState(false);
@@ -203,9 +203,9 @@ function CommunityAccountCard({ onOpenCommunity, jump }) {
   // Re-seed the form whenever the stored profile changes (sign in, save). The
   // "Saved" confirmation is cleared only when the account itself changes — a
   // save updates the profile too, and must not wipe its own confirmation.
-  const profileKey = user ? [user.id, user.displayName, user.handle, user.city].join("|") : "";
+  const profileKey = user ? [user.id, user.displayName, user.handle, user.city, user.bio].join("|") : "";
   React.useEffect(() => {
-    if (user) setForm({ displayName: user.displayName || "", handle: user.handle || "", city: user.city || "" });
+    if (user) setForm({ displayName: user.displayName || "", handle: user.handle || "", city: user.city || "", bio: user.bio || "" });
   }, [profileKey]);
   const userId = user ? user.id : "";
   React.useEffect(() => { setError(""); setSaved(false); }, [userId]);
@@ -236,13 +236,13 @@ function CommunityAccountCard({ onOpenCommunity, jump }) {
 
   const set = (k) => (e) => { setForm((f) => ({ ...f, [k]: e.target.value })); setSaved(false); };
   const dirty = form.displayName !== (user.displayName || "") || form.handle !== (user.handle || "")
-    || form.city !== (user.city || "");
+    || form.city !== (user.city || "") || form.bio !== (user.bio || "");
 
   const save = async (e) => {
     e.preventDefault();
     if (busy || !dirty) return;
     setError(""); setBusy("save");
-    const res = await CommunityStore.updateProfile({ displayName: form.displayName, handle: form.handle, city: form.city || null });
+    const res = await CommunityStore.updateProfile({ displayName: form.displayName, handle: form.handle, city: form.city || null, bio: form.bio || null });
     setBusy(null);
     if (res.ok) setSaved(true); else setError(res.error);
   };
@@ -252,6 +252,25 @@ function CommunityAccountCard({ onOpenCommunity, jump }) {
     await CommunityStore.signOut();
     setBusy(null);
   };
+  // The picture: upload a photo, take the Google one, pick a drawn one, or
+  // remove it (then the app picks a drawn one from the id).
+  const setAvatar = async (value) => {
+    if (busy) return;
+    setError(""); setBusy("avatar");
+    const res = await CommunityStore.avatarSet(value);
+    setBusy(null);
+    if (!res.ok) setError(res.error);
+  };
+  const pickPhoto = async () => {
+    if (busy) return;
+    setError(""); setBusy("avatar");
+    const res = await CommunityStore.avatarPick();
+    setBusy(null);
+    if (!res.ok && !res.cancelled) setError(res.error);
+  };
+  const isPhoto = !!(user.avatar && /^https?:\/\//.test(user.avatar));
+  const currentPreset = isPhoto ? -1 : communityPresetFor(user.id, user.avatar);
+
   const deleteAccount = async () => {
     setDeleteError(""); setBusy("delete");
     const res = await CommunityStore.deleteAccount();
@@ -263,6 +282,30 @@ function CommunityAccountCard({ onOpenCommunity, jump }) {
     <SettingsCard icon={icon} title="Community"
       desc={user.email ? `Signed in as ${user.email}` : "Signed in"}>
       <form className="cm-acct" ref={formRef} onSubmit={save} noValidate>
+        <div className="cm-acct-avatar">
+          <CommunityAvatar id={user.id} avatar={user.avatar} size="lg" />
+          <div className="tp-flex1 cm-acct-avatar-main">
+            <div className="cm-acct-avatar-title">Profile picture</div>
+            <div className="cm-acct-avatar-btns">
+              <button type="button" className="tp-btn sm" onClick={pickPhoto} disabled={!!busy}>
+                {busy === "avatar" ? "Saving…" : "Upload a photo…"}
+              </button>
+              {user.googleAvatar && user.avatar !== user.googleAvatar && (
+                <button type="button" className="tp-btn sm" onClick={() => setAvatar(user.googleAvatar)} disabled={!!busy}>Use my Google photo</button>
+              )}
+              {isPhoto && (
+                <button type="button" className="tp-btn sm ghost" onClick={() => setAvatar(null)} disabled={!!busy}>Remove photo</button>
+              )}
+            </div>
+            <div className="cm-acct-presets" role="radiogroup" aria-label="Or pick a picture">
+              {Array.from({ length: CM_AVATAR_COUNT }, (_, k) => (
+                <button type="button" role="radio" key={k} aria-checked={currentPreset === k} aria-label={`Picture ${k + 1}`}
+                  className={"cm-preset" + (currentPreset === k ? " on" : "")} disabled={!!busy}
+                  onClick={() => setAvatar("preset:" + k)}><CommunityPresetArt k={k} /></button>
+              ))}
+            </div>
+          </div>
+        </div>
         <div className="cm-acct-fields">
           <div className="cm-field">
             <label htmlFor="cm-acct-name">Name</label>
@@ -277,6 +320,11 @@ function CommunityAccountCard({ onOpenCommunity, jump }) {
           <div className="cm-field">
             <label htmlFor="cm-acct-city">City <span className="cm-opt">(optional)</span></label>
             <input id="cm-acct-city" className="cm-input" maxLength={60} value={form.city} onChange={set("city")} />
+          </div>
+          <div className="cm-field cm-acct-wide">
+            <label htmlFor="cm-acct-bio">About you <span className="cm-opt">(optional)</span></label>
+            <textarea id="cm-acct-bio" className="cm-input cm-textarea" rows={2} maxLength={280} value={form.bio} onChange={set("bio")}
+              placeholder="Where you play, what you like to open with…" />
           </div>
         </div>
         <div className="tp-set-row-l"><div className="ds">This is what other DJs see next to the tandas and comments you post.</div></div>

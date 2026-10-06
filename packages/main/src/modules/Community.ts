@@ -1,6 +1,7 @@
 import type {AppModule} from '../AppModule.js';
 import type {ModuleContext} from '../ModuleContext.js';
-import {BrowserWindow, ipcMain} from 'electron';
+import {BrowserWindow, dialog, ipcMain, nativeImage} from 'electron';
+import {readFile} from 'node:fs/promises';
 import {
   CommunityService,
   type CommentRow,
@@ -40,6 +41,16 @@ type FeedShow = 'all' | 'ready' | 'missing' | 'questions';
 // so neither the feed request nor a busy post grows without bound.
 const COMMENT_PREVIEW = 3;
 const COMMENT_PAGE = 20;
+const FOLLOW_PAGE = 30;
+// Profile pictures are stored this size, as JPEG.
+const AVATAR_SIZE = 256;
+// A picture reference as the backend accepts it: https (or a loopback http
+// backend, as the tests use), or one of the presets.
+const avatarRef = (v: unknown): string | null =>
+  typeof v === 'string' && v.length <= 2000
+  && (v.startsWith('https://') || /^http:\/\/(127\.0\.0\.1|localhost)[:/]/.test(v) || /^preset:\d{1,2}$/.test(v))
+    ? v
+    : null;
 
 /** A comment as the renderer shows it. */
 type FeedComment = {
@@ -48,7 +59,7 @@ type FeedComment = {
   body: string;
   createdAt: string;
   mine: boolean;
-  author: {id: string; handle: string; name: string};
+  author: {id: string; handle: string; name: string; avatar: string | null};
 };
 
 /** A post as the renderer shows it: the backend row, plus what only this
@@ -63,7 +74,7 @@ type FeedPost = {
   liked: boolean;
   saved: boolean;
   mine: boolean;
-  author: {id: string; handle: string; name: string; city: string | null};
+  author: {id: string; handle: string; name: string; city: string | null; avatar: string | null};
   tanda: MatchedTanda | null;
   // The DJ's own tanda this post was shared from, when it is theirs.
   localTandaId: string | null;
@@ -81,6 +92,7 @@ function toFeedComment(row: CommentRow, userId: string): FeedComment {
       id: row.author_id,
       handle: str(row.author?.handle, 24),
       name: str(row.author?.display_name, 60) || 'DJ',
+      avatar: avatarRef(row.author?.avatar_url),
     },
   };
 }
@@ -139,8 +151,42 @@ export class CommunityModule implements AppModule {
         displayName: str(input?.displayName, 200),
         handle: str(input?.handle, 200),
         city: str(input?.city, 200) || null,
+        bio: str(input?.bio, 1000) || null,
       }),
     );
+    // The profile picture: one of the app's presets, the Google photo, or none
+    // (then the app picks a preset). Uploads are the handler below.
+    ipcMain.handle('community:avatarSet', (_event, value: unknown) =>
+      community.setAvatar(typeof value === 'string' ? value.slice(0, 2000) : null),
+    );
+    // Ask for an image file, square it off at 256×256 as JPEG here (the backend
+    // only takes small JPEGs), and upload it.
+    ipcMain.handle('community:avatarPick', async () => {
+      const win = BrowserWindow.getAllWindows().find(w => !w.isDestroyed());
+      const opts: Electron.OpenDialogOptions = {
+        title: 'Choose a profile picture',
+        properties: ['openFile'],
+        filters: [{name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'heic']}],
+      };
+      const picked = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+      if (picked.canceled || !picked.filePaths[0]) return {ok: false, error: '', cancelled: true};
+      let bytes: Buffer;
+      try {
+        bytes = await readFile(picked.filePaths[0]);
+      } catch {
+        return {ok: false, error: 'Couldn’t read that file.'};
+      }
+      if (bytes.length > 25_000_000) return {ok: false, error: 'That picture is too large. Try one under 25 MB.'};
+      const image = nativeImage.createFromBuffer(bytes);
+      if (image.isEmpty()) return {ok: false, error: 'That file isn’t a picture Compás can read.'};
+      const {width, height} = image.getSize();
+      const side = Math.min(width, height);
+      const square = image
+        .crop({x: Math.floor((width - side) / 2), y: Math.floor((height - side) / 2), width: side, height: side})
+        .resize({width: AVATAR_SIZE, height: AVATAR_SIZE, quality: 'best'});
+      return community.uploadAvatar(square.toJPEG(86));
+    });
+
     ipcMain.handle('community:deleteAccount', () => community.deleteAccount());
 
     // ---- sharing ---------------------------------------------------------------
@@ -195,8 +241,9 @@ export class CommunityModule implements AppModule {
 
     ipcMain.handle(
       'community:feed',
-      async (_event, opts: {scope?: unknown; sort?: unknown; show?: unknown; orq?: unknown; postId?: unknown; offset?: unknown} | null) => {
-        const scope: FeedScope = opts?.scope === 'mine' || opts?.scope === 'saved' ? opts.scope : 'all';
+      async (_event, opts: {scope?: unknown; sort?: unknown; show?: unknown; orq?: unknown; postId?: unknown; author?: unknown; offset?: unknown} | null) => {
+        const scope: FeedScope =
+          opts?.scope === 'mine' || opts?.scope === 'saved' || opts?.scope === 'following' ? opts.scope : 'all';
         const sort: FeedSort = opts?.sort === 'new' || opts?.sort === 'liked' ? opts.sort : 'popular';
         const show: FeedShow =
           opts?.show === 'ready' || opts?.show === 'missing' || opts?.show === 'questions' ? opts.show : 'all';
@@ -205,6 +252,8 @@ export class CommunityModule implements AppModule {
         const orq = typeof opts?.orq === 'string' && ORQ_KEY_RE.test(opts.orq) ? opts.orq : null;
         // One post on its own (opened from a notification), whatever the filters say.
         const postId = uuid(opts?.postId);
+        // One DJ's posts (their profile page).
+        const author = uuid(opts?.author);
 
         // Matching happens here, on this computer: the backend never learns what
         // is in the library.
@@ -219,7 +268,7 @@ export class CommunityModule implements AppModule {
           const page = await community.listPosts(
             postId
               ? {scope: 'all', sort: 'new', kind: null, orq: null, id: postId, offset: 0, limit: 1}
-              : {scope, sort, kind, orq, offset, limit: FEED_PAGE + 1},
+              : {scope, sort, kind, orq, author, offset, limit: FEED_PAGE + 1},
           );
           if (!page.ok) return page;
           const rows = page.rows.slice(0, FEED_PAGE);
@@ -244,6 +293,7 @@ export class CommunityModule implements AppModule {
                 handle: str(r.author_handle, 24),
                 name: str(r.author_name, 60) || 'DJ',
                 city: str(r.author_city, 60) || null,
+                avatar: avatarRef(r.author_avatar),
               },
               tanda,
               localTandaId: localByPost.get(r.id) ?? null,
@@ -276,9 +326,9 @@ export class CommunityModule implements AppModule {
       if (!listed.ok) return listed;
       const items = listed.rows.map(r => ({
         key: `${r.kind}:${r.comment_id ?? `${r.post_id}:${r.actor_id}`}`,
-        kind: r.kind === 'like' || r.kind === 'reply' || r.kind === 'welcome' ? r.kind : 'comment',
+        kind: r.kind === 'like' || r.kind === 'reply' || r.kind === 'welcome' || r.kind === 'follow' ? r.kind : 'comment',
         createdAt: r.created_at,
-        actor: {id: r.actor_id, name: str(r.actor_name, 60) || 'DJ'},
+        actor: {id: r.actor_id, name: str(r.actor_name, 60) || 'DJ', avatar: avatarRef(r.actor_avatar)},
         postId: r.post_id,
         postKind: r.post_kind === 'question' ? 'question' : 'tanda',
         postTitle: str(r.post_title, 120),
@@ -367,6 +417,66 @@ export class CommunityModule implements AppModule {
     ipcMain.handle('community:block', (_event, userId: unknown) => {
       const id = uuid(userId);
       return id ? community.block(id) : BAD_REQUEST;
+    });
+
+    // ---- profiles and following -------------------------------------------------
+
+    ipcMain.handle('community:profile', async (_event, userId: unknown) => {
+      const id = uuid(userId);
+      if (!id) return BAD_REQUEST;
+      const got = await community.getProfile(id);
+      if (!got.ok) return got;
+      const r = got.row;
+      if (!r) return {ok: true, profile: null};
+      return {
+        ok: true,
+        profile: {
+          id: r.id,
+          handle: str(r.handle, 24),
+          name: str(r.display_name, 60) || 'DJ',
+          city: str(r.city, 60) || null,
+          bio: str(r.bio, 280) || null,
+          joinedAt: r.created_at,
+          tandas: Math.max(0, Number(r.tanda_count) || 0),
+          posts: Math.max(0, Number(r.post_count) || 0),
+          followers: Math.max(0, Number(r.follower_count) || 0),
+          following: Math.max(0, Number(r.following_count) || 0),
+          followed: !!r.viewer_follows,
+          followsYou: !!r.follows_viewer,
+          mine: r.id === got.userId,
+          avatar: avatarRef(r.avatar_url),
+        },
+      };
+    });
+    ipcMain.handle('community:follow', (_event, userId: unknown, on: unknown) => {
+      const id = uuid(userId);
+      return id ? community.setFollow(id, on !== false) : BAD_REQUEST;
+    });
+    // A page of who follows a DJ, or whom they follow, each marked with
+    // whether the signed-in DJ follows them.
+    ipcMain.handle('community:follows', async (_event, userId: unknown, which: unknown, offset: unknown) => {
+      const id = uuid(userId);
+      if (!id) return BAD_REQUEST;
+      const list = which === 'following' ? 'following' : 'followers';
+      const from = Number.isInteger(offset) && (offset as number) > 0 ? (offset as number) : 0;
+      const [page, followed] = await Promise.all([
+        community.listFollows(id, list, from, FOLLOW_PAGE + 1),
+        community.followingIds(),
+      ]);
+      if (!page.ok) return page;
+      const people = page.rows
+        .slice(0, FOLLOW_PAGE)
+        .filter(r => r.profile)
+        .map(r => ({
+          id: r.profile!.id,
+          handle: str(r.profile!.handle, 24),
+          name: str(r.profile!.display_name, 60) || 'DJ',
+          city: str(r.profile!.city, 60) || null,
+          followed: followed.has(r.profile!.id),
+          mine: r.profile!.id === page.userId,
+          avatar: avatarRef(r.profile!.avatar_url),
+        }));
+      return {ok: true, people, hasMore: page.rows.length > FOLLOW_PAGE, nextOffset: from + FOLLOW_PAGE};
     });
   }
 }

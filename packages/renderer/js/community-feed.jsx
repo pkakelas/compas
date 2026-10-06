@@ -7,8 +7,6 @@
 
 const CM_REPORT_REASONS = ["Spam", "Abusive or hateful", "Not about tango DJing", "Something else"];
 
-function cmInitials(name) { return communityInitials({ displayName: name }); }
-
 /* ---------- report a post ---------- */
 function ReportModal({ onCancel, onSend }) {
   const [reason, setReason] = React.useState(CM_REPORT_REASONS[0]);
@@ -124,13 +122,15 @@ function PostTanda({ post, inMyTandas, preview, onPlay, onAdd, onPickOrq }) {
 }
 
 /* ---------- one comment (bubble + actions) ---------- */
-function PostComment({ c, isReply, onReply, onDelete }) {
+function PostComment({ c, isReply, onReply, onDelete, onOpenProfile }) {
   return (
     <div className={"cm-comment" + (isReply ? " is-reply" : "")}>
-      <div className={"cm-avatar sm " + communityAvatarClass(c.author.id)} aria-hidden="true">{cmInitials(c.author.name)}</div>
+      <CommunityAvatar id={c.author.id} avatar={c.author.avatar} size="sm" />
       <div className="cm-comment-main">
         <div className="cm-bubble">
-          <div className="cm-bubble-name">{c.author.name}</div>
+          <div className="cm-bubble-name">
+            <button type="button" className="cm-name-btn" onClick={() => onOpenProfile(c.author.id)}>{c.author.name}</button>
+          </div>
           <div className="cm-bubble-text">{c.body}</div>
         </div>
         <div className="cm-comment-meta">
@@ -144,7 +144,7 @@ function PostComment({ c, isReply, onReply, onDelete }) {
 }
 
 /* ---------- a post ---------- */
-function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPickOrq, flash, ask }) {
+function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPickOrq, onOpenProfile, flash, ask }) {
   const player = usePlayer();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [loadingOlder, setLoadingOlder] = React.useState(false);
@@ -288,10 +288,10 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
   return (
     <article className={"cm-post" + (post.kind === "question" ? " is-question" : "")} data-post-id={post.id}>
       <div className="cm-post-head">
-        <div className={"cm-avatar " + communityAvatarClass(post.author.id)} aria-hidden="true">{cmInitials(post.author.name)}</div>
+        <CommunityAvatar id={post.author.id} avatar={post.author.avatar} />
         <div className="tp-flex1">
           <div className="cm-post-author">
-            <b>{post.author.name}</b>{" "}
+            <button type="button" className="cm-name-btn" onClick={() => onOpenProfile(post.author.id)}>{post.author.name}</button>{" "}
             {post.kind === "question" ? <span>posted</span>
               : post.tanda && post.tanda.name ? <><span>shared</span> <b className="cm-post-tname">{post.tanda.name}</b></>
               : <span>shared a tanda</span>}
@@ -346,9 +346,9 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
         <div className={"cm-comments" + (loaded.length > 5 ? " is-long" : "")} ref={listRef}>
           {tops.map((c) => (
             <React.Fragment key={c.id}>
-              <PostComment c={c} onReply={startReply} onDelete={deleteComment} />
+              <PostComment onOpenProfile={onOpenProfile} c={c} onReply={startReply} onDelete={deleteComment} />
               {repliesOf(c.id).map((r) => (
-                <PostComment key={r.id} c={r} isReply onReply={startReply} onDelete={deleteComment} />
+                <PostComment onOpenProfile={onOpenProfile} key={r.id} c={r} isReply onReply={startReply} onDelete={deleteComment} />
               ))}
             </React.Fragment>
           ))}
@@ -363,7 +363,7 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
       )}
       {(commentOpen || loaded.length > 0 || post.commentCount > 0) && (
         <form className="cm-comment-form" onSubmit={sendComment}>
-          <div className={"cm-avatar sm " + communityAvatarClass(me.id)} aria-hidden="true">{communityInitials(me)}</div>
+          <CommunityAvatar id={me.id} avatar={me.avatar} size="sm" />
           <input ref={inputRef} className="cm-input cm-comment-input" type="text" maxLength={1000}
             aria-label="Write a comment" placeholder={replyTo ? "Write a reply…" : "Write a comment…"}
             value={draft} onChange={(e) => setDraft(e.target.value)} />
@@ -380,7 +380,7 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
 /* What other DJs did with your posts and comments, newest first. Opening the
    list is "having looked": the bell clears, while the rows that were new keep
    their dot for this visit. */
-function NotificationsList({ onOpenPost, onOpenFeed }) {
+function NotificationsList({ onOpenPost, onOpenFeed, onOpenProfile }) {
   const [items, setItems] = React.useState(null);
   const [error, setError] = React.useState("");
   React.useEffect(() => {
@@ -406,7 +406,7 @@ function NotificationsList({ onOpenPost, onOpenFeed }) {
         <div className="cm-empty">
           <div className="cm-empty-ic"><I.bell s={20} /></div>
           <div className="cm-empty-title">No notifications yet</div>
-          <div className="cm-empty-sub">When someone likes or comments on what you share, you’ll see it here.</div>
+          <div className="cm-empty-sub">When someone likes or comments on what you share, or follows you, you’ll see it here.</div>
         </div>
       )}
       {items && items.length > 0 && (
@@ -424,11 +424,11 @@ function NotificationsList({ onOpenPost, onOpenFeed }) {
             </button>
           ) : (
             <button type="button" key={n.key} className={"cm-notif" + (n.unread ? " is-unread" : "")}
-              onClick={() => onOpenPost(n.postId)}>
-              <span className={"cm-avatar sm " + communityAvatarClass(n.actor.id)} aria-hidden="true">{cmInitials(n.actor.name)}</span>
+              onClick={() => (n.kind === "follow" ? onOpenProfile(n.actor.id) : onOpenPost(n.postId))}>
+              <CommunityAvatar id={n.actor.id} avatar={n.actor.avatar} size="sm" />
               <span className="tp-flex1">
                 <span className="cm-notif-text">
-                  <b>{n.actor.name}</b> {action(n)}{n.postTitle ? <> <b>{n.postTitle}</b></> : null}
+                  <b>{n.actor.name}</b> {n.kind === "follow" ? "started following you" : action(n)}{n.postTitle ? <> <b>{n.postTitle}</b></> : null}
                 </span>
                 {n.body && <span className="cm-notif-body">{n.body}</span>}
                 <span className="cm-notif-when">{communityAgo(n.createdAt)}</span>
@@ -442,9 +442,130 @@ function NotificationsList({ onOpenPost, onOpenFeed }) {
   );
 }
 
+/* ---------- a DJ's page ---------- */
+/* Follow / Following, for the page itself and for rows in people lists.
+   `person` carries `followed` and `mine`; the DJ's own entry gets no button. */
+function FollowButton({ person, onChange, flash }) {
+  const [busy, setBusy] = React.useState(false);
+  if (person.mine) return null;
+  const toggle = async () => {
+    if (busy) return;
+    setBusy(true);
+    const res = await CommunityStore.follow(person.id, !person.followed);
+    setBusy(false);
+    if (res.ok) onChange(!person.followed); else flash(res.error);
+  };
+  return (
+    <button type="button" className={"tp-btn sm cm-follow" + (person.followed ? "" : " primary")}
+      aria-pressed={person.followed} onClick={toggle} disabled={busy}>
+      {person.followed ? <><I.check s={14} /> Following</> : "Follow"}
+    </button>
+  );
+}
+
+const CM_PROFILE_TABS = [
+  { id: "posts", count: (p) => p.posts, label: (n) => (n === 1 ? "post" : "posts") },
+  { id: "followers", count: (p) => p.followers, label: (n) => (n === 1 ? "follower" : "followers") },
+  { id: "following", count: (p) => p.following, label: () => "following" },
+];
+
+/* Who the DJ is, and three counts that double as tabs for what is listed
+   under the card: their posts, who follows them, whom they follow. */
+function ProfileCard({ profile, tab, onTab, onEdit, onFollowChange, flash }) {
+  const joined = new Date(profile.joinedAt);
+  const sub = [
+    profile.handle ? "@" + profile.handle : null,
+    profile.city,
+    Number.isNaN(joined.getTime()) ? null : "Joined " + joined.toLocaleDateString(undefined, { month: "long", year: "numeric" }),
+  ].filter(Boolean).join(" · ");
+  return (
+    <section className="cm-profile" aria-label={profile.name}>
+      <div className="cm-profile-head">
+        <CommunityAvatar id={profile.id} avatar={profile.avatar} size="lg" />
+        <div className="tp-flex1 cm-profile-id">
+          <h2 className="cm-profile-name">{profile.name}</h2>
+          <div className="cm-profile-sub">{sub}</div>
+          {profile.followsYou && !profile.mine && <span className="cm-profile-badge">Follows you</span>}
+        </div>
+        {profile.mine
+          ? (onEdit && <button type="button" className="tp-btn sm" onClick={onEdit}><I.pencil s={14} /> Edit profile</button>)
+          : <FollowButton person={profile} onChange={onFollowChange} flash={flash} />}
+      </div>
+      {profile.bio && <p className="cm-profile-bio">{profile.bio}</p>}
+      <div className="cm-profile-tabs" role="tablist">
+        {CM_PROFILE_TABS.map((t) => {
+          const n = t.count(profile);
+          return (
+            <button type="button" role="tab" key={t.id} aria-selected={tab === t.id}
+              className={"cm-ptab" + (tab === t.id ? " on" : "")} onClick={() => onTab(t.id)}>
+              <b>{n}</b> {t.label(n)}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/* A DJ's followers, or the DJs they follow: a row each, with Follow. */
+function PeopleList({ userId, which, onOpen, flash }) {
+  const [people, setPeople] = React.useState(null); // null = loading
+  const [hasMore, setHasMore] = React.useState(false);
+  const [next, setNext] = React.useState(0);
+  const [error, setError] = React.useState("");
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  React.useEffect(() => {
+    let alive = true;
+    setPeople(null); setError("");
+    CommunityStore.follows(userId, which, 0).then((res) => {
+      if (!alive) return;
+      if (res.ok) { setPeople(res.people); setHasMore(res.hasMore); setNext(res.nextOffset); }
+      else { setPeople([]); setError(res.error); }
+    });
+    return () => { alive = false; };
+  }, [userId, which]);
+  const more = async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    const res = await CommunityStore.follows(userId, which, next);
+    setLoadingMore(false);
+    if (res.ok) { setPeople((cur) => cur.concat(res.people.filter((p) => !cur.some((c) => c.id === p.id)))); setHasMore(res.hasMore); setNext(res.nextOffset); }
+    else flash(res.error);
+  };
+  const setFollowed = (id, on) => setPeople((cur) => cur.map((p) => (p.id === id ? { ...p, followed: on } : p)));
+  if (!people) return <div className="cm-skels" role="status" aria-label="Loading"><PostSkeleton /></div>;
+  if (error) return <div className="cm-error" role="alert">{error}</div>;
+  if (people.length === 0) {
+    return (
+      <div className="cm-empty">
+        <div className="cm-empty-ic"><I.users s={20} /></div>
+        <div className="cm-empty-title">{which === "followers" ? "No followers yet" : "Not following anyone yet"}</div>
+      </div>
+    );
+  }
+  return (
+    <div className="cm-people">
+      {people.map((p) => (
+        <div className="cm-person" key={p.id}>
+          <button type="button" className="cm-person-main" onClick={() => onOpen(p.id)}>
+            <CommunityAvatar id={p.id} avatar={p.avatar} />
+            <span className="tp-flex1">
+              <span className="cm-person-name">{p.name}</span>
+              <span className="cm-person-sub">{[p.handle ? "@" + p.handle : null, p.city].filter(Boolean).join(" · ")}</span>
+            </span>
+          </button>
+          <FollowButton person={p} onChange={(on) => setFollowed(p.id, on)} flash={flash} />
+        </div>
+      ))}
+      {hasMore && <button type="button" className="tp-btn sm cm-people-more" onClick={more} disabled={loadingMore}>Show more</button>}
+    </div>
+  );
+}
+
 /* ---------- the feed ---------- */
 const CM_SCOPES = [
   { id: "all", label: "Feed", icon: "home" },
+  { id: "following", label: "Following", icon: "users" },
   { id: "mine", label: "My posts", icon: "upload" },
   { id: "saved", label: "Saved", icon: "bookmark" },
   { id: "notifications", label: "Notifications", icon: "bell" },
@@ -469,6 +590,7 @@ const CM_EMPTY_SHOW = {
 };
 const CM_EMPTY = {
   all: ["Nothing has been shared yet", "Tandas shared by the community will appear here. Be the first."],
+  following: ["Nothing from the DJs you follow yet", "Open a DJ’s page and follow them: their tandas and posts will gather here."],
   mine: ["You haven’t posted yet", "Share one of your tandas, or write something to the community."],
   saved: ["No saved posts", "Use Save on a post to keep it here."],
 };
@@ -500,6 +622,11 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
   const [orchestras, setOrchestras] = React.useState([]);
   // A single post opened from a notification, shown on its own.
   const [focusPost, setFocusPost] = React.useState(null);
+  // The DJ whose page is open (null for the lists), which of its tabs, and
+  // the page's card once loaded (null while loading; false if there is no such DJ).
+  const [profileId, setProfileId] = React.useState(null);
+  const [profileTab, setProfileTab] = React.useState("posts");
+  const [profile, setProfile] = React.useState(null);
   const [nextOffset, setNextOffset] = React.useState(0);
   const [posts, setPosts] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -561,11 +688,16 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
     const latest = await CommunityStore.latest();
     if (mine === request.current && latest.ok) newestSeen.current = latest.latestAt;
   }, []);
+  const noPosts = () => { request.current++; setPosts([]); setHasMore(false); setLoading(false); setError(""); };
+  // What the posts column is listing right now, as a feed query.
+  const query = () => (profileId ? { scope: "all", sort: "new", author: profileId } : { scope, show, sort, orq: orq || null });
   const reload = () => {
     if (focusPost) { load({ scope: "all", postId: focusPost }); return; }
+    // A DJ's page lists their posts; its other tabs list people, not posts.
+    if (profileId) { if (profileTab === "posts") load(query()); else noPosts(); return; }
     // The notifications list loads itself; there are no posts to fetch for it.
-    if (scope === "notifications") { request.current++; setPosts([]); setHasMore(false); setLoading(false); setError(""); return; }
-    load({ scope, show, sort, orq: orq || null });
+    if (scope === "notifications") { noPosts(); return; }
+    load(query());
     // The list of orchestras changes as tandas are shared; keep it fresh too.
     CommunityStore.orchestras().then((res) => { if (res.ok) setOrchestras(res.orchestras); });
   };
@@ -573,12 +705,29 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
   // Reload when what is asked for changes, when something was shared or removed
   // elsewhere, and when the library changes (the matching depends on it).
   const librarySize = (store.songs || []).length;
-  React.useEffect(() => { reload(); }, [scope, show, sort, orq, focusPost, community.feedVersion, librarySize, user.id]);
+  React.useEffect(() => { reload(); }, [scope, show, sort, orq, focusPost, profileId, profileTab, community.feedVersion, librarySize, user.id]);
+
+  // The card of the DJ whose page is open.
+  React.useEffect(() => {
+    if (!profileId) { setProfile(null); return undefined; }
+    let alive = true;
+    setProfile(null);
+    CommunityStore.profile(profileId).then((res) => {
+      if (!alive) return;
+      if (res.ok) setProfile(res.profile || false); else { setProfile(false); flash(res.error); }
+    });
+    return () => { alive = false; };
+  }, [profileId, user.id]);
+  const openProfile = (id) => {
+    setFocusPost(null); setProfileTab("posts"); setProfileId(id);
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  };
+  const closeProfile = () => { setProfileId(null); setProfile(null); };
 
   // The bell in the top bar was clicked: show the notifications.
   React.useEffect(() => {
     if (!community.openNotifications) return;
-    setFocusPost(null); setScope("notifications");
+    setFocusPost(null); setProfileId(null); setScope("notifications");
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [community.openNotifications]);
 
@@ -586,19 +735,19 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
   // everything, at the top. `homeSignal` is a counter, 0 until the first click.
   // Already there, the click just refreshes.
   const viewNow = React.useRef(null);
-  viewNow.current = { scope, show, orq, focusPost };
+  viewNow.current = { scope, show, orq, focusPost, profileId };
   React.useEffect(() => {
     if (!homeSignal) return;
     const v = viewNow.current;
-    if (v.scope === "all" && v.show === "all" && !v.orq && !v.focusPost) load({ scope: "all", show: "all", sort, orq: null });
-    else { setFocusPost(null); setScope("all"); setShow("all"); setOrq(""); }
+    if (v.scope === "all" && v.show === "all" && !v.orq && !v.focusPost && !v.profileId) load({ scope: "all", show: "all", sort, orq: null });
+    else { setFocusPost(null); setProfileId(null); setScope("all"); setShow("all"); setOrq(""); }
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [homeSignal]);
 
   const loadMore = async () => {
     if (loadingMore) return;
     setLoadingMore(true);
-    const res = await CommunityStore.feed({ scope, show, sort, orq: orq || null, offset: nextOffset });
+    const res = await CommunityStore.feed({ ...query(), offset: nextOffset });
     setLoadingMore(false);
     if (res.ok) {
       setPosts((cur) => cur.concat(res.posts.filter((p) => !cur.some((c) => c.id === p.id))));
@@ -698,10 +847,12 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
 
   // What the column is showing: the usual list of posts, the notifications,
   // or one post opened from a notification.
-  const viewing = focusPost ? "post" : scope === "notifications" ? "notifications" : "list";
+  const viewing = focusPost ? "post" : profileId ? "profile" : scope === "notifications" ? "notifications" : "list";
 
   const sub = [user.handle ? "@" + user.handle : null, user.city].filter(Boolean).join(" · ");
   const empty = (focusPost && ["This post is no longer here", "It may have been deleted by the DJ who shared it."])
+    || (profileId && (profile && profile.mine ? ["You haven’t posted yet", "Share one of your tandas, or write something to the community."]
+      : ["Nothing posted yet", "When this DJ shares a tanda or writes something, it will be here."]))
     || (scope !== "mine" && orq && [`No tandas by ${orqName || "this orchestra"} here`, "Try another orchestra, or see everything."])
     || (scope !== "mine" && CM_EMPTY_SHOW[show]) || CM_EMPTY[scope];
   return (
@@ -710,13 +861,13 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
         <div className="cm-feed">
           {/* left rail */}
           <aside className="cm-rail">
-            <div className="cm-me">
-              <div className={"cm-avatar " + communityAvatarClass(user.id)} aria-hidden="true">{communityInitials(user)}</div>
+            <button type="button" className="cm-me cm-me-btn" onClick={() => openProfile(user.id)} title="Your page">
+              <CommunityAvatar id={user.id} avatar={user.avatar} />
               <div className="tp-flex1">
                 <div className="cm-me-name">{user.displayName || user.email || "Signed in"}</div>
                 {sub && <div className="cm-me-sub">{sub}</div>}
               </div>
-            </div>
+            </button>
             {onOpenSettings && (
               <button type="button" className="tp-btn sm block" onClick={onOpenSettings}><I.pencil s={14} /> Edit profile</button>
             )}
@@ -724,9 +875,9 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
               {CM_SCOPES.map((s) => {
                 const Icon = I[s.icon];
                 return (
-                  <button type="button" key={s.id} className={"cm-nav-item" + (scope === s.id ? " on" : "")}
-                    aria-current={scope === s.id ? "page" : undefined}
-                    onClick={() => { setFocusPost(null); setScope(s.id); setShow("all"); setOrq(""); }}>
+                  <button type="button" key={s.id} className={"cm-nav-item" + (scope === s.id && !profileId ? " on" : "")}
+                    aria-current={scope === s.id && !profileId ? "page" : undefined}
+                    onClick={() => { setFocusPost(null); setProfileId(null); setScope(s.id); setShow("all"); setOrq(""); }}>
                     <Icon s={17} /> {s.label}
                     {s.id === "notifications" && community.unread > 0 && <span className="cm-nav-n">{community.unread > 9 ? "9+" : community.unread}</span>}
                   </button>
@@ -746,7 +897,7 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
             {/* Posting belongs to the feed, not to the "My posts" / "Saved" lists. */}
             {viewing === "list" && scope === "all" && (
               <form className={"cm-composer" + (composing ? " is-open" : "")} onSubmit={submitPost}>
-                <div className={"cm-avatar " + communityAvatarClass(user.id)} aria-hidden="true">{communityInitials(user)}</div>
+                <CommunityAvatar id={user.id} avatar={user.avatar} />
                 <div className="cm-composer-main">
                   <textarea ref={composeRef} className="cm-input cm-textarea cm-composer-input" rows={composing ? 3 : 1} maxLength={500}
                     aria-label="Write a post" placeholder="What are you playing this week?"
@@ -858,8 +1009,29 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
             )}
 
             {viewing === "notifications" && (
-              <NotificationsList onOpenPost={setFocusPost}
+              <NotificationsList onOpenPost={setFocusPost} onOpenProfile={openProfile}
                 onOpenFeed={() => { setScope("all"); setShow("all"); setOrq(""); }} />
+            )}
+            {viewing === "profile" && (
+              <>
+                <button type="button" className="tp-btn sm cm-back" onClick={closeProfile}>
+                  <I.chev s={14} /> Back
+                </button>
+                {profile === null && <div className="cm-skels" role="status" aria-label="Loading the profile"><PostSkeleton /></div>}
+                {profile === false && (
+                  <div className="cm-empty">
+                    <div className="cm-empty-title">This DJ is no longer here</div>
+                    <div className="cm-empty-sub">The account may have been deleted.</div>
+                  </div>
+                )}
+                {profile && (
+                  <ProfileCard profile={profile} tab={profileTab} onTab={setProfileTab} onEdit={onOpenSettings} flash={flash}
+                    onFollowChange={(on) => setProfile((p) => ({ ...p, followed: on, followers: Math.max(0, p.followers + (on ? 1 : -1)) }))} />
+                )}
+                {profile && profileTab !== "posts" && (
+                  <PeopleList userId={profile.id} which={profileTab} onOpen={openProfile} flash={flash} />
+                )}
+              </>
             )}
             {viewing === "post" && (
               <button type="button" className="tp-btn sm cm-back" onClick={() => setFocusPost(null)}>
@@ -875,10 +1047,11 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
 
             {posts.map((p) => (
               <CommunityPost key={p.id} post={p} me={user} tandaSigs={tandaSigs}
-                onChange={changePost} onRemove={removePost} onReload={reload} onPickOrq={scope === "mine" ? undefined : pickOrq} flash={flash} ask={ask} />
+                onChange={changePost} onRemove={removePost} onReload={reload} onPickOrq={scope === "mine" || profileId ? undefined : pickOrq}
+                onOpenProfile={openProfile} flash={flash} ask={ask} />
             ))}
 
-            {viewing !== "notifications" && !error && !loading && posts.length === 0 && (
+            {viewing !== "notifications" && !(viewing === "profile" && (profileTab !== "posts" || !profile)) && !error && !loading && posts.length === 0 && (
               <div className="cm-empty">
                 <div className="cm-empty-ic"><I.note s={20} /></div>
                 <div className="cm-empty-title">{empty[0]}</div>

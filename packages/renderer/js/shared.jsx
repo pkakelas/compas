@@ -5,6 +5,7 @@ const { useMemo, useState, useRef, useCallback, useEffect } = React;
    Line icons share one stroke weight (1.7). The plus and check marks are a
    touch heavier (2 / 2.2) on purpose so they stay legible at small sizes. */
 const I = {
+  users: (p) => <svg viewBox="0 0 24 24" width={p.s||16} height={p.s||16} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="16.5" cy="9" r="2.6"/><path d="M15.5 14.2c2.4.2 4.3 1.9 5 4.8"/></svg>,
   play:  (p) => <svg viewBox="0 0 24 24" width={p.s||20} height={p.s||20} fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>,
   pause: (p) => <svg viewBox="0 0 24 24" width={p.s||20} height={p.s||20} fill="currentColor"><rect x="7" y="5.5" width="3.4" height="13" rx="1"/><rect x="13.6" y="5.5" width="3.4" height="13" rx="1"/></svg>,
   prev:  (p) => <svg viewBox="0 0 24 24" width={p.s||18} height={p.s||18} fill="currentColor"><rect x="5" y="6.5" width="2.6" height="11" rx="1"/><path d="M19 6.5v11l-9-5.5z"/></svg>,

@@ -2951,6 +2951,7 @@ button.tp-nav {
 .cm-acct { display: flex; flex-direction: column; gap: 14px; }
 .cm-acct-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .cm-acct-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cm-acct-wide { grid-column: 1 / -1; }
 .tp-btn.ghost.cm-danger { color: var(--accent-deep); }
 .tp-btn.ghost.cm-danger:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent-deep); }
 
@@ -2969,14 +2970,25 @@ button.tp-nav {
 .tv-share.on { color: var(--vals); border-color: var(--vals-line); background: var(--vals-soft); }
 .tv-share.on:hover { color: var(--vals); border-color: var(--vals); background: var(--vals-soft); }
 
-/* ---- avatars ---- */
-.cm-avatar.sm { width: 28px; height: 28px; font-size: 10.5px; }
-/* each DJ keeps one colour (picked from their id), so faces are recognisable */
-.cm-avatar.av-1 { background: var(--vals-soft); border-color: var(--vals-line); color: var(--vals); }
-.cm-avatar.av-2 { background: var(--milonga-soft); border-color: var(--milonga-line); color: var(--milonga); }
-.cm-avatar.av-3 { background: var(--mood-soft); border-color: var(--mood-line); color: var(--mood); }
-.cm-avatar.av-4 { background: var(--cue-soft); border-color: var(--cue-line); color: var(--cue-deep); }
-.cm-avatar.av-5 { background: var(--surface-3); border-color: var(--line-2); color: var(--ink); }
+/* ---- avatars: a photo, or one of the app's drawn pictures ---- */
+.cm-avatar.sm { width: 28px; height: 28px; }
+.cm-avatar { overflow: hidden; padding: 0; }
+.cm-avatar svg { display: block; width: 100%; height: 100%; }
+.cm-avatar.is-photo { object-fit: cover; border-color: var(--line-2); background: var(--surface-2); }
+/* Settings: the picture and the ways to change it */
+.cm-acct-avatar { display: flex; align-items: flex-start; gap: 16px; }
+.cm-acct-avatar-main { min-width: 0; }
+.cm-acct-avatar-title { font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+.cm-acct-avatar-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.cm-acct-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.cm-preset {
+  width: 34px; height: 34px; padding: 2px; border-radius: 50%; border: 2px solid transparent; background: transparent; cursor: pointer;
+}
+.cm-preset svg { display: block; width: 100%; height: 100%; }
+.cm-preset:hover { border-color: var(--line-2); }
+.cm-preset.on { border-color: var(--accent); }
+.cm-preset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cm-preset:disabled { opacity: .6; cursor: default; }
 
 /* ---- feed layout: a narrow rail and a reading-width post column ---- */
 .cm-feed {
@@ -2994,7 +3006,7 @@ button.tp-nav {
 .cm-nav-item:hover { background: var(--surface-2); color: var(--ink); }
 .cm-nav-item.on { background: var(--surface-2); color: var(--ink); font-weight: 600; }
 .cm-nav-item.on svg { color: var(--accent); }
-.cm-nav-item:focus-visible, .cm-act:focus-visible, .cm-composer-btn:focus-visible, .cm-newpill:focus-visible,
+.cm-nav-item:focus-visible, .cm-act:focus-visible, .cm-composer-btn:focus-visible, .cm-newpill:focus-visible, .cm-ptab:focus-visible, .cm-person-main:focus-visible, .cm-me-btn:focus-visible, .cm-name-btn:focus-visible,
 .cm-meta-btn:focus-visible, .cm-more:focus-visible, .cm-send:focus-visible, .cm-tanda-menu button:focus-visible, .cm-attached-x:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
@@ -3035,6 +3047,44 @@ button.tp-nav {
 .cm-notif .tp-flex1 { min-width: 0; }
 .cm-notif-dot { width: 9px; height: 9px; flex: none; margin-top: 6px; border-radius: 50%; background: var(--accent); }
 .cm-back { align-self: flex-start; }
+
+/* ---- a DJ's page ---- */
+.cm-me-btn { width: 100%; cursor: pointer; font: inherit; color: inherit; text-align: left; }
+.cm-me-btn:hover { border-color: var(--line-2); }
+.cm-name-btn { padding: 0; border: none; background: none; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
+.cm-name-btn:hover { text-decoration: underline; }
+.cm-profile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px 22px 0; }
+.cm-profile-head { display: flex; align-items: flex-start; gap: 16px; }
+.cm-avatar.lg { width: 64px; height: 64px; font-size: 20px; }
+.cm-profile-id { min-width: 0; }
+.cm-profile-name { margin: 2px 0 0; font-size: 20px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); overflow-wrap: anywhere; }
+.cm-profile-sub { margin-top: 3px; font-size: 13px; color: var(--ink-2); }
+.cm-profile-badge {
+  display: inline-block; margin-top: 7px; padding: 2px 8px; border-radius: 999px;
+  background: var(--surface-2); font-size: 11.5px; font-weight: 600; color: var(--ink-2);
+}
+.cm-profile-bio { margin: 14px 0 0; font-size: 14.5px; line-height: 1.5; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cm-profile-tabs { display: flex; gap: 4px; margin-top: 16px; border-top: 1px solid var(--line); }
+.cm-ptab {
+  display: inline-flex; align-items: center; gap: 5px; height: 44px; padding: 0 12px; margin-bottom: -1px;
+  border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--ink-2); font: 500 13.5px var(--sans); cursor: pointer;
+}
+.cm-ptab b { font-weight: 700; color: var(--ink); }
+.cm-ptab:hover { color: var(--ink); }
+.cm-ptab.on { color: var(--ink); border-bottom-color: var(--accent); }
+.cm-follow { flex: none; }
+.cm-people { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.cm-person { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border-bottom: 1px solid var(--line); }
+.cm-person:last-child { border-bottom: none; }
+.cm-person-main {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 6px 8px; border: none; border-radius: 10px;
+  background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer;
+}
+.cm-person-main:hover { background: var(--surface-2); }
+.cm-person-main .tp-flex1 { min-width: 0; }
+.cm-person-name { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-person-sub { display: block; font-size: 12.5px; color: var(--ink-2); }
+.cm-people-more { align-self: center; margin: 10px; }
 .cm-back svg { transform: rotate(180deg); }
 
 /* ---- composer: one field; under it "Add a tanda" (or the tanda added) and "Post" ---- */

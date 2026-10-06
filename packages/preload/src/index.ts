@@ -290,8 +290,18 @@ function communitySignOut() {
   return ipcRenderer.invoke('community:signOut');
 }
 
-function communityUpdateProfile(input: {displayName: string; handle: string; city: string | null}) {
+function communityUpdateProfile(input: {displayName: string; handle: string; city: string | null; bio: string | null}) {
   return ipcRenderer.invoke('community:updateProfile', input);
+}
+
+/** Set the profile picture: "preset:<n>", the Google photo's URL, or null. */
+function communityAvatarSet(value: string | null) {
+  return ipcRenderer.invoke('community:avatarSet', value);
+}
+/** Choose an image file and upload it as the profile picture. Resolves to
+ *  `{ok, state}`, or `{ok: false, cancelled: true}` if the dialog was closed. */
+function communityAvatarPick() {
+  return ipcRenderer.invoke('community:avatarPick');
 }
 
 /** Permanently delete the signed-in account and everything it posted. */
@@ -323,11 +333,13 @@ function communityAsk(text: string) {
  *  library. `show` filters it, `sort` orders it, `offset` is the `nextOffset`
  *  of the previous page. Resolves to `{ok, posts, nextOffset, hasMore}`. */
 function communityFeed(opts: {
-  scope: 'all' | 'mine' | 'saved';
+  scope: 'all' | 'mine' | 'saved' | 'following';
   sort?: 'popular' | 'new' | 'liked';
   show?: 'all' | 'ready' | 'missing' | 'questions';
   orq?: string | null;
   postId?: string | null;
+  // One DJ's posts (their profile page).
+  author?: string | null;
   offset?: number;
 }) {
   return ipcRenderer.invoke('community:feed', opts);
@@ -397,6 +409,19 @@ function communityBlock(userId: string) {
   return ipcRenderer.invoke('community:block', userId);
 }
 
+/** One DJ as their page shows them. Resolves to `{ok, profile}` (null profile
+ *  when there is no such DJ). */
+function communityProfile(userId: string) {
+  return ipcRenderer.invoke('community:profile', userId);
+}
+function communityFollow(userId: string, on: boolean) {
+  return ipcRenderer.invoke('community:follow', userId, on);
+}
+/** Who follows a DJ, or whom they follow. Resolves to `{ok, people, hasMore, nextOffset}`. */
+function communityFollows(userId: string, which: 'followers' | 'following', offset: number) {
+  return ipcRenderer.invoke('community:follows', userId, which, offset);
+}
+
 /** Subscribe to sign-in state changes (sign in/out, profile edits). The
  *  callback receives the fresh state. Returns an unsubscribe function. */
 function onCommunityChanged(cb: (state: unknown) => void) {
@@ -457,6 +482,8 @@ export {
   communitySignOut,
   communityUpdateProfile,
   communityDeleteAccount,
+  communityAvatarSet,
+  communityAvatarPick,
   onCommunityChanged,
   communitySharePreview,
   communityShare,
@@ -476,4 +503,7 @@ export {
   communityDeletePost,
   communityReport,
   communityBlock,
+  communityProfile,
+  communityFollow,
+  communityFollows,
 };

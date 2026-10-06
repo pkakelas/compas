@@ -77,6 +77,8 @@ window.compas = {
     signOut: preload.communitySignOut,
     updateProfile: preload.communityUpdateProfile,
     deleteAccount: preload.communityDeleteAccount,
+    avatarSet: preload.communityAvatarSet,
+    avatarPick: preload.communityAvatarPick,
     onChanged: preload.onCommunityChanged,
     sharePreview: preload.communitySharePreview,
     share: preload.communityShare,
@@ -96,5 +98,8 @@ window.compas = {
     deletePost: preload.communityDeletePost,
     report: preload.communityReport,
     block: preload.communityBlock,
+    profile: preload.communityProfile,
+    follow: preload.communityFollow,
+    follows: preload.communityFollows,
   },
 };

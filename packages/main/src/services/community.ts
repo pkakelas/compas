@@ -25,6 +25,12 @@ export type CommunityUser = {
   handle: string | null;
   displayName: string | null;
   city: string | null;
+  bio: string | null;
+  // An https URL (Google photo or upload), "preset:<n>", or null (the app
+  // picks a preset from the id).
+  avatar: string | null;
+  // The picture Google gave at sign-in, if any — offered as a choice.
+  googleAvatar: string | null;
 };
 
 export type CommunityState = {
@@ -36,7 +42,7 @@ export type CommunityResult =
   | {ok: true; state: CommunityState; pending?: 'confirm-email'}
   | {ok: false; error: string; cancelled?: boolean};
 
-export type ProfileInput = {displayName: string; handle: string; city: string | null};
+export type ProfileInput = {displayName: string; handle: string; city: string | null; bio: string | null};
 
 /** A row of the backend's `feed_posts` view. `tanda` is another user's JSON:
  *  treat it as untrusted (services/community-share.ts checks it). */
@@ -54,6 +60,31 @@ export type FeedRow = {
   author_city: string | null;
   viewer_liked: boolean;
   viewer_saved: boolean;
+  author_followed: boolean;
+  author_avatar: string | null;
+};
+
+/** A row of the backend's `profile_cards` view: a DJ as their page shows them. */
+export type ProfileRow = {
+  id: string;
+  handle: string;
+  display_name: string;
+  city: string | null;
+  bio: string | null;
+  created_at: string;
+  tanda_count: number;
+  post_count: number;
+  follower_count: number;
+  following_count: number;
+  viewer_follows: boolean;
+  follows_viewer: boolean;
+  avatar_url: string | null;
+};
+
+/** One entry of a followers / following list. */
+export type FollowRow = {
+  created_at: string;
+  profile: {id: string; handle: string; display_name: string; city: string | null; avatar_url: string | null} | null;
 };
 
 export type CommentRow = {
@@ -63,14 +94,14 @@ export type CommentRow = {
   author_id: string;
   body: string;
   created_at: string;
-  author: {handle: string; display_name: string} | null;
+  author: {handle: string; display_name: string; avatar_url: string | null} | null;
 };
 
 /** A row of the backend's `my_notifications` view: something another DJ did
  *  with one of the signed-in DJ's posts or comments — or the one `welcome`
  *  entry every DJ gets from Compás itself, which is about no post. */
 export type NotificationRow = {
-  kind: 'like' | 'comment' | 'reply' | 'welcome';
+  kind: 'like' | 'comment' | 'reply' | 'follow' | 'welcome';
   created_at: string;
   actor_id: string;
   actor_name: string;
@@ -79,9 +110,10 @@ export type NotificationRow = {
   post_title: string | null;
   comment_id: string | null;
   body: string | null;
+  actor_avatar: string | null;
 };
 
-export type FeedScope = 'all' | 'mine' | 'saved';
+export type FeedScope = 'all' | 'mine' | 'saved' | 'following';
 /** How the feed is ordered: by the backend's popularity score (recent posts
  *  that people liked and talked about), by date, or by likes of all time. */
 export type FeedSort = 'popular' | 'new' | 'liked';
@@ -219,11 +251,20 @@ function debug(...args: unknown[]): void {
 
 const HANDLE_RE = /^[a-z0-9_]{3,24}$/;
 
+/** The picture an identity provider (Google) gave for the account, if any. */
+function googlePicture(meta: Record<string, unknown> | undefined): string | null {
+  for (const key of ['avatar_url', 'picture']) {
+    const v = meta?.[key];
+    if (typeof v === 'string' && v.startsWith('https://') && v.length <= 2000) return v;
+  }
+  return null;
+}
+
 // A comment with its author's public name. The `!author_id` hint is required:
 // comments also reach profiles through comment_likes, and without it the
 // backend refuses the query as ambiguous.
 const COMMENT_COLUMNS =
-  'id, post_id, parent_id, author_id, body, created_at, author:profiles!author_id(handle, display_name)';
+  'id, post_id, parent_id, author_id, body, created_at, author:profiles!author_id(handle, display_name, avatar_url)';
 const NOT_CONFIGURED_MESSAGE = 'Community isn’t available in this build.';
 const NOT_CONFIGURED: CommunityResult = {ok: false, error: NOT_CONFIGURED_MESSAGE};
 
@@ -273,7 +314,7 @@ export class CommunityService {
   readonly #userDataDir: string;
   readonly #onChange: (state: CommunityState) => void;
   #clientInstance: SupabaseClient | null = null;
-  #profile: {userId: string; handle: string; displayName: string; city: string | null} | null = null;
+  #profile: {userId: string; handle: string; displayName: string; city: string | null; bio: string | null; avatar: string | null} | null = null;
   #pendingSignIn: {cancel: () => void} | null = null;
 
   /** `onChange` fires whenever the signed-in state may have changed (sign in/out,
@@ -321,11 +362,11 @@ export class CommunityService {
       this.#profile = null;
       const {data: row, error: profileError} = await client
         .from('profiles')
-        .select('handle, display_name, city')
+        .select('handle, display_name, city, bio, avatar_url')
         .eq('id', authUser.id)
         .maybeSingle();
       if (row) {
-        this.#profile = {userId: authUser.id, handle: row.handle, displayName: row.display_name, city: row.city};
+        this.#profile = {userId: authUser.id, handle: row.handle, displayName: row.display_name, city: row.city, bio: row.bio, avatar: row.avatar_url};
       }
       debug(`signed in as ${authUser.id}; profile ${row ? 'loaded (@' + row.handle + ')' : 'NOT readable'}`, profileError ?? '');
     }
@@ -337,6 +378,9 @@ export class CommunityService {
         handle: this.#profile?.handle ?? null,
         displayName: this.#profile?.displayName ?? null,
         city: this.#profile?.city ?? null,
+        bio: this.#profile?.bio ?? null,
+        avatar: this.#profile?.avatar ?? null,
+        googleAvatar: googlePicture(authUser.user_metadata),
       },
     };
   }
@@ -488,24 +532,72 @@ export class CommunityService {
     const displayName = (input.displayName ?? '').trim();
     const handle = (input.handle ?? '').trim().toLowerCase();
     const city = (input.city ?? '').trim() || null;
+    const bio = (input.bio ?? '').trim() || null;
     if (displayName.length < 1 || displayName.length > 60) return {ok: false, error: 'Your name should be 1–60 characters.'};
     if (!HANDLE_RE.test(handle)) {
       return {ok: false, error: 'Handles are 3–24 lowercase letters, numbers or underscores.'};
     }
     if (city && city.length > 60) return {ok: false, error: 'City should be at most 60 characters.'};
+    if (bio && bio.length > 280) return {ok: false, error: 'The bio should be at most 280 characters.'};
 
     const {data: session} = await client.auth.getSession();
     const userId = session.session?.user.id;
     if (!userId) return {ok: false, error: 'Sign in first.'};
     const {data: row, error} = await client
       .from('profiles')
-      .update({display_name: displayName, handle, city})
+      .update({display_name: displayName, handle, city, bio})
       .eq('id', userId)
-      .select('handle, display_name, city')
+      .select('handle, display_name, city, bio, avatar_url')
       .maybeSingle();
     if (error) return {ok: false, error: friendly(error, 'Couldn’t save your profile. Try again.')};
     if (!row) return {ok: false, error: 'Couldn’t save your profile. Try again.'};
-    this.#profile = {userId, handle: row.handle, displayName: row.display_name, city: row.city};
+    this.#profile = {userId, handle: row.handle, displayName: row.display_name, city: row.city, bio: row.bio, avatar: row.avatar_url};
+    const state = await this.getState();
+    this.#onChange(state);
+    return {ok: true, state};
+  }
+
+  /** Set the profile picture: "preset:<n>", the Google photo's URL, or null
+   *  for the app's own choice. Uploads go through uploadAvatar. */
+  async setAvatar(value: string | null): Promise<CommunityResult> {
+    const client = this.#client();
+    if (!client) return NOT_CONFIGURED;
+    const {data: session} = await client.auth.getSession();
+    const userId = session.session?.user.id;
+    if (!userId) return {ok: false, error: 'Sign in first.'};
+    // Only a preset, or the picture Google gave this very account.
+    const google = googlePicture(session.session?.user.user_metadata);
+    const avatar = value && /^preset:\d{1,2}$/.test(value) ? value : value && value === google ? value : null;
+    if (value && !avatar) return {ok: false, error: 'That picture can’t be used.'};
+    return this.#saveAvatar(client, userId, avatar);
+  }
+
+  /** Upload an (already resized) JPEG as the profile picture. */
+  async uploadAvatar(jpeg: Buffer): Promise<CommunityResult> {
+    const client = this.#client();
+    if (!client) return NOT_CONFIGURED;
+    const {data: session} = await client.auth.getSession();
+    const userId = session.session?.user.id;
+    if (!userId) return {ok: false, error: 'Sign in first.'};
+    if (jpeg.length > 1_000_000) return {ok: false, error: 'That picture is too large.'};
+    const name = `${userId}.jpg`;
+    const {error} = await client.storage.from('avatars').upload(name, jpeg, {contentType: 'image/jpeg', upsert: true});
+    if (error) return {ok: false, error: friendly(error, 'Couldn’t upload the picture. Try again.')};
+    // A new version under the same name: the query string makes caches fetch it.
+    const url = client.storage.from('avatars').getPublicUrl(name).data.publicUrl + '?v=' + Date.now();
+    return this.#saveAvatar(client, userId, url);
+  }
+
+  async #saveAvatar(client: SupabaseClient, userId: string, avatar: string | null): Promise<CommunityResult> {
+    const {data: row, error} = await client
+      .from('profiles')
+      .update({avatar_url: avatar})
+      .eq('id', userId)
+      .select('handle, display_name, city, bio, avatar_url')
+      .maybeSingle();
+    if (error) return {ok: false, error: friendly(error, 'Couldn’t save the picture. Try again.')};
+    if (!row) return {ok: false, error: 'Couldn’t save the picture. Try again.'};
+    this.#profile = {userId, handle: row.handle, displayName: row.display_name, city: row.city, bio: row.bio, avatar: row.avatar_url};
     const state = await this.getState();
     this.#onChange(state);
     return {ok: true, state};
@@ -561,6 +653,8 @@ export class CommunityService {
     orq: string | null;
     // Just this one post (opened from a notification).
     id?: string | null;
+    // Just one DJ's posts (their profile page).
+    author?: string | null;
     offset: number;
     limit: number;
   }): Promise<Outcome<{rows: FeedRow[]; userId: string}>> {
@@ -584,6 +678,8 @@ export class CommunityService {
     const run = (sort: FeedSort) => {
       let query = client.from('feed_posts').select('*');
       if (opts.scope === 'mine') query = query.eq('author_id', userId);
+      if (opts.scope === 'following') query = query.eq('author_followed', true);
+      if (opts.author) query = query.eq('author_id', opts.author);
       if (savedIds) query = query.in('id', savedIds);
       if (opts.kind) query = query.eq('kind', opts.kind);
       if (opts.orq) query = query.contains('orq_keys', [opts.orq]);
@@ -739,6 +835,66 @@ export class CommunityService {
 
   setSaved(postId: string, on: boolean): Promise<Outcome<object>> {
     return this.#toggle('saves', postId, on);
+  }
+
+  // ---- profiles and following -----------------------------------------------
+
+  /** One DJ as their page shows them, or null if there is no such DJ. */
+  async getProfile(id: string): Promise<Outcome<{row: ProfileRow | null; userId: string}>> {
+    const client = this.#client();
+    if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
+    const userId = await this.#userId(client);
+    if (!userId) return {ok: false, error: 'Sign in first.'};
+    const {data, error} = await client.from('profile_cards').select('*').eq('id', id).maybeSingle();
+    if (error) return {ok: false, error: friendly(error, 'Couldn’t load that profile. Try again.')};
+    return {ok: true, row: (data as ProfileRow | null) ?? null, userId};
+  }
+
+  /** Follow (or stop following) a DJ. Already following counts as done. */
+  async setFollow(id: string, on: boolean): Promise<Outcome<object>> {
+    const client = this.#client();
+    if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
+    const userId = await this.#userId(client);
+    if (!userId) return {ok: false, error: 'Sign in first.'};
+    if (id === userId) return {ok: false, error: 'That’s you.'};
+    const {error} = on
+      ? await client.from('follows').insert({followee_id: id})
+      : await client.from('follows').delete().eq('follower_id', userId).eq('followee_id', id);
+    if (error && error.code !== '23505') {
+      return {ok: false, error: friendly(error, on ? 'Couldn’t follow that DJ. Try again.' : 'Couldn’t unfollow. Try again.')};
+    }
+    return {ok: true};
+  }
+
+  /** Who follows a DJ, or whom they follow, newest first. */
+  async listFollows(
+    id: string,
+    which: 'followers' | 'following',
+    offset: number,
+    limit: number,
+  ): Promise<Outcome<{rows: FollowRow[]; userId: string}>> {
+    const client = this.#client();
+    if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
+    const userId = await this.#userId(client);
+    if (!userId) return {ok: false, error: 'Sign in first.'};
+    // The other side of each row, embedded by the foreign key it means.
+    const side = which === 'followers' ? 'follower_id' : 'followee_id';
+    const {data, error} = await client
+      .from('follows')
+      .select(`created_at, profile:profiles!${side}(id, handle, display_name, city, avatar_url)`)
+      .eq(which === 'followers' ? 'followee_id' : 'follower_id', id)
+      .order('created_at', {ascending: false})
+      .range(offset, offset + limit - 1);
+    if (error) return {ok: false, error: friendly(error, 'Couldn’t load that list. Try again.')};
+    return {ok: true, rows: (data ?? []) as unknown as FollowRow[], userId};
+  }
+
+  /** The ids of every DJ the signed-in DJ follows (to mark them in lists). */
+  async followingIds(): Promise<Set<string>> {
+    const client = this.#client();
+    if (!client) return new Set();
+    const {data} = await client.from('follows').select('followee_id').limit(1000);
+    return new Set((data ?? []).map(r => r.followee_id as string));
   }
 
   async report(target: {postId?: string | null; commentId?: string | null}, reason: string): Promise<Outcome<object>> {

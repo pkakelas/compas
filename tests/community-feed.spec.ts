@@ -468,6 +468,60 @@ test('saved posts and my posts have their own lists', async () => {
   await expect(composer).toBeVisible();
 });
 
+test('a DJ has a page, and can be followed', async () => {
+  // A name on a post opens the DJ's page: who they are, and their posts.
+  const marta = post(STUB_MARTA_POST);
+  await marta.locator('.cm-post-head').getByRole('button', {name: 'Marta Kowalczyk'}).click();
+  const card = page.locator('.cm-profile');
+  await expect(card.getByRole('heading', {name: 'Marta Kowalczyk'})).toBeVisible();
+  await expect(card).toContainText('@marta · Kraków');
+  await expect(card.getByRole('tab', {name: '1 post'})).toHaveAttribute('aria-selected', 'true');
+  await expect(card.getByRole('tab', {name: '0 followers'})).toBeVisible();
+  await expect(page.locator('.cm-post')).toHaveCount(1);
+  await expect(marta).toBeVisible();
+  await expect(page.locator('.cm-composer')).toHaveCount(0);
+
+  // Follow: the button and the count say so, and the backend has it.
+  const follow = card.getByRole('button', {name: 'Follow', exact: true});
+  await follow.click();
+  await expect(card.getByRole('button', {name: 'Following'})).toHaveAttribute('aria-pressed', 'true');
+  await expect(card.getByRole('tab', {name: '1 follower'})).toBeVisible();
+  expect(stub.follows.has(`${ME}|${STUB_MARTA}`)).toBe(true);
+  await card.getByRole('tab', {name: '1 follower'}).click();
+  await expect(page.locator('.cm-person')).toHaveCount(1);
+  await expect(page.locator('.cm-person')).toContainText('Test DJ');
+  await expect(page.locator('.cm-post')).toHaveCount(0);
+
+  // "Following" in the rail lists only what the DJs I follow posted.
+  const nav = page.getByRole('navigation', {name: 'Community'});
+  await nav.getByRole('button', {name: 'Following'}).click();
+  await expect(page.locator('.cm-post')).toHaveCount(1);
+  await expect(marta).toBeVisible();
+
+  // Being followed back is a notification, and shows on their page.
+  stub.follows.add(`${STUB_MARTA}|${ME}`);
+  stub.followedAt.set(`${STUB_MARTA}|${ME}`, new Date().toISOString());
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  const bell = page.locator('.tp-bell');
+  await expect(bell).toHaveAccessibleName('Notifications, 1 new');
+  await bell.click();
+  const row = page.locator('.cm-notif', {hasText: 'started following you'});
+  await expect(row).toContainText('Marta Kowalczyk started following you');
+  await row.click();
+  await expect(card.getByRole('heading', {name: 'Marta Kowalczyk'})).toBeVisible();
+  await expect(card).toContainText('Follows you');
+
+  // Unfollow, and back to the feed as the next tests expect it.
+  await card.getByRole('button', {name: 'Following'}).click();
+  await expect(card.getByRole('button', {name: 'Follow', exact: true})).toBeVisible();
+  expect(stub.follows.has(`${ME}|${STUB_MARTA}`)).toBe(false);
+  stub.follows.delete(`${STUB_MARTA}|${ME}`);
+  await page.getByRole('button', {name: 'Back', exact: true}).click();
+  await expect(card).toHaveCount(0);
+  await nav.getByRole('button', {name: 'Feed'}).click();
+  await expect(marta).toBeVisible();
+});
+
 test('a post can be reported, and its author blocked', async () => {
   const marta = post(STUB_MARTA_POST);
   await marta.getByRole('button', {name: 'Post options'}).click();
@@ -512,7 +566,7 @@ test('a tanda can be added to a post from the composer', async () => {
   await add.click();
   await expect(list).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.locator('.cm-me-name').click();
+  await field.click();
   await expect(list).toHaveCount(0);
   await add.click();
   await list.getByRole('menuitem', {name: new RegExp(TANDA_NAME)}).click();

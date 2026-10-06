@@ -1,7 +1,8 @@
 import {test, expect, type ElectronApplication, type Page} from '@playwright/test';
-import {readdirSync, readFileSync} from 'node:fs';
+import {mkdtempSync, readdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {launchApp, gotoView} from './helpers/app.js';
+import {launchApp, gotoView, stubFolderDialog} from './helpers/app.js';
 import {
   startCommunityStub,
   STUB_ACCOUNT,
@@ -13,6 +14,8 @@ import {
 // Community accounts, end to end against a local stub backend: the real main
 // process (auth client, encrypted session file, IPC) and the real sign-in UI.
 // Google sign-in is not covered — it needs a real browser and Google account.
+
+const ME = '11111111-1111-4111-8111-111111111111';
 
 let stub: CommunityStub;
 let app: ElectronApplication;
@@ -95,6 +98,47 @@ test('the profile can be edited from Settings', async () => {
   await gotoView(page, 'Community');
   await expect(page.locator('.cm-me-name')).toHaveText('Test DJ Renamed');
   await expect(page.locator('.cm-me-sub')).toHaveText('@dj_test · Athens');
+});
+
+test('the profile picture can be one of the drawn ones, or an uploaded photo', async () => {
+  // With nothing chosen, the app draws one from the account id; picking
+  // another is one click, and the backend remembers it.
+  await page.getByRole('button', {name: 'Edit profile'}).click();
+  const card = page.locator('.cm-acct-avatar');
+  const own = card.locator('.cm-avatar');
+  await expect(own).toHaveAttribute('data-preset', /^\d+$/);
+  await card.getByRole('radio', {name: 'Picture 4'}).click();
+  await expect(card.getByRole('radio', {name: 'Picture 4'})).toHaveAttribute('aria-checked', 'true');
+  await expect(own).toHaveAttribute('data-preset', '3');
+  expect(stub.profiles.get(ME)?.avatar_url).toBe('preset:3');
+
+  // A photo: chosen from disk, squared and shrunk here, stored as the DJ's
+  // own file, and shown from there.
+  const dir = mkdtempSync(join(tmpdir(), 'compas-avatar-'));
+  const png = join(dir, 'me.png');
+  // A 6×4 PNG (made by Electron itself), so the crop and resize have
+  // something to do.
+  const pngBase64 = await app.evaluate(({nativeImage}) => {
+    const w = 6, h = 4, px = Buffer.alloc(w * h * 4);
+    for (let i = 0; i < w * h; i++) px.set([200, 60, 60, 255], i * 4);
+    return nativeImage.createFromBitmap(px, {width: w, height: h}).toPNG().toString('base64');
+  });
+  writeFileSync(png, Buffer.from(pngBase64, 'base64'));
+  await stubFolderDialog(app, png);
+  await card.getByRole('button', {name: 'Upload a photo…'}).click();
+  await expect(card.locator('img.cm-avatar')).toHaveAttribute('src', new RegExp(`/storage/v1/object/public/avatars/${ME}\\.jpg\\?v=\\d+$`));
+  const stored = stub.uploads.get(`${ME}.jpg`)!;
+  expect(stored.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff])); // a JPEG
+  expect(stub.profiles.get(ME)?.avatar_url).toContain(`/avatars/${ME}.jpg`);
+  // Everywhere the DJ appears, it is the photo now.
+  await gotoView(page, 'Community');
+  await expect(page.locator('.cm-me img.cm-avatar')).toBeVisible();
+  await page.getByRole('button', {name: 'Edit profile'}).click();
+
+  // And it can be taken down again.
+  await card.getByRole('button', {name: 'Remove photo'}).click();
+  await expect(own).toHaveAttribute('data-preset', /^\d+$/);
+  expect(stub.profiles.get(ME)?.avatar_url).toBeNull();
 });
 
 test('the session survives a restart and is not stored in clear', async () => {
