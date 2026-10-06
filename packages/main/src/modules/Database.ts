@@ -667,19 +667,19 @@ export function listCollectionTandas(): Tanda[] {
   return listTandas().filter(t => t.inCollection);
 }
 
-/** Record (or, with null, clear) the post a tanda was shared as by the
- *  signed-in account. */
-export function setTandaSharedPost(id: string, postId: string | null): void {
-  if (!shareAccount) return;
+/** Record (or, with null, clear) the post a tanda was shared as by `userId` —
+ *  the account that made (or took down) the post, named by the caller rather
+ *  than read from whoever is signed in at this moment. */
+export function setTandaSharedPost(id: string, postId: string | null, userId: string): void {
   const d = getDb();
   if (postId) {
     d.prepare('INSERT OR REPLACE INTO tanda_shares (tanda_id, user_id, post_id) VALUES (?, ?, ?)').run(
       Number(id),
-      shareAccount,
+      userId,
       postId,
     );
   } else {
-    d.prepare('DELETE FROM tanda_shares WHERE tanda_id = ? AND user_id = ?').run(Number(id), shareAccount);
+    d.prepare('DELETE FROM tanda_shares WHERE tanda_id = ? AND user_id = ?').run(Number(id), userId);
   }
 }
 

@@ -619,11 +619,6 @@ export class CommunityService {
   }
 
   async #saveAvatar(client: SupabaseClient, userId: string, avatar: string | null): Promise<CommunityResult> {
-    // Moving away from an uploaded photo deletes the file, not just the link to it.
-    if (!avatar?.startsWith('upload:') && this.#profile?.userId === userId && this.#profile.avatar?.startsWith('upload:')) {
-      const removed = await this.#removeUpload(client, userId);
-      if (!removed.ok) return removed;
-    }
     const {data: row, error} = await client
       .from('profiles')
       .update({avatar_url: avatar})
@@ -635,6 +630,17 @@ export class CommunityService {
     this.#profile = {userId, handle: row.handle, displayName: row.display_name, city: row.city, bio: row.bio, avatar: row.avatar_url};
     const state = await this.getState();
     this.#onChange(state);
+    // Any picture other than an upload: delete the uploaded file, if there is
+    // one. Only now that the profile no longer points at it (a failed save
+    // above leaves the photo working), and every time rather than when a
+    // cached profile says there was one — removing nothing is a no-op, and a
+    // file left over from an earlier failure is caught by the next change.
+    if (!avatar?.startsWith('upload:')) {
+      const removed = await this.#removeUpload(client, userId);
+      if (!removed.ok) {
+        return {ok: false, error: 'Your picture changed, but your old photo couldn’t be deleted yet. Choose a picture again to retry.'};
+      }
+    }
     return {ok: true, state};
   }
 
@@ -663,15 +669,17 @@ export class CommunityService {
   }
 
   /** Publish a post: a shared tanda (song details only) or a question. */
-  async createPost(input: {kind: 'tanda' | 'question'; note: string; tanda?: unknown}): Promise<Outcome<{id: string}>> {
+  /** Publish a post. Resolves to its id and the account it was posted as. */
+  async createPost(input: {kind: 'tanda' | 'question'; note: string; tanda?: unknown}): Promise<Outcome<{id: string; userId: string}>> {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
-    if (!(await this.#userId(client))) return {ok: false, error: 'Sign in first.'};
+    const userId = await this.#userId(client);
+    if (!userId) return {ok: false, error: 'Sign in first.'};
     const row: Record<string, unknown> = {kind: input.kind, note: input.note};
     if (input.kind === 'tanda') row.tanda = input.tanda;
     const {data, error} = await client.from('posts').insert(row).select('id').single();
     if (error || !data) return {ok: false, error: friendly(error, 'Couldn’t post that. Try again.')};
-    return {ok: true, id: data.id as string};
+    return {ok: true, id: data.id as string, userId};
   }
 
   /** Delete one of the signed-in DJ's own posts. A post that is already gone

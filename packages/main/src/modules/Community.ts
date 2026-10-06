@@ -126,6 +126,19 @@ export class CommunityModule implements AppModule {
     };
     const community = new CommunityService(app.getPath('userData'), broadcast);
     const avatarOf: AvatarOf = (userId, value) => community.avatarUrl(userId, value);
+    // A result that carries a new account state reaches the renderer only
+    // after the markers follow that account — so the tandas it reloads, and
+    // anything it shares next, are the new account's.
+    const settled = async <T extends {ok: boolean; state?: CommunityState}>(result: T): Promise<T> => {
+      if (result.ok && result.state) await followAccount(result.state);
+      return result;
+    };
+    // The account signed in now, with the markers following it.
+    const signedIn = async (): Promise<string | null> => {
+      const state = await community.getState();
+      await followAccount(state);
+      return state.user?.id ?? null;
+    };
 
     ipcMain.handle('community:state', async (): Promise<CommunityState> => {
       const state = await community.getState();
@@ -136,7 +149,7 @@ export class CommunityModule implements AppModule {
     // Google sign-in happens in the system browser; bring Compás back to the
     // front once it finishes so the DJ isn't left looking at a browser tab.
     ipcMain.handle('community:signInGoogle', async (): Promise<CommunityResult> => {
-      const result = await community.signInWithGoogle();
+      const result = await settled(await community.signInWithGoogle());
       if (result.ok) {
         const win = BrowserWindow.getAllWindows().find(w => !w.isDestroyed());
         if (win) {
@@ -149,19 +162,19 @@ export class CommunityModule implements AppModule {
     });
     ipcMain.handle('community:cancelSignIn', (): void => community.cancelSignIn());
 
-    ipcMain.handle('community:signInPassword', (_event, email: unknown, password: unknown) =>
-      community.signInWithPassword(str(email, 254), str(password, 256)),
+    ipcMain.handle('community:signInPassword', async (_event, email: unknown, password: unknown) =>
+      settled(await community.signInWithPassword(str(email, 254), str(password, 256))),
     );
-    ipcMain.handle('community:signUp', (_event, email: unknown, password: unknown) =>
-      community.signUp(str(email, 254), str(password, 256)),
+    ipcMain.handle('community:signUp', async (_event, email: unknown, password: unknown) =>
+      settled(await community.signUp(str(email, 254), str(password, 256))),
     );
-    ipcMain.handle('community:confirmSignUp', (_event, email: unknown, code: unknown) =>
-      community.confirmSignUp(str(email, 254), str(code, 12)),
+    ipcMain.handle('community:confirmSignUp', async (_event, email: unknown, code: unknown) =>
+      settled(await community.confirmSignUp(str(email, 254), str(code, 12))),
     );
     ipcMain.handle('community:resendSignUpCode', (_event, email: unknown) =>
       community.resendSignUpCode(str(email, 254)),
     );
-    ipcMain.handle('community:signOut', () => community.signOut());
+    ipcMain.handle('community:signOut', async () => settled(await community.signOut()));
 
     ipcMain.handle('community:updateProfile', (_event, input: Partial<ProfileInput> | null) =>
       community.updateProfile({
@@ -204,7 +217,7 @@ export class CommunityModule implements AppModule {
       return community.uploadAvatar(square.toJPEG(86));
     });
 
-    ipcMain.handle('community:deleteAccount', () => community.deleteAccount());
+    ipcMain.handle('community:deleteAccount', async () => settled(await community.deleteAccount()));
 
     // ---- sharing ---------------------------------------------------------------
 
@@ -221,6 +234,7 @@ export class CommunityModule implements AppModule {
     ipcMain.handle(
       'community:share',
       async (_event, tandaId: unknown, note: unknown, includeTags: unknown) => {
+        if (!(await signedIn())) return {ok: false, error: 'Sign in first.'};
         const tanda = findTanda(tandaId);
         if (!tanda) return {ok: false, error: 'That tanda no longer exists.'};
         if (tanda.sharedPostId) return {ok: false, error: 'This tanda is already shared.'};
@@ -232,18 +246,21 @@ export class CommunityModule implements AppModule {
           tanda: built.tanda,
         });
         if (!posted.ok) return posted;
-        setTandaSharedPost(tanda.id, posted.id);
+        // Filed under the account the post was made as.
+        setTandaSharedPost(tanda.id, posted.id, posted.userId);
         return {ok: true, postId: posted.id, tandas: listCollectionTandas()};
       },
     );
 
     ipcMain.handle('community:unshare', async (_event, tandaId: unknown) => {
+      const me = await signedIn();
+      if (!me) return {ok: false, error: 'Sign in first.'};
       const tanda = findTanda(tandaId);
       if (!tanda) return {ok: false, error: 'That tanda no longer exists.'};
       if (tanda.sharedPostId) {
         const removed = await community.deletePost(tanda.sharedPostId);
         if (!removed.ok) return removed;
-        setTandaSharedPost(tanda.id, null);
+        setTandaSharedPost(tanda.id, null, me);
       }
       return {ok: true, tandas: listCollectionTandas()};
     });
