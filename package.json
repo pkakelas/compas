@@ -30,7 +30,9 @@
     "typecheck": "pnpm -r --if-present run typecheck",
     "pretest:e2e": "pnpm run build",
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "db:push:staging": "node scripts/db-push.mjs staging",
+    "db:push:production": "node scripts/db-push.mjs production"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",
@@ -39,7 +41,8 @@
     "@types/node": "25.5.0",
     "electron": "41.0.3",
     "electron-builder": "26.16.1",
-    "glob": "13.0.6"
+    "glob": "13.0.6",
+    "supabase": "^2.119.0"
   },
   "dependencies": {
     "@app/main": "*",
@@ -51,7 +54,8 @@
       "better-sqlite3",
       "electron",
       "esbuild",
-      "ffmpeg-static"
+      "ffmpeg-static",
+      "supabase"
     ]
   }
 }

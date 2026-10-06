@@ -1,4 +1,4 @@
-// app-shell.jsx — top-level: top-nav switches Live · Tandas · Playlists · Settings
+// app-shell.jsx — top-level: top-nav switches Live · Tandas · Playlists · Community · Settings
 const { useState } = React;
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
@@ -102,6 +102,9 @@ function AppShell() {
   // background-analysis banner to the main process's progress broadcasts.
   React.useEffect(() => { Store.loadAll(); Store.initAnalysis(); Store.initLibraryWatch(); }, []);
 
+  // Read the Community sign-in state (a no-op in builds without Community).
+  React.useEffect(() => { CommunityStore.init(); }, []);
+
   // Apply the active theme to <html> and persist it across restarts.
   React.useEffect(() => {
     document.documentElement.dataset.theme = t.theme;
@@ -170,6 +173,31 @@ function AppBody({ t, setTweak }) {
   const player = usePlayer();
   const [update, dismissUpdate] = useUpdateNotice();
   const [showOnboarding, dismissOnboarding, startOnboarding] = useOnboarding();
+  const community = useCommunity();
+  // Any view can ask for a tab switch (e.g. "Sign in to share" → Community).
+  React.useEffect(() => {
+    const onNavigate = (e) => { if (typeof e.detail === "string") setView(e.detail); };
+    window.addEventListener("compas:navigate", onNavigate);
+    return () => window.removeEventListener("compas:navigate", onNavigate);
+  }, []);
+  // "Edit profile" (Community tab) opens Settings scrolled to the Community
+  // card with the name field focused. The counter re-triggers it on every click.
+  const [profileJump, setProfileJump] = useState(0);
+  const openProfileSettings = () => { setView("Settings"); setProfileJump((n) => n + 1); };
+  // Clicking Community in the top bar always lands on the general feed, even
+  // if "My posts" or "Saved" was showing last time (or is showing now).
+  const [feedHome, setFeedHome] = useState(0);
+  // Someone who has never opened the Community tab gets a small "new" dot on
+  // it — an honest pointer to a feature they haven't seen, not a made-up count.
+  const [communitySeen, setCommunitySeen] = useState(() => {
+    try { return localStorage.getItem("compas.communitySeen") === "1"; } catch (e) { return true; }
+  });
+  React.useEffect(() => {
+    if (view !== "Community" || communitySeen) return;
+    try { localStorage.setItem("compas.communitySeen", "1"); } catch (e) { /* ignore */ }
+    setCommunitySeen(true);
+  }, [view, communitySeen]);
+  const navTo = (v) => { setView(v); if (v === "Community") setFeedHome((n) => n + 1); };
 
   // Play a playlist in place (marks the active song, like playing a tanda). It
   // deliberately does NOT switch to the Live tab or load the live queue — a
@@ -181,7 +209,14 @@ function AppBody({ t, setTweak }) {
   // so it sits at the bottom on every tab.
   return (
     <div className="tp-app">
-      <TopBar active={view} onNav={setView} />
+      {/* The bell opens the Community tab on its notifications. While a live
+          set is locked it stays quiet: no count to pull the DJ's eye. */}
+      <TopBar active={view} onNav={navTo} community={community.configured}
+        communityNew={community.loaded && !community.user && !communitySeen}
+        bell={community.user ? {
+          count: player.locked ? 0 : community.unread,
+          onOpen: () => { setView("Community"); CommunityStore.openNotifications(); },
+        } : null} />
       <AnalysisBanner />
 
       <div className="tp-view" style={{ display: view === "Live" ? undefined : "none" }}>
@@ -201,8 +236,14 @@ function AppBody({ t, setTweak }) {
         <PlaylistsView onPlay={playPlaylist} dockWidth={t.playlistDockWidth}
           onDockWidthChange={(v) => setTweak("playlistDockWidth", v)} />
       </div>
+      {community.configured && (
+        <div className="tp-view" style={{ display: view === "Community" ? undefined : "none" }}>
+          <CommunityView onOpenSettings={openProfileSettings} homeSignal={feedHome} active={view === "Community"} />
+        </div>
+      )}
       <div className="tp-view" style={{ display: view === "Settings" ? undefined : "none" }}>
-        <SettingsView t={t} setTweak={setTweak} onReplayTour={startOnboarding} />
+        <SettingsView t={t} setTweak={setTweak} onReplayTour={startOnboarding}
+          onOpenCommunity={() => setView("Community")} communityJump={profileJump} />
       </div>
 
       <PlayerBar />

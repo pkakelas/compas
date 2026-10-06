@@ -251,12 +251,34 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
   const editTanda = (t) => { setBuilder({ songs: t.songs.slice(), name: t.name || "", tags: (t.tags || []).slice(), editingId: t.id }); goBuild(); };
   const newTanda = () => { clear(); goBuild(); };
   const playTanda = (t) => player.playTanda(t);
+  // Community sharing — only offered in builds that have a Community backend.
+  const community = useCommunity();
+  const [sharing, setSharing] = useState(null);
+  const shareTanda = (t) => setSharing(t);
+  const unshareTanda = (t) => {
+    ask({
+      title: "Take this tanda down?",
+      message: `“${t.name || "Untitled tanda"}” will be removed from the Community, along with its likes and comments. It stays in your tandas.`,
+      confirmLabel: "Unshare",
+      onConfirm: async () => {
+        const res = await CommunityStore.unshareTanda(t.id);
+        flash(res.ok ? "Removed from Community" : res.error);
+      },
+    });
+  };
+
   const deleteTanda = (t) => {
     ask({
       title: "Delete this tanda?",
-      message: `“${t.name || "Untitled tanda"}” will be removed from your collection.`,
+      message: `“${t.name || "Untitled tanda"}” will be removed from your collection.`
+        + (t.sharedPostId ? " It will also be taken down from the Community." : ""),
       confirmLabel: "Delete tanda",
-      onConfirm: () => {
+      onConfirm: async () => {
+        // A shared tanda is taken down first, so no post outlives its tanda.
+        if (t.sharedPostId) {
+          const res = await CommunityStore.unshareTanda(t.id);
+          if (!res.ok) { flash(res.error); return; }
+        }
         const snapshot = tandas.slice();
         Store.deleteTanda(t.id);
         flash("Tanda deleted", () => Store.setTandasLocal(snapshot));
@@ -346,6 +368,7 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
         <>
           {header}
           <ManageGrid tab={tab} tandas={tandas} suggestions={sugg} onEdit={editTanda} onDelete={deleteTanda} onNew={newTanda} onPlay={playTanda}
+            onShare={community.configured ? shareTanda : undefined} onUnshare={unshareTanda}
             onSaveSuggestion={saveSuggestion} onDismissSuggestion={dismissSuggestion} onBrowseSuggestions={browseSuggestions} preview={preview} view={tandaView} />
         </>
       )}
@@ -356,6 +379,10 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
 
       <Toast toast={toast} onDismiss={dismiss} />
       {modal}
+      {sharing && (
+        <ShareTandaModal tanda={sharing} onClose={() => setSharing(null)}
+          onShared={() => { setSharing(null); flash("Shared to Community"); }} />
+      )}
     </div>
   );
 }

@@ -84,6 +84,8 @@ export type Tanda = {
   tags: TandaTag[];
   // False for a tanda that exists only inside an imported playlist.
   inCollection: boolean;
+  // The Community post this tanda was shared as, or null when it isn't shared.
+  sharedPostId: string | null;
 };
 
 /** A playlist item is either a saved tanda or a single cortina song. */
@@ -217,7 +219,11 @@ function migrate(d: Database.Database): void {
   // Tandas created by a playlist import live only inside that playlist until
   // the DJ keeps one: they stay out of "My tandas" and are removed once no
   // playlist uses them.
-  addColumns(d, 'tandas', [['in_collection', 'INTEGER NOT NULL DEFAULT 1']]);
+  addColumns(d, 'tandas', [
+    ['in_collection', 'INTEGER NOT NULL DEFAULT 1'],
+    // Community: id of the post a tanda was shared as (see services/community.ts).
+    ['shared_post_id', 'TEXT'],
+  ]);
   const addedSongColumns = addColumns(d, 'songs', [
     ['loudness_lufs', 'REAL'],
     ['loudness_peak', 'REAL'],
@@ -607,6 +613,7 @@ export function listTandas(): Tanda[] {
     name: string | null;
     created_at: number;
     in_collection: number;
+    shared_post_id: string | null;
   }[];
   const songStmt = d.prepare(`
     SELECT s.* FROM tanda_songs ts
@@ -623,12 +630,23 @@ export function listTandas(): Tanda[] {
     songs: (songStmt.all(t.id) as SongRow[]).map(rowToSong),
     tags: tagStmt.all(t.id) as TandaTag[],
     inCollection: t.in_collection !== 0,
+    sharedPostId: t.shared_post_id ?? null,
   }));
 }
 
 /** The DJ's own tandas ("My tandas"), without playlist-only ones. */
 export function listCollectionTandas(): Tanda[] {
   return listTandas().filter(t => t.inCollection);
+}
+
+/** Record (or, with null, clear) the Community post a tanda was shared as. */
+export function setTandaSharedPost(id: string, postId: string | null): void {
+  getDb().prepare('UPDATE tandas SET shared_post_id = ? WHERE id = ?').run(postId, Number(id));
+}
+
+/** Forget a Community post that no longer exists, whichever tanda pointed at it. */
+export function clearSharedPost(postId: string): void {
+  getDb().prepare('UPDATE tandas SET shared_post_id = NULL WHERE shared_post_id = ?').run(postId);
 }
 
 /** Keep a playlist-only tanda in "My tandas". */

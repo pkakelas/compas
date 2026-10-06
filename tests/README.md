@@ -29,6 +29,16 @@ Build is required because tests load the renderer from `packages/renderer/dist`
   repairs it.
 - **playback.spec.ts** — builds a tanda from imported tracks, queues it in Live,
   hits play, and asserts Howler actually reports a playing sound.
+- **community.spec.ts** — Community accounts against a local stub backend
+  (`helpers/community-stub.ts`): sign in, edit the profile, restart with the
+  session intact (and not stored in clear), sign up with an emailed code, sign
+  out, delete the account. Google sign-in is not covered. Every other spec runs
+  with Community switched off, so no test talks to a real server.
+- **community-feed.spec.ts** — sharing and the feed against the same stub, with
+  a real imported library: a tanda is shared (and only song details leave the
+  app), other DJs' tandas are matched against the library (ready / missing
+  songs), then play, like, comment, reply, ask a question, save, report, block
+  and unshare.
 
 ## How it stays isolated
 

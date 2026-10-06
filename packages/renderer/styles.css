@@ -2842,3 +2842,453 @@ button.tp-nav {
   .tp-ob-icon { width: 52px; height: 52px; margin: 2px auto 12px; border-radius: 15px; }
   .tp-ob-dots { margin: 16px 0 14px; }
 }
+
+/* ============================================================
+   COMMUNITY — sign-in screen, signed-in home, Settings account card
+   ============================================================ */
+.cm-scroll { flex: 1; min-height: 0; overflow-y: auto; background: var(--bg); }
+
+/* sign in: pitch on the left, the form card on the right; wraps to a column */
+.cm-signin {
+  min-height: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: 48px 96px; padding: 48px 30px;
+}
+.cm-pitch { flex: 0 1 460px; min-width: 0; }
+.cm-pitch h1 { margin: 12px 0 0; font-size: 36px; font-weight: 700; letter-spacing: -.025em; line-height: 1.1; color: var(--ink); }
+.cm-pitch h1 em { font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--accent-deep); }
+.cm-pitch > p { margin: 14px 0 0; font-size: 15.5px; line-height: 1.55; color: var(--ink-2); }
+.cm-points { display: flex; flex-direction: column; gap: 18px; margin-top: 28px; }
+.cm-point { display: flex; gap: 14px; align-items: flex-start; }
+.cm-point-ic {
+  width: 36px; height: 36px; flex: none; border-radius: 10px; display: grid; place-items: center;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--ink);
+}
+.cm-point-ic.ok  { color: var(--vals); }
+.cm-point-ic.acc { color: var(--accent-deep); }
+.cm-point b { display: block; font-size: 14.5px; font-weight: 600; color: var(--ink); }
+.cm-point span { display: block; font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+.cm-private {
+  display: flex; gap: 10px; align-items: flex-start; margin-top: 28px; padding-top: 18px;
+  border-top: 1px solid var(--line); font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+}
+.cm-private svg { flex: none; margin-top: 2px; }
+
+.cm-card {
+  flex: 0 1 400px; min-width: 0; padding: 28px; display: flex; flex-direction: column; gap: 16px;
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 16px;
+}
+.cm-card h2 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -.015em; color: var(--ink); }
+.cm-card-sub { font-size: 13px; color: var(--ink-2); margin-top: 4px; line-height: 1.45; }
+.cm-card-sub b { color: var(--ink); font-weight: 600; }
+
+.cm-google {
+  display: flex; align-items: center; justify-content: center; gap: 10px; height: 44px; padding: 0 16px;
+  border-radius: 12px; border: 1px solid var(--ink); background: var(--ink); color: var(--on-ink);
+  font: 700 14px var(--sans); cursor: pointer; transition: opacity .14s;
+}
+.cm-google:hover:not(:disabled) { opacity: .9; }
+.cm-google:disabled { opacity: .6; cursor: default; }
+.cm-google .g {
+  width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid currentColor;
+  display: grid; place-items: center; font-size: 11.5px; font-weight: 800; line-height: 1;
+}
+.cm-or {
+  display: flex; align-items: center; gap: 12px; font-size: 11px; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--ink-2);
+}
+.cm-or::before, .cm-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+.cm-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cm-field label { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.cm-opt { font-weight: 500; }
+.cm-input {
+  width: 100%; height: 42px; padding: 0 13px; border-radius: 10px; border: 1px solid var(--line-2);
+  background: var(--bg); color: var(--ink); font: 500 14px var(--sans); outline: none;
+  transition: border-color .12s, box-shadow .12s;
+}
+.cm-input::placeholder { color: var(--ink-3s); }
+.cm-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.cm-input.cm-code { font: 600 20px var(--mono); letter-spacing: .3em; text-align: center; }
+
+.cm-error {
+  font-size: 13px; line-height: 1.45; color: var(--accent-deep); background: var(--accent-soft);
+  border: 1px solid var(--accent-line); border-radius: 10px; padding: 9px 12px; text-align: left;
+}
+.cm-notice { font-size: 13px; line-height: 1.45; color: var(--ink-2); background: var(--surface-2); border-radius: 10px; padding: 9px 12px; }
+.cm-switch { text-align: center; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.cm-link {
+  appearance: none; border: none; background: none; padding: 0; cursor: pointer;
+  font: 600 13px var(--sans); color: var(--accent-deep);
+}
+.cm-link:hover:not(:disabled) { text-decoration: underline; }
+.cm-link:disabled { opacity: .5; cursor: default; }
+.cm-link:focus-visible, .cm-google:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* the signed-in DJ's own card (feed rail) */
+.cm-me {
+  display: flex; align-items: center; gap: 14px; padding: 16px 18px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+}
+.cm-avatar {
+  width: 44px; height: 44px; flex: none; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent-deep);
+  font-size: 14px; font-weight: 700;
+}
+.cm-me-name { font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-me-sub { font-size: 12.5px; color: var(--ink-2); margin-top: 1px; }
+.cm-empty {
+  text-align: center; padding: 44px 24px; background: var(--surface);
+  border: 1px dashed var(--line-2); border-radius: var(--r);
+}
+.cm-empty-ic {
+  width: 46px; height: 46px; margin: 0 auto 14px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line);
+}
+.cm-empty-title { font-size: 16px; font-weight: 600; color: var(--ink); }
+.cm-empty-sub { font-size: 13px; color: var(--ink-2); margin-top: 6px; }
+
+/* Settings ▸ Community account */
+.cm-acct { display: flex; flex-direction: column; gap: 14px; }
+.cm-acct-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cm-acct-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tp-btn.ghost.cm-danger { color: var(--accent-deep); }
+.tp-btn.ghost.cm-danger:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent-deep); }
+
+/* ---- share control on a tanda card / row ----
+   A small pill button: "Share" is neutral until hovered; "Shared" is a calm
+   green state that takes the tanda down again when clicked. */
+.tv-share {
+  flex: none; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px;
+  border-radius: 999px; border: 1px solid var(--line-2); background: transparent; color: var(--ink-2);
+  font: 600 11.5px var(--sans); cursor: pointer; white-space: nowrap;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.tv-share:hover:not(:disabled) { color: var(--accent-deep); border-color: var(--accent-line); background: var(--accent-soft); }
+.tv-share:disabled { opacity: .45; cursor: default; }
+.tv-share:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tv-share.on { color: var(--vals); border-color: var(--vals-line); background: var(--vals-soft); }
+.tv-share.on:hover { color: var(--vals); border-color: var(--vals); background: var(--vals-soft); }
+
+/* ---- avatars ---- */
+.cm-avatar.sm { width: 28px; height: 28px; font-size: 10.5px; }
+/* each DJ keeps one colour (picked from their id), so faces are recognisable */
+.cm-avatar.av-1 { background: var(--vals-soft); border-color: var(--vals-line); color: var(--vals); }
+.cm-avatar.av-2 { background: var(--milonga-soft); border-color: var(--milonga-line); color: var(--milonga); }
+.cm-avatar.av-3 { background: var(--mood-soft); border-color: var(--mood-line); color: var(--mood); }
+.cm-avatar.av-4 { background: var(--cue-soft); border-color: var(--cue-line); color: var(--cue-deep); }
+.cm-avatar.av-5 { background: var(--surface-3); border-color: var(--line-2); color: var(--ink); }
+
+/* ---- feed layout: a narrow rail and a reading-width post column ---- */
+.cm-feed {
+  width: 100%; max-width: 960px; margin: 0 auto; padding: 24px 30px 44px;
+  display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: center; gap: 24px;
+}
+/* the rail stays put while the posts scroll past it */
+.cm-rail { flex: 1 1 200px; max-width: 240px; min-width: 0; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 24px; }
+.cm-col { flex: 1 1 420px; max-width: 620px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.cm-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.cm-nav-item {
+  display: flex; align-items: center; gap: 11px; height: 40px; padding: 0 12px; border-radius: 10px;
+  border: none; background: transparent; color: var(--ink-2); font: 500 14px var(--sans); cursor: pointer; text-align: left;
+}
+.cm-nav-item:hover { background: var(--surface-2); color: var(--ink); }
+.cm-nav-item.on { background: var(--surface-2); color: var(--ink); font-weight: 600; }
+.cm-nav-item.on svg { color: var(--accent); }
+.cm-nav-item:focus-visible, .cm-act:focus-visible, .cm-composer-btn:focus-visible, .cm-newpill:focus-visible,
+.cm-meta-btn:focus-visible, .cm-more:focus-visible, .cm-send:focus-visible, .cm-tanda-menu button:focus-visible, .cm-attached-x:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+/* ---- notifications: the bell in the top bar, and the list ---- */
+.tp-bell {
+  position: relative; width: 36px; height: 36px; flex: none; display: grid; place-items: center; cursor: pointer;
+  border-radius: 50%; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2);
+  transition: background .12s, color .12s, border-color .12s;
+}
+.tp-bell:hover { background: var(--surface-2); color: var(--ink); border-color: var(--ink-3s); }
+.tp-bell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tp-bell-n, .cm-nav-n {
+  min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; text-align: center;
+  background: var(--accent); color: var(--on-accent); font: 700 10.5px/17px var(--mono);
+}
+.tp-bell-n { position: absolute; top: -4px; right: -4px; }
+.tp-nav-dot { position: absolute; top: 1px; right: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+/* the same count, riding on the top-right corner of the Community tab */
+.tp-nav { position: relative; }
+.tp-nav-n {
+  position: absolute; top: -5px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+  text-align: center; background: var(--accent); color: var(--on-accent); font: 700 10px/16px var(--mono);
+}
+.cm-nav-n { margin-left: auto; }
+.cm-notifs { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.cm-notif {
+  display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 12px 14px; text-align: left; cursor: pointer;
+  border: none; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit;
+}
+.cm-notif:last-child { border-bottom: none; }
+.cm-notif:hover { background: var(--surface-2); }
+.cm-notif:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cm-notif-text { display: block; font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
+.cm-notif-text b { font-weight: 700; color: var(--ink); }
+.cm-notif-body { display: block; margin-top: 3px; font-size: 13px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-notif-when { display: block; margin-top: 3px; font-size: 12px; color: var(--ink-2); }
+.cm-notif .tp-flex1 { min-width: 0; }
+.cm-notif-dot { width: 9px; height: 9px; flex: none; margin-top: 6px; border-radius: 50%; background: var(--accent); }
+.cm-back { align-self: flex-start; }
+.cm-back svg { transform: rotate(180deg); }
+
+/* ---- composer: one field; under it "Add a tanda" (or the tanda added) and "Post" ---- */
+.cm-composer {
+  display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 14px 16px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+}
+.cm-composer-main { flex: 1; min-width: 0; }
+.cm-composer .cm-composer-input { display: block; width: 100%; min-height: 44px; padding: 11px 16px; border-radius: 22px; resize: none; background: var(--bg); }
+.cm-composer.is-open .cm-composer-input { border-radius: 12px; }
+.cm-ask-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.cm-ask-actions > .tp-btn { flex: none; margin-left: auto; }
+/* the button and the added tanda are the same chip in the same place */
+.cm-composer-btn, .cm-attached {
+  display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; white-space: nowrap;
+  border-radius: 9px; border: 1px solid transparent; background: var(--surface-2); color: var(--ink); font: 600 13px var(--sans);
+}
+.cm-composer-btn { cursor: pointer; }
+.cm-composer-btn:hover, .cm-composer-btn[aria-expanded="true"] { border-color: var(--line-2); }
+.cm-composer-btn .acc, .cm-attached .acc { display: inline-flex; flex: none; color: var(--accent); }
+.cm-attached { min-width: 0; flex: 0 1 auto; padding-right: 4px; }
+.cm-attached b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+.cm-attached .n { flex: none; font-weight: 500; color: var(--ink-2); }
+.cm-attached-x {
+  flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: none; border-radius: 7px;
+  background: transparent; color: var(--ink-2); cursor: pointer;
+}
+.cm-attached-x:hover { background: var(--line); color: var(--ink); }
+.cm-compose-hint { flex: 1 1 140px; min-width: 0; font-size: 12.5px; line-height: 1.3; color: var(--ink-2); }
+/* the DJ's tandas, listed under "Add a tanda" */
+.cm-tanda-menu { left: 0; right: auto; width: 300px; max-height: 300px; overflow-y: auto; }
+.cm-tanda-menu-empty { padding: 10px; font-size: 13px; line-height: 1.4; color: var(--ink-2); }
+.cm-pick-name { display: block; font-size: 13.5px; font-weight: 600; }
+.cm-pick-sub { display: block; font-size: 12px; color: var(--ink-2); }
+.cm-pick-n { font: 12px var(--mono); color: var(--ink-2); flex: none; }
+.cm-textarea { height: auto; padding: 10px 13px; resize: vertical; line-height: 1.45; }
+
+/* the feed's two controls: what to show, and in what order */
+/* One row, however many controls there are: each takes an equal share of the
+   width, with its label sitting small above it, so nothing wraps. */
+.cm-filters { display: flex; align-items: flex-end; gap: 10px; }
+.cm-filter { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
+.cm-filter > span { padding-left: 2px; }
+.cm-select { width: 100%; min-width: 0; height: 36px; font-weight: 500; text-overflow: ellipsis; }
+.cm-filters .cm-list-title { flex: 2 1 0; align-self: center; }
+.cm-refresh { flex: none; height: 36px; width: 36px; }
+.cm-empty-btn { margin-top: 14px; }
+.cm-list-title { flex: 1; margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+/* one-line explanation of the library check (or what to do without a library) */
+.cm-hint {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px;
+  background: var(--surface-2); font-size: 12.5px; line-height: 1.45; color: var(--ink-2);
+}
+.cm-hint svg { flex: none; }
+.cm-hint .ok { display: inline-flex; color: var(--vals); }
+
+/* "New posts" — offered, never forced on someone mid-read */
+.cm-newpill {
+  position: sticky; top: 8px; z-index: 6; align-self: center; display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--accent); background: var(--accent);
+  color: var(--on-accent); font: 700 12.5px var(--sans); cursor: pointer; box-shadow: 0 10px 24px -12px var(--shadow-accent);
+}
+.cm-newpill svg { transform: rotate(180deg); }
+
+/* loading placeholders, and the invisible marker that loads older posts */
+.cm-skels { display: flex; flex-direction: column; gap: 16px; }
+.cm-skel { animation: cmPulse 1.4s ease-in-out infinite; }
+.cm-skel i { display: block; border-radius: 6px; background: var(--surface-2); }
+.cm-skel-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.cm-skel .av { width: 44px; height: 44px; border-radius: 50%; }
+.cm-skel .l1 { width: 180px; height: 12px; }
+.cm-skel .l2 { width: 110px; height: 10px; margin-top: 8px; }
+.cm-skel .b1 { width: 70%; height: 14px; }
+.cm-skel .b2 { height: 58px; margin-top: 12px; border-radius: 12px; }
+.cm-skel .b3 { width: 45%; height: 12px; margin-top: 12px; }
+@keyframes cmPulse { 50% { opacity: .55; } }
+.cm-sentinel { height: 1px; }
+.cm-end { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 20px 16px 8px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.cm-end-title { font-family: var(--serif); font-style: italic; font-size: 20px; color: var(--ink); }
+.cm-end .tp-btn { margin-top: 8px; }
+
+/* ---- a post ---- */
+.cm-post { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; }
+.cm-post-head { display: flex; align-items: center; gap: 12px; }
+.cm-post-author { font-size: 14px; color: var(--ink); }
+.cm-post-author b { font-weight: 700; }
+.cm-post-author span { color: var(--ink-2); }
+.cm-post-where { font-size: 12px; color: var(--ink-2); }
+.cm-post-note { margin: 12px 0 0; font-size: 15px; line-height: 1.45; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* a question is the post — let it be the loudest thing in it */
+.cm-post.is-question .cm-post-note { font-size: 19px; font-weight: 600; line-height: 1.35; letter-spacing: -.01em; }
+
+.cm-menu-wrap { position: relative; flex: none; }
+.cm-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 200px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 11px;
+  box-shadow: 0 16px 40px -16px var(--shadow-drop);
+}
+.cm-menu button {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: none; border-radius: 7px;
+  background: transparent; color: var(--ink); font: 500 13px var(--sans); text-align: left; cursor: pointer;
+}
+.cm-menu button:hover { background: var(--surface-2); }
+
+/* The shared tanda: one quiet row (who plays it, and Play), then the songs
+   laid straight onto the post. Its name is in the post's headline. Only the
+   share dialog's preview of "what gets posted" is boxed. */
+.cm-post-tanda { margin-top: 12px; }
+.cm-post-tanda-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.cm-post-tanda-by { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12.5px; color: var(--ink-2); }
+.cm-post-tanda-by .tv-tag { height: 20px; font-size: 10.5px; padding: 0 8px; }
+.cm-post-tname { font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+/* an orchestra name on a post: click it to see only that orchestra's tandas */
+.cm-orq-link { padding: 0; border: none; background: none; font: inherit; color: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.cm-orq-link:hover { color: var(--ink); text-decoration-color: currentColor; }
+.cm-orq-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.cm-post-tanda-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+/* a small square icon button (play, add to my tandas) */
+.cm-icon-btn {
+  width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--line-2); background: transparent; color: var(--ink);
+  transition: background .12s, border-color .12s, color .12s;
+}
+.cm-icon-btn:hover { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-deep); }
+.cm-icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cm-icon-btn.is-done { cursor: default; color: var(--vals); border-color: transparent; }
+.cm-icon-btn.is-done:hover { background: transparent; border-color: transparent; color: var(--vals); }
+.cm-share-preview { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.cm-share-preview-top { padding: 13px 14px 12px; border-bottom: 1px solid var(--line); }
+.cm-post-tanda-name { flex: 1; min-width: 0; font-size: 16px; font-weight: 700; letter-spacing: -.015em; line-height: 1.25; color: var(--ink); overflow-wrap: anywhere; }
+.cm-post-tanda-sub { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; }
+.cm-share-preview-top .tv-tcard-tags { margin-top: 9px; }
+.cm-match { flex: none; margin: 0; }
+/* "1 of 4 in your library" — said plainly, in the same quiet voice as the line
+   it sits on; no badge. */
+.cm-match-partial { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.cm-post-songs { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px 8px; }
+.cm-post-tanda .cm-post-songs { padding: 8px 0 0; }
+.cm-post-tanda .cm-post-song { margin: 0 -8px; padding: 3px 8px; }
+.cm-post-tanda .tp-cuebadge { width: 22px; height: 22px; }
+.cm-post-tanda .tp-cuebadge svg { width: 12px; height: 12px; }
+.cm-post-song { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 8px; }
+/* The number column shows the track number; the listen icon takes its place
+   only under the pointer, and the playing bars while the song plays — a list
+   of icons would be clutter. */
+.cm-post-song .n { width: 22px; height: 22px; flex: none; display: grid; place-items: center; font: 11px var(--mono); color: var(--ink-3s); }
+.cm-post-song .n > svg { display: none; color: var(--accent); }
+.cm-post-song .n .tp-cuebadge { display: none; }
+.cm-post-song.is-clickable:hover .n .num, .cm-post-song.playing .n .num { display: none; }
+.cm-post-song.is-clickable:hover:not(.playing) .n > svg { display: block; }
+.cm-post-song.is-clickable:hover:not(.playing) .n .tp-cuebadge { display: grid; }
+.cm-post-song .t { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-post-song .d { font: 12px var(--mono); color: var(--ink-2); flex: none; min-width: 32px; text-align: right; }
+.cm-post-song .own { flex: none; display: inline-flex; color: var(--vals); }
+/* A song the DJ has gets a green tick and full-strength text; one they don't
+   is simply dimmed, with a plain "Missing" where the tick would be. */
+.cm-post-song .miss { flex: none; font-size: 11.5px; color: var(--ink-3s); }
+.cm-post-song.is-missing .t { color: var(--ink-3s); }
+.cm-post-song.is-missing .d { color: var(--ink-3s); }
+.cm-post-song.is-clickable { cursor: pointer; transition: background .12s; }
+.cm-post-song.is-clickable:hover { background: var(--surface-2); }
+.cm-post-song.playing { background: var(--accent-soft); }
+.cm-post-song.playing .t { color: var(--accent-deep); font-weight: 600; }
+.cm-post-foot-note { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
+
+/* a light row of actions under the post — no rules, no full-width bar */
+.cm-post-actions { display: flex; flex-wrap: wrap; gap: 2px; margin: 10px -10px -6px; }
+.cm-act {
+  display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 10px;
+  border: none; border-radius: 9px; background: transparent; color: var(--ink-2); font: 600 13px var(--sans); cursor: pointer;
+}
+.cm-act:hover { background: var(--surface-2); color: var(--ink); }
+.cm-act.on { color: var(--accent-deep); }
+/* like / comment totals ride on their buttons */
+.cm-act-n { font: 600 12px var(--mono); opacity: .85; }
+/* a like just given: the heart pops once */
+.cm-act.pop svg { animation: cmPop .32s ease-out; }
+@keyframes cmPop { 0% { transform: scale(1); } 40% { transform: scale(1.4); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .cm-skel, .cm-act.pop svg { animation: none; }
+}
+
+/* ---- conversation ---- */
+.cm-more { display: block; margin: 14px 0 -4px; padding: 0; border: none; background: none; font: 600 12.5px var(--sans); color: var(--ink-2); cursor: pointer; }
+.cm-more:hover { color: var(--ink); text-decoration: underline; }
+.cm-comments { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+/* A long conversation scrolls inside the post instead of stretching it. */
+.cm-comments.is-long { max-height: 360px; overflow-y: auto; padding-right: 6px; }
+.cm-comment { display: flex; gap: 10px; align-items: flex-start; }
+.cm-comment.is-reply { margin-left: 38px; }
+.cm-comment-main { min-width: 0; }
+.cm-bubble { display: inline-block; max-width: 100%; background: var(--surface-2); border-radius: 14px; padding: 8px 12px; }
+.cm-bubble-name { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.cm-bubble-text { font-size: 13.5px; line-height: 1.45; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cm-comment-meta { display: flex; align-items: center; gap: 12px; margin: 4px 0 0 12px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.cm-meta-btn { padding: 0; border: none; background: none; font: 600 12px var(--sans); color: var(--ink-2); cursor: pointer; }
+.cm-meta-btn:hover { color: var(--ink); text-decoration: underline; }
+.cm-replying { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+.cm-replying b { color: var(--ink); font-weight: 600; }
+.cm-comment-form { display: flex; align-items: center; gap: 10px; margin: 12px 0 0; }
+.cm-comment-input { height: 36px; border-radius: 999px; padding: 0 14px; font-size: 13.5px; }
+.cm-send {
+  width: 36px; height: 36px; flex: none; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+  border: 1px solid var(--accent-line); background: var(--accent-soft); color: var(--accent-deep);
+}
+.cm-send:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.cm-send:disabled { opacity: .45; cursor: default; }
+
+/* ---- share dialog ---- */
+.cm-share {
+  width: 100%; max-width: 560px; max-height: calc(100vh - 48px); margin: 0; display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--line-2); border-radius: 16px; overflow: hidden;
+  box-shadow: 0 28px 70px -20px var(--shadow-drop); animation: tpModalIn .16s cubic-bezier(.2, .8, .3, 1) both;
+}
+.cm-share-head { display: flex; align-items: center; gap: 14px; padding: 20px 22px 16px; }
+.cm-share-ic {
+  width: 42px; height: 42px; flex: none; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent);
+}
+.cm-share-head h2 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -.015em; color: var(--ink); }
+.cm-share-sub { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+.cm-share-sub b { color: var(--ink); font-weight: 600; }
+.cm-share-body { padding: 0 22px 20px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
+.cm-share-preview { margin-top: 0; }
+.cm-share-loading { padding: 22px; text-align: center; font-size: 13px; color: var(--ink-2); }
+.cm-share-preview > .cm-error { margin: 12px; }
+.cm-share-notehead { display: flex; align-items: baseline; justify-content: space-between; }
+.cm-share-count { font-size: 11px; color: var(--ink-2); }
+.cm-check { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--ink); cursor: pointer; }
+.cm-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.cm-share-private {
+  display: flex; gap: 11px; align-items: flex-start; padding: 12px 14px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--line); font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+}
+.cm-share-private svg { flex: none; margin-top: 2px; }
+.cm-share-private b { color: var(--ink); font-weight: 600; }
+.cm-share-foot {
+  display: flex; align-items: center; justify-content: flex-end; gap: 9px; padding: 14px 22px;
+  background: var(--surface-2); border-top: 1px solid var(--line);
+}
+
+/* report */
+.cm-report { text-align: left; }
+.cm-report-list { display: flex; flex-direction: column; gap: 10px; margin: 14px 0 4px; }
+.cm-report .tp-modal-actions { justify-content: flex-end; }
+
+@media (max-width: 640px) {
+  .cm-signin { padding: 28px 16px; gap: 32px; }
+  .cm-pitch h1 { font-size: 28px; }
+  .cm-card { padding: 20px; }
+  .cm-acct-fields { grid-template-columns: minmax(0, 1fr); }
+  .cm-feed { padding: 16px; gap: 16px; }
+  .cm-rail { max-width: none; position: static; }
+  .cm-filters { flex-wrap: wrap; }
+  .cm-filter { flex: 1 1 140px; }
+  .cm-comment.is-reply { margin-left: 20px; }
+}

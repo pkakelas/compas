@@ -331,7 +331,7 @@ function AboutFooter() {
 }
 
 /* ============================ SETTINGS VIEW ============================ */
-function SettingsView({ t, setTweak, onReplayTour }) {
+function SettingsView({ t, setTweak, onReplayTour, onOpenCommunity, communityJump }) {
   return (
     <div className="tv">
       <div className="tv-head">
@@ -352,6 +352,8 @@ function SettingsView({ t, setTweak, onReplayTour }) {
           <CortinaPlaybackCard />
 
           <LibraryDisplayCard t={t} setTweak={setTweak} />
+
+          <CommunityAccountCard onOpenCommunity={onOpenCommunity} jump={communityJump} />
 
           <SettingsCard icon={<I.spark s={16} />} title="Appearance"
             desc="Choose how Compás looks.">
@@ -408,4 +410,5 @@ function SettingsView({ t, setTweak, onReplayTour }) {
   );
 }
 
-Object.assign(window, { SettingsView });
+// SettingsCard / SetRow are shared with the Community account card (community-view.jsx).
+Object.assign(window, { SettingsView, SettingsCard, SetRow });
