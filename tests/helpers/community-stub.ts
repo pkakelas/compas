@@ -55,8 +55,13 @@ export type CommunityStub = {
   follows: Set<string>;
   followedAt: Map<string, string>;
   reports: Record<string, unknown>[];
-  /** Files in the `avatars` bucket, by name ("<user id>.jpg"). */
+  /** Files in the `avatars` bucket, by path ("<user id>/<version>.jpg"), and
+   *  when each was stored (ISO time; tests may backdate one). */
   uploads: Map<string, Buffer>;
+  uploadedAt: Map<string, string>;
+  /** Switches for failure cases: `failStorageDeletes` makes every delete in
+   *  the bucket fail, as an outage would. */
+  flags: {failStorageDeletes: boolean};
   close(): Promise<void>;
 };
 
@@ -102,6 +107,8 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
   const likedAt = new Map<string, string>();
   const reports: Record<string, unknown>[] = [];
   const uploads = new Map<string, Buffer>();
+  const uploadedAt = new Map<string, string>();
+  const flags = {failStorageDeletes: false};
   let nextId = 0;
   const newId = () => `cccccccc-cccc-4ccc-8ccc-${String(++nextId).padStart(12, '0')}`;
   if (opts.seedFeed) {
@@ -338,7 +345,9 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
       return json(res, 204);
     }
 
-    // ---- the `avatars` storage bucket: public to read, your own file to write ----
+    // ---- the `avatars` storage bucket: anyone reads a file by its public URL;
+    //      a DJ lists, adds and deletes only in their own folder, one new file
+    //      per upload ("<user id>/<version>.jpg"), as the real policies allow ----
     if (url.pathname.startsWith('/storage/v1/object/')) {
       const rest = url.pathname.slice('/storage/v1/object/'.length);
       if (req.method === 'GET' && rest.startsWith('public/avatars/')) {
@@ -347,22 +356,39 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
         res.writeHead(200, {'content-type': 'image/jpeg'});
         return res.end(bytes);
       }
-      // remove(): DELETE …/object/avatars with {prefixes: [names]}; only your own file goes.
+      const me = bearerUser(req);
+      if (!me) return json(res, 401, {statusCode: '401', error: 'Unauthorized', message: 'unauthorized'});
+      const own = (path: string) => path.startsWith(`${me}/`);
+      // list(): POST …/object/list/avatars with {prefix, limit, offset}.
+      if (req.method === 'POST' && rest === 'list/avatars') {
+        const prefix = String(body.prefix ?? '');
+        const offset = Number(body.offset ?? 0);
+        const limit = Number(body.limit ?? 100);
+        const files = [...uploads.keys()]
+          .filter(p => own(p) && p.startsWith(prefix + '/'))
+          .sort()
+          .slice(offset, offset + limit)
+          .map(p => ({name: p.slice(prefix.length + 1), id: p, created_at: uploadedAt.get(p)}));
+        return json(res, 200, files);
+      }
+      // remove(): DELETE …/object/avatars with {prefixes: [paths]}.
       if (req.method === 'DELETE' && rest === 'avatars') {
-        const me = bearerUser(req);
-        if (!me) return json(res, 401, {statusCode: '401', error: 'Unauthorized', message: 'unauthorized'});
-        const names = Array.isArray(body.prefixes) ? (body.prefixes as unknown[]).map(String) : [];
-        const removed = names.filter(n => n === `${me}.jpg` && uploads.delete(n));
+        if (flags.failStorageDeletes) return json(res, 500, {statusCode: '500', error: 'internal', message: 'storage unavailable'});
+        const paths = Array.isArray(body.prefixes) ? (body.prefixes as unknown[]).map(String) : [];
+        const removed = paths.filter(p => own(p) && uploads.delete(p));
+        for (const p of removed) uploadedAt.delete(p);
         return json(res, 200, removed.map(name => ({name, bucket_id: 'avatars'})));
       }
-      if ((req.method === 'POST' || req.method === 'PUT') && rest.startsWith('avatars/')) {
-        const me = bearerUser(req);
-        if (!me) return json(res, 401, {statusCode: '401', error: 'Unauthorized', message: 'unauthorized'});
-        const name = rest.slice('avatars/'.length);
-        if (name !== `${me}.jpg`) return json(res, 403, {statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy'});
+      if (req.method === 'POST' && rest.startsWith('avatars/')) {
+        const path = rest.slice('avatars/'.length);
+        if (!new RegExp(`^${me}/\\d{1,20}\\.jpg$`).test(path)) {
+          return json(res, 403, {statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy'});
+        }
+        if (uploads.has(path)) return json(res, 409, {statusCode: '409', error: 'Duplicate', message: 'The resource already exists'});
         if (req.headers['content-type'] !== 'image/jpeg') return json(res, 415, {statusCode: '415', error: 'invalid_mime_type', message: 'mime type not supported'});
-        uploads.set(name, raw);
-        return json(res, 200, {Key: `avatars/${name}`, Id: name});
+        uploads.set(path, raw);
+        uploadedAt.set(path, new Date().toISOString());
+        return json(res, 200, {Key: `avatars/${path}`, Id: path});
       }
     }
 
@@ -620,6 +646,8 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
     followedAt,
     reports,
     uploads,
+    uploadedAt,
+    flags,
     close: () =>
       new Promise<void>(resolve => {
         server.closeAllConnections();

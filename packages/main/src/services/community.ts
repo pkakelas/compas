@@ -257,6 +257,9 @@ const HANDLE_RE = /^[a-z0-9_]{3,24}$/;
 const PRESET_RE = /^preset:\d{1,2}$/;
 const UPLOAD_RE = /^upload:(\d{1,20})$/;
 const GOOGLE_PHOTO_RE = /^https:\/\/lh\d{1,2}\.googleusercontent\.com\/[A-Za-z0-9_/=.~-]+$/;
+// An uploaded photo the profile doesn't show is only swept up once it is this
+// old: a younger one may belong to an upload still finishing on another device.
+const AVATAR_SWEEP_GRACE_MS = 10 * 60_000;
 const isGooglePhoto = (v: unknown): v is string => typeof v === 'string' && v.length <= 2000 && GOOGLE_PHOTO_RE.test(v);
 
 /** The picture Google gave for the account, if any. */
@@ -324,6 +327,11 @@ export class CommunityService {
   #clientInstance: SupabaseClient | null = null;
   #profile: {userId: string; handle: string; displayName: string; city: string | null; bio: string | null; avatar: string | null} | null = null;
   #pendingSignIn: {cancel: () => void} | null = null;
+  // Uploaded photos that should be gone but whose delete failed ("<user>/<v>.jpg"),
+  // and the account whose folder has been swept since launch (see #cleanUploads).
+  #photosToDelete = new Set<string>();
+  #sweptFor: string | null = null;
+  #sweeping: Promise<unknown> | null = null;
 
   /** `onChange` fires whenever the signed-in state may have changed (sign in/out,
    *  token refresh, profile edit). Construct after the app is ready. */
@@ -342,7 +350,7 @@ export class CommunityService {
     if (PRESET_RE.test(value) || isGooglePhoto(value)) return value;
     const upload = UPLOAD_RE.exec(value);
     if (upload && this.#config && /^[0-9a-f-]{36}$/i.test(userId)) {
-      return `${this.#config.url.replace(/\/+$/, '')}/storage/v1/object/public/avatars/${userId}.jpg?v=${upload[1]}`;
+      return `${this.#config.url.replace(/\/+$/, '')}/storage/v1/object/public/avatars/${userId}/${upload[1]}.jpg`;
     }
     return null;
   }
@@ -379,6 +387,15 @@ export class CommunityService {
     if (!authUser) {
       this.#profile = null;
       return {configured: true, user: null};
+    }
+    // Once per launch, and again while a delete is still owed: clear out
+    // uploaded photos the profile no longer shows. In the background — reading
+    // the state never waits on it.
+    if (!this.#sweeping && (this.#sweptFor !== authUser.id || this.#photosToDelete.size > 0)) {
+      const userId = authUser.id;
+      this.#sweeping = this.#cleanUploads(client, userId, [], true)
+        .then(ok => { if (ok) this.#sweptFor = userId; })
+        .finally(() => { this.#sweeping = null; });
     }
     if (this.#profile?.userId !== authUser.id) {
       this.#profile = null;
@@ -594,7 +611,9 @@ export class CommunityService {
     return this.#saveAvatar(client, userId, avatar);
   }
 
-  /** Upload an (already resized) JPEG as the profile picture. */
+  /** Upload an (already resized) JPEG as the profile picture. Each upload is
+   *  a new file, "<user id>/<version>.jpg", so it never overwrites — or gets
+   *  deleted as — another upload. */
   async uploadAvatar(jpeg: Buffer): Promise<CommunityResult> {
     const client = this.#client();
     if (!client) return NOT_CONFIGURED;
@@ -602,23 +621,67 @@ export class CommunityService {
     const userId = session.session?.user.id;
     if (!userId) return {ok: false, error: 'Sign in first.'};
     if (jpeg.length > 1_000_000) return {ok: false, error: 'That picture is too large.'};
-    const name = `${userId}.jpg`;
-    const {error} = await client.storage.from('avatars').upload(name, jpeg, {contentType: 'image/jpeg', upsert: true});
+    const version = String(Date.now());
+    const path = `${userId}/${version}.jpg`;
+    const {error} = await client.storage.from('avatars').upload(path, jpeg, {contentType: 'image/jpeg'});
     if (error) return {ok: false, error: friendly(error, 'Couldn’t upload the picture. Try again.')};
-    // A new version under the same name: the version goes in the URL, so caches
-    // fetch the new picture.
-    return this.#saveAvatar(client, userId, `upload:${Date.now()}`);
+    const saved = await this.#saveAvatar(client, userId, `upload:${version}`);
+    // Not shown anywhere after all: don't leave it in the public bucket.
+    if (!saved.ok) await this.#cleanUploads(client, userId, [path], false);
+    return saved;
   }
 
-  /** Remove the DJ's uploaded photo from the public bucket. Nothing there is
-   *  fine; a failure is reported, so a photo is never left behind silently. */
-  async #removeUpload(client: SupabaseClient, userId: string): Promise<{ok: true} | {ok: false; error: string}> {
-    const {error} = await client.storage.from('avatars').remove([`${userId}.jpg`]);
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t remove your photo. Try again.')};
-    return {ok: true};
+  /**
+   * Delete uploaded photos the profile no longer shows. `paths` are files known
+   * to be replaced: deleted at once (unless the profile shows them again). With
+   * `sweep`, every other file in the DJ's folder goes too, except the current
+   * picture and files younger than AVATAR_SWEEP_GRACE_MS — those may be another
+   * device's upload whose profile change hasn't landed yet. A failed delete is
+   * remembered and retried by getState. Resolves false if anything is left.
+   */
+  async #cleanUploads(client: SupabaseClient, userId: string, paths: string[], sweep: boolean): Promise<boolean> {
+    const {data: row, error: readError} = await client.from('profiles').select('avatar_url').eq('id', userId).maybeSingle();
+    if (readError) {
+      for (const p of paths) this.#photosToDelete.add(p);
+      return false;
+    }
+    const current = UPLOAD_RE.exec(String(row?.avatar_url ?? ''));
+    const keep = current ? `${userId}/${current[1]}.jpg` : null;
+    const targets = new Set([...paths, ...[...this.#photosToDelete].filter(p => p.startsWith(userId + '/'))]);
+    if (sweep) {
+      const listed = await this.#listUploads(client, userId);
+      if (!listed) return false;
+      const oldEnough = Date.now() - AVATAR_SWEEP_GRACE_MS;
+      for (const f of listed) if (Date.parse(f.createdAt) < oldEnough) targets.add(f.path);
+    }
+    if (keep) targets.delete(keep);
+    if (targets.size === 0) return true;
+    const {error} = await client.storage.from('avatars').remove([...targets]);
+    if (error) {
+      debug('photo cleanup failed; will retry', error);
+      for (const p of targets) this.#photosToDelete.add(p);
+      return false;
+    }
+    for (const p of targets) this.#photosToDelete.delete(p);
+    return true;
+  }
+
+  /** Every file in the DJ's folder of the `avatars` bucket, or null on error. */
+  async #listUploads(client: SupabaseClient, userId: string): Promise<{path: string; createdAt: string}[] | null> {
+    const out: {path: string; createdAt: string}[] = [];
+    for (let offset = 0; ; offset += 100) {
+      const {data, error} = await client.storage.from('avatars').list(userId, {limit: 100, offset});
+      if (error) return null;
+      for (const f of data ?? []) out.push({path: `${userId}/${f.name}`, createdAt: f.created_at ?? ''});
+      if ((data ?? []).length < 100) return out;
+    }
   }
 
   async #saveAvatar(client: SupabaseClient, userId: string, avatar: string | null): Promise<CommunityResult> {
+    // The picture being replaced, read fresh: if it is an upload, that file
+    // (and only that one) is deleted once the profile no longer shows it.
+    const {data: before} = await client.from('profiles').select('avatar_url').eq('id', userId).maybeSingle();
+    const replaced = UPLOAD_RE.exec(String(before?.avatar_url ?? ''));
     const {data: row, error} = await client
       .from('profiles')
       .update({avatar_url: avatar})
@@ -628,19 +691,14 @@ export class CommunityService {
     if (error) return {ok: false, error: friendly(error, 'Couldn’t save the picture. Try again.')};
     if (!row) return {ok: false, error: 'Couldn’t save the picture. Try again.'};
     this.#profile = {userId, handle: row.handle, displayName: row.display_name, city: row.city, bio: row.bio, avatar: row.avatar_url};
+    // After the change, so a failed save leaves the old photo working. If the
+    // delete fails, the picture has still changed; the file is deleted later
+    // (see getState), with no need for the DJ to do anything.
+    if (replaced && row.avatar_url !== before?.avatar_url) {
+      await this.#cleanUploads(client, userId, [`${userId}/${replaced[1]}.jpg`], false);
+    }
     const state = await this.getState();
     this.#onChange(state);
-    // Any picture other than an upload: delete the uploaded file, if there is
-    // one. Only now that the profile no longer points at it (a failed save
-    // above leaves the photo working), and every time rather than when a
-    // cached profile says there was one — removing nothing is a no-op, and a
-    // file left over from an earlier failure is caught by the next change.
-    if (!avatar?.startsWith('upload:')) {
-      const removed = await this.#removeUpload(client, userId);
-      if (!removed.ok) {
-        return {ok: false, error: 'Your picture changed, but your old photo couldn’t be deleted yet. Choose a picture again to retry.'};
-      }
-    }
     return {ok: true, state};
   }
 
@@ -652,8 +710,13 @@ export class CommunityService {
     if (!client) return NOT_CONFIGURED;
     const userId = await this.#userId(client);
     if (!userId) return {ok: false, error: 'Sign in first.'};
-    const removed = await this.#removeUpload(client, userId);
-    if (!removed.ok) return removed;
+    // Every uploaded photo goes first, the current one included.
+    const files = await this.#listUploads(client, userId);
+    if (!files) return {ok: false, error: 'Couldn’t remove your photos. Try again.'};
+    if (files.length) {
+      const {error: removeError} = await client.storage.from('avatars').remove(files.map(f => f.path));
+      if (removeError) return {ok: false, error: friendly(removeError, 'Couldn’t remove your photos. Try again.')};
+    }
     const {error} = await client.rpc('delete_my_account');
     if (error) return {ok: false, error: friendly(error, 'Couldn’t delete the account. Try again.')};
     await client.auth.signOut({scope: 'local'});

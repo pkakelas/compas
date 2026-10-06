@@ -126,8 +126,10 @@ test('the profile picture can be one of the drawn ones, or an uploaded photo', a
   writeFileSync(png, Buffer.from(pngBase64, 'base64'));
   await stubFolderDialog(app, png);
   await card.getByRole('button', {name: 'Upload a photo…'}).click();
-  await expect(card.locator('img.cm-avatar')).toHaveAttribute('src', new RegExp(`/storage/v1/object/public/avatars/${ME}\\.jpg\\?v=\\d+$`));
-  const stored = stub.uploads.get(`${ME}.jpg`)!;
+  await expect(card.locator('img.cm-avatar')).toHaveAttribute('src', new RegExp(`/storage/v1/object/public/avatars/${ME}/\\d+\\.jpg$`));
+  const mine = () => [...stub.uploads.keys()].filter(p => p.startsWith(`${ME}/`));
+  expect(mine()).toHaveLength(1);
+  const stored = stub.uploads.get(mine()[0])!;
   expect(stored.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff])); // a JPEG
   // What is stored is "an upload", not a URL: the app builds that itself.
   expect(stub.profiles.get(ME)?.avatar_url).toMatch(/^upload:\d+$/);
@@ -136,11 +138,31 @@ test('the profile picture can be one of the drawn ones, or an uploaded photo', a
   await expect(page.locator('.cm-me img.cm-avatar')).toBeVisible();
   await page.getByRole('button', {name: 'Edit profile'}).click();
 
+  // A second photo is a file of its own; the first is deleted once replaced.
+  await stubFolderDialog(app, png);
+  const first = mine()[0];
+  await card.getByRole('button', {name: 'Upload a photo…'}).click();
+  await expect.poll(() => mine().length === 1 && mine()[0] !== first).toBe(true);
+  await expect(card.locator('img.cm-avatar')).toHaveAttribute('src', new RegExp(`/${mine()[0]}$`));
+
   // And it can be taken down again — the file too, not just the link to it.
   await card.getByRole('button', {name: 'Remove photo'}).click();
   await expect(own).toHaveAttribute('data-preset', /^\d+$/);
   expect(stub.profiles.get(ME)?.avatar_url).toBeNull();
-  expect(stub.uploads.has(`${ME}.jpg`)).toBe(false);
+  await expect.poll(() => mine()).toEqual([]);
+
+  // If deleting the file fails, the picture still changes, and the file is
+  // deleted later without the DJ having to do anything.
+  await stubFolderDialog(app, png);
+  await card.getByRole('button', {name: 'Upload a photo…'}).click();
+  await expect(card.locator('img.cm-avatar')).toBeVisible();
+  stub.flags.failStorageDeletes = true;
+  await card.getByRole('radio', {name: 'Picture 2'}).click();
+  await expect(own).toHaveAttribute('data-preset', '1');
+  expect(mine()).toHaveLength(1);
+  stub.flags.failStorageDeletes = false;
+  await gotoView(page, 'Community'); // anything that reads the account state retries
+  await expect.poll(() => mine()).toEqual([]);
 });
 
 test('the session survives a restart and is not stored in clear', async () => {
