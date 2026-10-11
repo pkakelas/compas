@@ -15,31 +15,31 @@ test.beforeAll(async () => {
 
   // Import the fixture library through the real flow.
   const musicRoot = mkdtempSync(join(tmpdir(), 'compas-music-'));
-  makeMusicFixture(musicRoot);
+  const fixtureCounts = makeMusicFixture(musicRoot);
   await stubFolderDialog(app, musicRoot);
   await gotoView(page, 'Tandas');
   await page.getByRole('button', {name: /Choose a folder/i}).click();
   await page.getByText(/Import — set folder types/i).waitFor();
   await page.getByRole('button', {name: 'Import', exact: true}).click();
-  await page
-    .locator('#root')
-    .getByText(/songs across/i)
-    .first()
-    .waitFor()
-    .catch(() => {});
+  await expect(
+    page.locator('#root').getByText(`${fixtureCounts.total} songs across`).first(),
+  ).toBeVisible({timeout: 10_000});
 
   // Save three tandas so creation order (Bravo, Alpha, Charlie) disagrees with
   // alphabetical order, then reload so the views pick them up.
-  await page.evaluate(async () => {
+  const ids: string[] = await page.evaluate(async () => {
+    const lib = await (window as any).compas.getLibrary();
+    return lib.songs.filter((s: any) => s.genre === 'tango').map((s: any) => s.id);
+  });
+  expect(ids).toHaveLength(fixtureCounts.tango);
+  await page.evaluate(async songIds => {
     const c = (window as any).compas;
-    const lib = await c.getLibrary();
-    const ids = lib.songs.filter((s: any) => s.genre === 'tango').map((s: any) => s.id);
     const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
     for (const name of ['Bravo', 'Alpha', 'Charlie']) {
-      await c.saveTanda({name, songIds: ids});
+      await c.saveTanda({name, songIds});
       await sleep(5);
     }
-  });
+  }, ids);
   await page.reload();
   await page.waitForLoadState('domcontentloaded');
 });

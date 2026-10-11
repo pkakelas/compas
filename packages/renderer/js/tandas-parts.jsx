@@ -209,10 +209,13 @@ function SongEditRow({ s, onClose }) {
   const asked = useBoolPref("writeTagsAsked");
   const [choosing, setChoosing] = useState(false);
   // Set when the edit was saved in Compás but the file could not be updated;
-  // the editor stays open to show why, then closes on OK.
+  // the editor stays open to show why, then closes on OK. Changing a field
+  // again clears it and brings Save back, so a follow-up correction is saved
+  // rather than lost when the editor closes.
   const [fileError, setFileError] = useState(null);
-  const set = (k) => (e) => setDraft((d) => ({ ...d, [k]: e.target.value }));
-  const setVal = (k) => (v) => setDraft((d) => ({ ...d, [k]: v }));
+  const change = (k, v) => { setFileError(null); setDraft((d) => ({ ...d, [k]: v })); };
+  const set = (k) => (e) => change(k, e.target.value);
+  const setVal = (k) => (v) => change(k, v);
 
   // Open-ended facets (orchestra, singer) suggest values already in the library
   // so existing names stay consistent — but the DJ can always type a brand-new
@@ -302,7 +305,7 @@ function SongEditRow({ s, onClose }) {
           <input value={draft.album} onChange={set("album")} placeholder={tr("parts.album")} /></label>
         <label className="tv-song-edit-cortina">
           <input type="checkbox" checked={draft.isCortina}
-            onChange={(e) => setDraft((d) => ({ ...d, isCortina: e.target.checked }))} />
+            onChange={(e) => change("isCortina", e.target.checked)} />
           <span className="tv-cort-text">
             <span className="tv-cort-title"><I.curtain s={14} /> {tr("parts.useAsCortina")}</span>
             <span className="tv-cort-hint">{tr("parts.cortinaHint")}</span>
