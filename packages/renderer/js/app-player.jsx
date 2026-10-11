@@ -198,6 +198,7 @@ function queueDurationSec(queue) {
 /* ============================ LIBRARY (left) ============================ */
 
 function LibPlaylistCard({ pl, added, onAdd, drag, dragging }) {
+  const songTitle = useSongTitle();
   const tandaCount = pl.items.filter((i) => i.type === "tanda").length;
   // Count single songs as cortinas only when they play that role.
   const cortinaCount = pl.items.filter((it, i) => it.type !== "tanda" && actsAsCortina(pl.items, i)).length;
@@ -212,7 +213,7 @@ function LibPlaylistCard({ pl, added, onAdd, drag, dragging }) {
         <div className="tp-libcard-songs">
           {pl.items.map((it, i) => (
             <span key={i} className="tp-libsong">
-              {it.type === "cortina" ? tr("parts.quotedName", { name: it.data.title }) : (it.data.name || tandaMeta(it.data).orq)}
+              {it.type === "cortina" ? tr("parts.quotedName", { name: songTitle(it.data) }) : (it.data.name || tandaMeta(it.data).orq)}
               {i < pl.items.length - 1 ? <span className="tp-dotsep">·</span> : null}
             </span>
           ))}
@@ -236,6 +237,7 @@ const EMPTY_SET = new Set();
 // to drop at a spot, or tap + to append. Added as a single-song item that —
 // because the song is flagged isCortina — renders as a cortina in the queue.
 function LibCortinaRow({ c, added, onAdd, preview, makeDrag, draggingId }) {
+  const songTitle = useSongTitle();
   const playing = preview && preview.previewId === c.id && preview.playing;
   const drag = makeDrag ? makeDrag(c) : {};
   return (
@@ -244,7 +246,7 @@ function LibCortinaRow({ c, added, onAdd, preview, makeDrag, draggingId }) {
       title={previewTitle(preview, playing, tr("player.auditionCortina"))}>
       <span className="tp-cortrow-ic">{playing ? <EQ /> : (preview && preview.viaMonitor ? <span className="tp-cuebadge"><I.headphones s={14} /></span> : <I.curtain s={15} />)}</span>
       <div className="tp-flex1">
-        <div className="tp-cortrow-title">{c.title}</div>
+        <div className="tp-cortrow-title">{songTitle(c)}</div>
         <div className="tp-cortrow-meta">{c.orq || tr("common.genre.cortina")}<span className="tp-dotsep">·</span><span className="tp-mono">{c.dur}</span></div>
       </div>
       <button className={"tp-addbtn sm" + (added ? " is-added" : "")} onClick={(e) => { e.stopPropagation(); onAdd(); }} title={tr("player.addCortinaToQueue")}>
@@ -461,6 +463,7 @@ function QueueTanda({ item, ix, now, playing, nowIx, onPlaySong, onSkipSong, onR
 
 function QueueCortina({ item, now, playing, onPlay, onRemove, drag }) {
   const c = item.data;
+  const songTitle = useSongTitle();
   const { className: dragCls = "", ...handlers } = drag;
   return (
     <div className={"tp-cortina tp-qrow" + (now ? " is-now" : "") + (onPlay ? "" : " is-locked") + " " + dragCls} {...handlers}
@@ -470,7 +473,7 @@ function QueueCortina({ item, now, playing, onPlay, onRemove, drag }) {
       <I.curtain s={17} />
       <div className="tp-flex1">
         <div className="tp-cortina-label">{now ? (playing ? tr("player.cortinaPlaying") : tr("player.cortinaPaused")) : tr("common.genre.cortina")}</div>
-        <div className="tp-cortina-sub">{tr("parts.quotedName", { name: c.title })} · {c.orq || tr("common.genre.cortina")}</div>
+        <div className="tp-cortina-sub">{tr("parts.quotedName", { name: songTitle(c) })} · {c.orq || tr("common.genre.cortina")}</div>
       </div>
       <div className="tp-fade">{now && playing ? <EQ /> : <I.clock s={13} />} {c.dur}</div>
       {onRemove && <button className="tp-qx dark" onClick={(e) => { e.stopPropagation(); onRemove(); }} title={tr("player.remove")}><I.x s={14} /></button>}
@@ -907,7 +910,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, locked, o
           <div className="tp-nb-mark cortina"><I.curtain s={18} /></div>
           <div style={{ minWidth: 0 }}>
             <div className="tp-nb-eyebrow">{snippetActive ? tr("player.cortinaSnippet", { seconds: cortinaSnippetSec }) : tr("player.cortinaFloorClears")}</div>
-            <Marquee className="tp-nb-cortitle" text={tr("parts.quotedName", { name: c.title })} />
+            <Marquee className="tp-nb-cortitle" text={tr("parts.quotedName", { name: songTitle(c) })} />
             <div className="tp-nb-sub">
               {c.orq || tr("common.genre.cortina")}
               {snippetActive && (
