@@ -21,9 +21,12 @@ test.beforeAll(async () => {
   await page.getByRole('button', {name: /Choose a folder/i}).click();
   await page.getByText(/Import — set folder types/i).waitFor();
   await page.getByRole('button', {name: 'Import', exact: true}).click();
-  await expect(
-    page.locator('#root').getByText(`${fixtureCounts.total} songs across`).first(),
-  ).toBeVisible({timeout: 10_000});
+  // Wait for the import itself: the summary line sits on tabs that aren't showing.
+  await expect
+    .poll(async () => page.evaluate(async () => (await (window as any).compas.getLibrary()).songs.length), {
+      timeout: 10_000,
+    })
+    .toBe(fixtureCounts.total);
 
   // Save three tandas so creation order (Bravo, Alpha, Charlie) disagrees with
   // alphabetical order, then reload so the views pick them up.
