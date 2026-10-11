@@ -1,11 +1,25 @@
 name: Store package
 
-# Builds the Microsoft Store packages (.appx) on demand and attaches them to the
-# workflow run. Kept out of the Release workflow on purpose: the packages are
-# uploaded by hand to Partner Center, never published to GitHub Releases, and a
-# packaging failure here must not break a release or its update metadata.
+# Builds the Microsoft Store package for every release tag (or on demand) and
+# submits it to the Store straight from here, so nothing large is uploaded by
+# hand. Kept out of the Release workflow on purpose: a packaging or Store
+# failure here must not break a release or its update metadata.
+#
+# Submitting needs Partner Center access: the AZURE_AD_TENANT_ID,
+# AZURE_AD_APPLICATION_CLIENT_ID, AZURE_AD_APPLICATION_SECRET and SELLER_ID repo
+# secrets (an Entra app added in Partner Center with the Manager role) and the
+# STORE_PRODUCT_ID repo variable. Without them the packages are only built and
+# attached to the run, as before.
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      submit:
+        description: 'Submit for certification (off: leave a draft in Partner Center to review)'
+        type: boolean
+        default: true
 
 jobs:
   appx:
@@ -48,9 +62,77 @@ jobs:
           fi
           pnpm exec electron-builder build --config electron-builder.mjs --win appx --x64 --arm64 --publish never
 
+      # The Store tool takes a single file, so both architectures go into one
+      # bundle. Once the Store has published a bundle, every later submission
+      # has to be a bundle too — which this always is.
+      - name: Bundle both architectures
+        id: bundle
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $makeappx = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\makeappx.exe" |
+            Where-Object { $_.Directory.Parent.Name -match '^\d+(\.\d+){3}$' } |
+            Sort-Object { [version]$_.Directory.Parent.Name } |
+            Select-Object -Last 1
+          if (-not $makeappx) { Write-Output "::error::makeappx.exe not found in the Windows SDK."; exit 1 }
+          New-Item -ItemType Directory -Force dist\bundle | Out-Null
+          Copy-Item dist\*.appx dist\bundle\
+          $bundle = "dist\Compas-$version.msixbundle"
+          & $makeappx.FullName bundle /d dist\bundle /p $bundle /bv "$version.0" /o
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "path=$bundle" >> $env:GITHUB_OUTPUT
+
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
           name: store-packages
-          path: dist/*.appx
+          path: |
+            dist/*.appx
+            dist/*.msixbundle
           if-no-files-found: error
+
+      - name: Check Partner Center access
+        id: store
+        shell: bash
+        env:
+          TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+          PRODUCT_ID: ${{ vars.STORE_PRODUCT_ID }}
+        run: |
+          if [ -n "$TENANT_ID" ] && [ -n "$CLIENT_ID" ] && [ -n "$CLIENT_SECRET" ] && [ -n "$SELLER_ID" ] && [ -n "$PRODUCT_ID" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Partner Center access isn't set up, so the packages were built but not submitted."
+          fi
+
+      - name: Setup Microsoft Store Developer CLI
+        if: steps.store.outputs.ready == 'true'
+        uses: microsoft/microsoft-store-apppublisher@v1.4
+
+      # Starts a new submission from the last published one with this bundle in
+      # it (replacing any draft left open in Partner Center), then either
+      # submits it for certification or leaves it as a draft. A submit waits
+      # only for Partner Center to accept the submission, not for certification.
+      - name: Submit to the Store
+        if: steps.store.outputs.ready == 'true'
+        shell: pwsh
+        env:
+          TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+          PRODUCT_ID: ${{ vars.STORE_PRODUCT_ID }}
+          BUNDLE: ${{ steps.bundle.outputs.path }}
+          # Tag pushes have no inputs: they always submit.
+          SUBMIT: ${{ github.event_name != 'workflow_dispatch' || inputs.submit }}
+        run: |
+          msstore reconfigure --tenantId $env:TENANT_ID --sellerId $env:SELLER_ID --clientId $env:CLIENT_ID --clientSecret $env:CLIENT_SECRET
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($env:SUBMIT -eq 'true') {
+            msstore publish $env:BUNDLE --appId $env:PRODUCT_ID
+          } else {
+            msstore publish $env:BUNDLE --appId $env:PRODUCT_ID --noCommit
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
