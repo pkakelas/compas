@@ -328,6 +328,7 @@ function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, on
 function PlImportModal({ preview, onConfirm, onCancel }) {
   const [name, setName] = useState(preview.name || "");
   const [busy, setBusy] = useState(false);
+  const songTitle = useSongTitle();
   const tandas = preview.items.filter((it) => it.type === "tanda");
   const cortinas = preview.items.length - tandas.length;
   const nothing = preview.items.length === 0;
@@ -374,7 +375,7 @@ function PlImportModal({ preview, onConfirm, onCancel }) {
                 <span className="pl-imp-main">
                   <span className="pl-imp-title">{it.tanda.name || tr("playlists.importTandaFallback", { n: tIx })}</span>
                   <span className="pl-imp-songs">
-                    {it.tanda.songs.map((s) => s.title).join(" · ")}
+                    {it.tanda.songs.map(songTitle).join(" · ")}
                   </span>
                   {(it.tanda.existingTandaId || it.tanda.missing.length > 0) && (
                     <span className="pl-imp-sub">
@@ -389,7 +390,7 @@ function PlImportModal({ preview, onConfirm, onCancel }) {
             ) : (
               <div className="pl-imp-row is-cortina" key={i}>
                 <span className="pl-imp-n"><I.curtain s={12} /></span>
-                <span className="pl-imp-main"><span className="pl-imp-title">{it.song.title}</span><span className="pl-imp-sub">{tr("playlists.importRowCortina")}</span></span>
+                <span className="pl-imp-main"><span className="pl-imp-title">{songTitle(it.song)}</span><span className="pl-imp-sub">{tr("playlists.importRowCortina")}</span></span>
               </div>
             ))}
           </div>

@@ -180,6 +180,7 @@ export async function scanFile(root: string, file: string): Promise<ScannedSong>
   let year: number | null = null;
   let durationSec: number | null = null;
   let tagStyle: string | null = null;
+  let tagReadFailed = false;
   // The file's modification time, remembered so the startup reconcile can tell
   // which known files were edited while the app was closed (see watcher.ts).
   let mtimeMs: number | null = null;
@@ -207,6 +208,7 @@ export async function scanFile(root: string, file: string): Promise<ScannedSong>
     if (typeof meta.format.duration === 'number') durationSec = meta.format.duration;
   } catch {
     // Unreadable/corrupt tags — keep the file with filename-derived defaults.
+    tagReadFailed = true;
   }
 
   // Prefer a recording year spelled out in the filename; fall back to the
@@ -225,6 +227,7 @@ export async function scanFile(root: string, file: string): Promise<ScannedSong>
     genre: mapGenre(segments, tagStyle),
     tagStyle,
     isCortina: segmentsAreCortina(segments),
+    tagReadFailed,
     folder,
     folderPath,
   };

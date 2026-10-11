@@ -5,6 +5,7 @@ import {basename, dirname, join, sep} from 'node:path';
 import {existsSync} from 'node:fs';
 import Database from 'better-sqlite3';
 import {normalizeYear, yearFromFilename} from '../services/scan.js';
+import {ARTIST_TAG_SEP} from '../services/enrich.js';
 
 export type SongRow = {
   id: number;
@@ -356,6 +357,10 @@ export type ScannedSong = {
   // Set by the scanner when the song lives under a folder named like a cortina
   // folder. Orthogonal to genre.
   isCortina?: boolean;
+  // Set by the scanner when the file's tags couldn't be read, so the row holds
+  // only filename-derived defaults. A song already in the library is then left
+  // as it is rather than overwritten with them (see watcher.ts).
+  tagReadFailed?: boolean;
   folder: string;
   folderPath: string;
 };
@@ -377,7 +382,9 @@ export function importSongs(root: string, songs: ScannedSong[]): void {
     VALUES (@path, @title, @artist, @singer, @album, @year, @durationSec, @mtimeMs, @genre, 1, @isCortina, @folder, @folderPath, @root, @added_at)
     ON CONFLICT(path) DO UPDATE SET
       title = CASE WHEN songs.meta_locked = 1 THEN songs.title ELSE excluded.title END,
-      artist = CASE WHEN songs.orq_locked = 1 OR songs.meta_locked = 1 THEN songs.artist ELSE excluded.artist END,
+      artist = CASE WHEN songs.orq_locked = 1 OR songs.meta_locked = 1 THEN songs.artist
+                    WHEN songs.singer <> '' AND excluded.artist = songs.artist || @artistSep || songs.singer THEN songs.artist
+                    ELSE excluded.artist END,
       singer = CASE WHEN songs.meta_locked = 1 THEN songs.singer WHEN excluded.singer <> '' THEN excluded.singer ELSE songs.singer END,
       album = CASE WHEN songs.meta_locked = 1 THEN songs.album ELSE excluded.album END,
       year = CASE WHEN songs.year_locked = 1 OR songs.meta_locked = 1 THEN songs.year ELSE excluded.year END,
@@ -398,6 +405,10 @@ export function importSongs(root: string, songs: ScannedSong[]): void {
   // preserved when locked (set by Smart Organize / a manual cortina toggle), and
   // every editable field is preserved when `meta_locked` is set (a song edit
   // kept inside Compás), so a Compás-only edit survives the file being re-scanned.
+  // An artist tag that is exactly the "Orchestra - Singer" Compás wrote for this
+  // row (see joinArtistTag) keeps the two fields apart even when the scanner's
+  // conservative split didn't recognise the orchestra — otherwise saving an
+  // edit to the file would fold the singer into the orchestra on the next scan.
 
   // Folders the DJ flagged as cortinas under this root — newly-imported songs in
   // them inherit the flag regardless of the folder-name heuristic.
@@ -413,7 +424,14 @@ export function importSongs(root: string, songs: ScannedSong[]): void {
     upsertRoot(d, root);
     for (const s of songs) {
       const isCortina = s.isCortina || flaggedFolders.has(s.folderPath) ? 1 : 0;
-      upsertSong.run({...s, mtimeMs: s.mtimeMs ?? null, isCortina, root, added_at: now});
+      upsertSong.run({
+        ...s,
+        mtimeMs: s.mtimeMs ?? null,
+        isCortina,
+        root,
+        added_at: now,
+        artistSep: ARTIST_TAG_SEP,
+      });
     }
   });
   tx();
@@ -1111,12 +1129,15 @@ export function renameSong(oldPath: string, root: string, song: ScannedSong): bo
     // A move re-derives the file-backed fields, but preserves the DJ's app-only
     // `genre` (omitted from SET), a `singer` the file doesn't credit, any locked
     // `artist`/`year` set by Smart Organize and everything under `meta_locked`
-    // — mirroring importSongs so an edit isn't lost on a move.
+    // (and an artist tag Compás wrote for this row) — mirroring importSongs so
+    // an edit isn't lost on a move.
     d.prepare(
       `UPDATE songs SET
          path = @path,
          title = CASE WHEN meta_locked = 1 THEN title ELSE @title END,
-         artist = CASE WHEN orq_locked = 1 OR meta_locked = 1 THEN artist ELSE @artist END,
+         artist = CASE WHEN orq_locked = 1 OR meta_locked = 1 THEN artist
+                       WHEN singer <> '' AND @artist = artist || @artistSep || singer THEN artist
+                       ELSE @artist END,
          singer = CASE WHEN meta_locked = 1 THEN singer WHEN @singer <> '' THEN @singer ELSE singer END,
          album = CASE WHEN meta_locked = 1 THEN album ELSE @album END,
          year = CASE WHEN year_locked = 1 OR meta_locked = 1 THEN year ELSE @year END,
@@ -1137,6 +1158,7 @@ export function renameSong(oldPath: string, root: string, song: ScannedSong): bo
       folderPath: song.folderPath,
       root,
       id: row.id,
+      artistSep: ARTIST_TAG_SEP,
     });
     // The previous root may now be empty (a move across libraries).
     d.prepare(
