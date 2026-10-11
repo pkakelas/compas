@@ -169,7 +169,7 @@ function PlEditorSong({ n, title, dur, playing, onPlay, preview }) {
 function PlEditorTanda({ it, ix, slot, onRemove, preview }) {
   const t = it.data;
   const m = tandaMeta(t);
-  const songNameOnly = useSongNameOnly();
+  const songTitle = useSongTitle();
   return (
     <div className={"tp-tandacard pl-tandacard tp-qdrag" + (slot.dragging ? " is-dragging" : "")}
       {...slot.handlers}>
@@ -183,7 +183,7 @@ function PlEditorTanda({ it, ix, slot, onRemove, preview }) {
       </div>
       {t.songs.map((s, i) => {
         const playing = preview && preview.previewId === s.id && preview.playing;
-        return <PlEditorSong key={s.id + ":" + i} n={i + 1} title={songNameOnly ? cleanSongTitle(s) : s.title} dur={s.dur || "—"}
+        return <PlEditorSong key={s.id + ":" + i} n={i + 1} title={songTitle(s)} dur={s.dur || "—"}
           playing={playing} onPlay={() => preview && preview.toggle(s)} preview={preview} />;
       })}
       {t.inCollection === false && (
@@ -220,7 +220,7 @@ function PlEditorCortina({ it, slot, onRemove, preview }) {
 // row, no curtain. Mirrors the live queue's QueueSong.
 function PlEditorSongItem({ it, slot, onRemove, preview }) {
   const s = it.data;
-  const songNameOnly = useSongNameOnly();
+  const songTitle = useSongTitle();
   const playing = preview && preview.previewId === s.id && preview.playing;
   return (
     <div className={"tp-songcard tp-qrow tp-qdrag" + (slot.dragging ? " is-dragging" : "") + (playing ? " is-now" : "")}
@@ -229,7 +229,7 @@ function PlEditorSongItem({ it, slot, onRemove, preview }) {
       <span className="tp-grip" title={tr("playlists.dragToReorder")}><I.grip s={15} /></span>
       <span className="tp-songcard-glyph">{playing ? <EQ /> : (preview && preview.viaMonitor ? <span className="tp-cuebadge"><I.headphones s={14} /></span> : <I.note s={15} />)}</span>
       <div className="tp-flex1">
-        <div className="tp-songcard-title">{songNameOnly ? cleanSongTitle(s) : s.title}</div>
+        <div className="tp-songcard-title">{songTitle(s)}</div>
         <div className="tp-songcard-sub">{s.orq || tr("playlists.unknownArtist")}{s.singer ? " · " + s.singer : ""}</div>
       </div>
       <div className="tp-fade"><I.clock s={13} /> {s.dur || "—"}</div>
@@ -413,7 +413,7 @@ function PlImportModal({ preview, onConfirm, onCancel }) {
 function PlaylistCard({ pl, onOpen, onDelete, onPlay, onExport }) {
   const meta = playlistMeta(pl.items);
   const preview = pl.items.slice(0, 6);
-  const songNameOnly = useSongNameOnly();
+  const songTitle = useSongTitle();
   return (
     <div className="tv-tcard pl-card" onClick={() => onOpen(pl)} title={tr("playlists.openPlaylist")}>
       <div className="tv-tcard-top">
@@ -435,7 +435,7 @@ function PlaylistCard({ pl, onOpen, onDelete, onPlay, onExport }) {
               <span className="n pl-typ" title={role === "tanda" ? tr("playlists.rowTanda") : role === "cortina" ? tr("playlists.cortina") : tr("playlists.rowSingleSong")}>
                 {role === "tanda" ? <I.rows s={13} /> : role === "cortina" ? <I.curtain s={13} /> : <I.note s={13} />}
               </span>
-              <span className="t">{it.type !== "tanda" ? (songNameOnly && role === "song" ? cleanSongTitle(it.data) : it.data.title) : itemTitle(it)}</span>
+              <span className="t">{it.type !== "tanda" ? (role === "song" ? songTitle(it.data) : it.data.title) : itemTitle(it)}</span>
               <span className="d">{role === "tanda" ? tr("playlists.songCount", { count: it.data.songs.length }) : role === "cortina" ? tr("playlists.cortina") : tr("playlists.rowSong")}</span>
             </div>
           );

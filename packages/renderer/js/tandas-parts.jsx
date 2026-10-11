@@ -97,7 +97,7 @@ function TandaImpact({ emptied, shrunk }) {
 function TandaLibCard({ t, preview, onAdd, added, addTitle, drag, dragging }) {
   const [open, setOpen] = useState(false);
   const m = tandaMeta(t);
-  const songNameOnly = useSongNameOnly();
+  const songTitle = useSongTitle();
   const hasTags = t.tags && t.tags.length > 0;
   const toggle = () => setOpen((o) => !o);
   // On a short screen an opened tanda can be taller than the library viewport,
@@ -166,7 +166,7 @@ function TandaLibCard({ t, preview, onAdd, added, addTitle, drag, dragging }) {
                 title={previewTitle(preview, playing)}>
                 <span className="n"><PreviewGlyph preview={preview} playing={playing} n={i + 1} s={12} /></span>
                 <span className="tt">
-                  <div className="tp-song-title">{songNameOnly ? cleanSongTitle(s) : s.title}</div>
+                  <div className="tp-song-title">{songTitle(s)}</div>
                   {(s.singer || s.year) && (
                     <div className="tp-song-meta">{[s.singer, s.year].filter(Boolean).join(" · ")}</div>
                   )}
@@ -297,8 +297,8 @@ function SongRow({ s, inBuilder, onAdd, dragHandlers, dragging, isPreview, isPla
   // When the DJ opts into "song name only", strip the orchestra/singer/year
   // cruft baked into the title field and show just the bare song name. The
   // orchestra & singer still appear in the sub-line below, so nothing is lost.
-  const songNameOnly = useSongNameOnly();
-  const displayTitle = songNameOnly ? cleanSongTitle(s) : s.title;
+  const songTitle = useSongTitle();
+  const displayTitle = songTitle(s);
   // Editing is parent-controlled in the Library view (so the right-click menu's
   // "Edit song" can open the editor) and self-managed everywhere else.
   const controlled = onEdit !== undefined;
@@ -1927,7 +1927,7 @@ function TandaSearchBar({ filters, onChange, options, countLabel }) {
 /* ============================ MANAGE GRID ============================ */
 function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, onDismiss }) {
   const m = tandaMeta(t);
-  const songNameOnly = useSongNameOnly();
+  const songTitle = useSongTitle();
   const viaMonitor = preview && preview.viaMonitor;
   // Suggestions have no stored name, so generate a DJ-style one from their songs
   // (same helper the builder offers). The orquesta tag is the fallback orchestra
@@ -1966,7 +1966,7 @@ function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, on
               onClick={preview ? () => preview.toggle(s) : undefined}
               title={previewTitle(preview, isPlaying)}>
               <span className="n"><PreviewGlyph preview={preview} playing={isPlaying} n={i + 1} s={11} /></span>
-              <span className="t">{songNameOnly ? cleanSongTitle(s) : s.title}</span>
+              <span className="t">{songTitle(s)}</span>
               <span className="d">{s.dur}</span>
             </div>
           );
@@ -2005,7 +2005,7 @@ function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, on
  * columns. Here each song gets the full row width, so it reads in full. */
 function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, onDismiss }) {
   const m = tandaMeta(t);
-  const songNameOnly = useSongNameOnly();
+  const songTitle = useSongTitle();
   const viaMonitor = preview && preview.viaMonitor;
   const orqTag = suggested ? (t.tags || []).find((g) => g.cat === "orquesta") : null;
   const displayName = suggested
@@ -2059,7 +2059,7 @@ function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave
               onClick={preview ? () => preview.toggle(s) : undefined}
               title={previewTitle(preview, isPlaying)}>
               <span className="n"><PreviewGlyph preview={preview} playing={isPlaying} n={i + 1} s={11} /></span>
-              <span className="t">{songNameOnly ? cleanSongTitle(s) : s.title}</span>
+              <span className="t">{songTitle(s)}</span>
               <span className="d">{s.dur}</span>
             </div>
           );
