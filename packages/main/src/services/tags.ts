@@ -12,6 +12,7 @@ import {spawn} from 'node:child_process';
 import {rename, unlink} from 'node:fs/promises';
 import {dirname, extname, join} from 'node:path';
 import ffmpegStatic from 'ffmpeg-static';
+import {joinArtistTag} from './enrich.js';
 
 // `ffmpeg-static` resolves to a path inside app.asar once packaged; the binary
 // is unpacked next to it (see electron-builder asarUnpack), so point at that.
@@ -20,10 +21,13 @@ const FFMPEG_PATH = (ffmpegStatic as unknown as string | null)?.replace(
   'app.asar.unpacked$1',
 );
 
-/** The editable, file-backed metadata fields. `singer` is app-only (DB only). */
+/** The editable, file-backed metadata fields. The orchestra (`artist`) and
+ *  `singer` are written together into the artist tag ("Orchestra - Singer"),
+ *  the convention most tango collections follow — see joinArtistTag. */
 export type SongTags = {
   title: string;
   artist: string;
+  singer: string;
   album: string | null;
   year: number | null;
   genre: string;
@@ -34,7 +38,7 @@ export type SongTags = {
 function metadataArgs(tags: SongTags): string[] {
   const pairs: [string, string][] = [
     ['title', tags.title ?? ''],
-    ['artist', tags.artist ?? ''],
+    ['artist', joinArtistTag(tags.artist ?? '', tags.singer ?? '')],
     ['album', tags.album ?? ''],
     ['date', tags.year != null ? String(tags.year) : ''],
     ['genre', tags.genre ?? ''],

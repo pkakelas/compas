@@ -32,5 +32,6 @@
   "updateDownloaded": "Η έκδοση {version} κατέβηκε. Επανεκκινήστε το Compás για να ολοκληρωθεί η εγκατάσταση.",
   "updateLater": "Αργότερα",
   "updateRestarting": "Επανεκκίνηση…",
-  "updateRestart": "Επανεκκίνηση & ενημέρωση"
+  "updateRestart": "Επανεκκίνηση & ενημέρωση",
+  "ok": "OK"
 }

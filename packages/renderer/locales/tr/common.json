@@ -32,5 +32,6 @@
   "updateDownloaded": "{version} sürümü indirildi. Kurulumu tamamlamak için Compás’ı yeniden başlatın.",
   "updateLater": "Daha sonra",
   "updateRestarting": "Yeniden başlatılıyor…",
-  "updateRestart": "Yeniden başlat ve güncelle"
+  "updateRestart": "Yeniden başlat ve güncelle",
+  "ok": "Tamam"
 }

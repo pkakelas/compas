@@ -87,5 +87,10 @@
   "startDesc": "¿Acabas de llegar o solo quieres un repaso?",
   "tourLabel": "Recorrido de funciones",
   "tourDesc": "Repite el recorrido de bienvenida por todo lo que Compás puede hacer.",
-  "tourReplay": "Repetir recorrido"
+  "tourReplay": "Repetir recorrido",
+  "filesTitle": "Tus archivos de música",
+  "filesDesc": "Si los cambios que haces en Compás también se escriben en los archivos de las canciones de tu ordenador.",
+  "writeTagsLabel": "Guardar los cambios también en los archivos de música",
+  "writeTagsDesc": "Si está activado, los datos que edites (título, orquesta, cantor, año, álbum, estilo) también se escriben dentro del propio archivo, para que iTunes y otras aplicaciones muestren los mismos nombres. Si está desactivado, tus cambios se quedan dentro de Compás y no se toca nada en tu ordenador.",
+  "writeTagsNote": "Tu música nunca se altera, solo sus etiquetas. Orquesta y cantor se guardan juntos como «Orquesta - Cantor», tal como ya están etiquetadas la mayoría de las colecciones de tango. Se aplica a las canciones que editas una a una; la Organización inteligente siempre guarda sus cambios dentro de Compás."
 }

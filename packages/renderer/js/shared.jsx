@@ -265,6 +265,38 @@ function ConfirmModal({ title, message, confirmLabel = tr("common.delete"), canc
   );
 }
 
+/* Asked once, the first time the DJ saves a song edit: should edits stay inside
+   Compás (default, nothing on disk changes) or also go into the music files?
+   Two plain choices, no checkbox to remember; Settings can change it later.
+   Escape / backdrop click cancels without saving. */
+function FileWriteChoiceModal({ onChoose, onCancel }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancel(); } };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [onCancel]);
+  return (
+    <div className="tp-modal-scrim" onMouseDown={(e) => { e.stopPropagation(); onCancel(); }}>
+      <div className="tp-modal tp-modal-choice" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="tp-modal-icon"><I.folder s={20} /></div>
+        <div className="tp-modal-title">{tr("parts.fileWriteTitle")}</div>
+        <div className="tp-modal-msg">{tr("parts.fileWriteMsg")}</div>
+        <div className="tp-modal-options">
+          <button className="tp-modal-option primary" onClick={() => onChoose(false)} autoFocus>
+            <span className="tp-modal-option-label"><I.lock s={14} /> {tr("parts.fileWriteAppOnlyLabel")}</span>
+            <span className="tp-modal-option-desc">{tr("parts.fileWriteAppOnlyDesc")}</span>
+          </button>
+          <button className="tp-modal-option" onClick={() => onChoose(true)}>
+            <span className="tp-modal-option-label"><I.folder s={14} /> {tr("parts.fileWriteFilesLabel")}</span>
+            <span className="tp-modal-option-desc">{tr("parts.fileWriteFilesDesc")}</span>
+          </button>
+        </div>
+        <div className="tp-modal-foot">{tr("parts.fileWriteLater")}</div>
+      </div>
+    </div>
+  );
+}
+
 /* useConfirm owns the dialog state. `ask(opts)` opens the modal; `opts.onConfirm`
    fires when the user accepts. Render the returned `modal` somewhere in the view.
    Lives here so every view shares one confirmation flow. */
@@ -364,4 +396,4 @@ const useCollapseFoldersByDefault = () => useBoolPref("collapseFoldersByDefault"
 // years are offered in the library's filter dropdowns.
 const useCortinasInFilters = () => useBoolPref("cortinasInFilters");
 
-Object.assign(window, { I, Waveform, EQ, Marquee, PreviewGlyph, previewTitle, clickKeys, GenreTag, useToast, Toast, ConfirmModal, useConfirm, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, isCoreStyle, genreLabel, genreClass, cleanSongTitle, useSongTitle, useCollapseFoldersByDefault, useCortinasInFilters });
+Object.assign(window, { I, Waveform, EQ, Marquee, PreviewGlyph, previewTitle, clickKeys, GenreTag, useToast, Toast, ConfirmModal, useConfirm, FileWriteChoiceModal, useBoolPref, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, isCoreStyle, genreLabel, genreClass, cleanSongTitle, useSongTitle, useCollapseFoldersByDefault, useCortinasInFilters });

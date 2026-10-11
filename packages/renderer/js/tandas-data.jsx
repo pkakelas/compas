@@ -173,10 +173,12 @@ const Store = {
     ]);
     _set({ tandas: tandas || [], playlists: playlists || [] });
   },
-  // Edit a single song's metadata. The main process writes the file's tags and
-  // the database, then returns the fresh library; we re-apply it and refresh
-  // tandas/playlists since they embed copies of the song. Returns the updated
-  // song (or null if the id was unknown / the write failed).
+  // Edit a single song's metadata. The main process updates the database (and,
+  // with input.writeFile, the file's tags too), then returns the fresh library;
+  // we re-apply it and refresh tandas/playlists since they embed copies of the
+  // song. Returns {song, fileError} — song is null if the id was unknown;
+  // fileError ('missing' | 'readonly' | 'other') says why the file could not
+  // be updated even though the edit was kept in Compás.
   async updateSong(input) {
     if (!window.compas.updateSong) return null;
     const res = await window.compas.updateSong(input);
@@ -188,7 +190,7 @@ const Store = {
       ]);
       _set({ tandas: tandas || [], playlists: playlists || [] });
     }
-    return res ? res.song : null;
+    return res ? { song: res.song, fileError: res.fileError || null } : null;
   },
   // Flag/unflag songs as cortinas (usage flag, independent of genre). Refreshes
   // the library + tandas/playlists (embedded song copies carry the flag).

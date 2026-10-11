@@ -63,7 +63,10 @@ function deleteSongs(ids: string[]) {
   return ipcRenderer.invoke('songs:delete', ids);
 }
 
-/** Edit a song's metadata: writes the file's tags and the database row. Returns {song, library}. */
+/** Edit a song's metadata. Always updates the database row; with `writeFile`
+ *  also writes the file's tags. Returns {song, library, fileError}, where
+ *  fileError ('missing' | 'readonly' | 'other' | null) says why the file could
+ *  not be updated — the edit is kept in Compás regardless. */
 function updateSong(input: {
   id: string;
   title: string;
@@ -73,6 +76,7 @@ function updateSong(input: {
   year: number | null;
   genre: string;
   isCortina?: boolean;
+  writeFile?: boolean;
 }) {
   return ipcRenderer.invoke('songs:update', input);
 }

@@ -32,5 +32,6 @@
   "updateDownloaded": "バージョン{version}をダウンロードしました。Compás を再起動するとインストールが完了します。",
   "updateLater": "あとで",
   "updateRestarting": "再起動中…",
-  "updateRestart": "再起動してアップデート"
+  "updateRestart": "再起動してアップデート",
+  "ok": "OK"
 }

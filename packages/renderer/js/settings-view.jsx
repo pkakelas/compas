@@ -311,6 +311,22 @@ function LibraryDisplayCard({ t, setTweak }) {
 // App version + a friendly note, shown as a quiet footer below the cards (not in
 // a card of its own). The version is read once from the main process (the
 // packaged app's package.json) so it never drifts from the real build.
+// Whether song edits also go into the files on disk. Off by default: nothing on
+// the DJ's computer changes unless they ask. Flipping the switch here also
+// counts as having answered the song editor's first-save question.
+function MusicFilesCard({ t, setTweak }) {
+  return (
+    <SettingsCard icon={<I.folder s={16} />} title={tr("settings.filesTitle")}
+      desc={tr("settings.filesDesc")}>
+      <SetRow label={tr("settings.writeTagsLabel")} desc={tr("settings.writeTagsDesc")}>
+        <SetSwitch checked={!!t.writeTagsToFiles}
+          onChange={(v) => setTweak({ writeTagsToFiles: v, writeTagsAsked: true })} />
+      </SetRow>
+      <div className="tp-set-note">{tr("settings.writeTagsNote")}</div>
+    </SettingsCard>
+  );
+}
+
 function AboutFooter() {
   const [version, setVersion] = React.useState("");
   React.useEffect(() => {
@@ -357,6 +373,8 @@ function SettingsView({ t, setTweak, onReplayTour, onOpenCommunity, communityJum
       <div className="tp-set-scroll">
         <div className="tp-set-col">
           <AudioOutputsCard />
+
+          <MusicFilesCard t={t} setTweak={setTweak} />
 
           <SoundLevelingCard />
 

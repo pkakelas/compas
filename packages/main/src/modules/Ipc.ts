@@ -3,7 +3,7 @@ import type {ModuleContext} from '../ModuleContext.js';
 import {BrowserWindow, dialog, ipcMain, shell} from 'electron';
 import {basename, dirname, extname, relative, sep} from 'node:path';
 import {existsSync} from 'node:fs';
-import {readFile, stat, writeFile} from 'node:fs/promises';
+import {access, constants as fsConstants, readFile, stat, writeFile} from 'node:fs/promises';
 import {
   scanFolder,
   guessStyle,
@@ -80,6 +80,22 @@ type ImportTreeNode = {
   // renderer continues into the playlist import once the folders are in.
   playlist?: {path: string; name: string; found: number; total: number; inLibrary: number};
 };
+
+/** Why a song edit could not be written into its file — shown to the DJ in
+ *  plain words. `missing`: the file isn't there (unplugged drive, moved,
+ *  not downloaded); `readonly`: no permission to write it; `other`: ffmpeg
+ *  couldn't rewrite it (unusual container, corrupt file…). */
+export type FileWriteError = 'missing' | 'readonly' | 'other';
+
+function classifyFileWriteError(err: unknown): FileWriteError {
+  const code = (err as {code?: string} | null)?.code ?? '';
+  const msg = err instanceof Error ? err.message : String(err);
+  if (code === 'ENOENT' || /No such file or directory/i.test(msg)) return 'missing';
+  if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS' || /Permission denied|Read-only file system/i.test(msg)) {
+    return 'readonly';
+  }
+  return 'other';
+}
 
 const PLAYLIST_EXTS = new Set(['.m3u', '.m3u8']);
 export function isPlaylistFile(file: string): boolean {
@@ -408,24 +424,41 @@ export class IpcModule implements AppModule {
       async (
         _event,
         input: UpdateSongInput,
-      ): Promise<{song: ReturnType<typeof updateSong>; library: Library}> => {
+      ): Promise<{
+        song: ReturnType<typeof updateSong>;
+        library: Library;
+        fileError: FileWriteError | null;
+      }> => {
         const path = getSongPath(input.id);
-        if (!path) return {song: null, library: getLibrary()};
-        // Write the file's tags first; if this throws, the DB is left untouched
-        // and the error propagates to the renderer so it can flag the failure.
-        await writeSongTags(path, {
-          title: input.title,
-          artist: input.orq,
-          album: input.album,
-          year: input.year,
-          genre: input.genre,
-        });
-        const song = updateSong(input);
+        if (!path) return {song: null, library: getLibrary(), fileError: null};
+        // The edit always lands in the database. Writing it into the file too
+        // is the DJ's choice (Settings → "Also save changes to the music files");
+        // when it is on and the write fails, the edit is still kept in Compás
+        // and the reason goes back to the renderer so it can say so in plain
+        // words. A song whose file wasn't updated is locked against re-scans.
+        let fileError: FileWriteError | null = null;
+        if (input.writeFile) {
+          try {
+            await access(path, fsConstants.W_OK);
+            await writeSongTags(path, {
+              title: input.title,
+              artist: input.orq,
+              singer: input.singer,
+              album: input.album,
+              year: input.year,
+              genre: input.genre,
+            });
+          } catch (err) {
+            fileError = classifyFileWriteError(err);
+            console.warn(`[songs:update] file not updated (${fileError}): ${path}`, err);
+          }
+        }
+        const song = updateSong(input, {lock: !input.writeFile || fileError !== null});
         const library = getLibrary();
         // Push the fresh library to every other window too, so a song edited in
         // one place updates everywhere immediately.
         broadcastLibrary(library);
-        return {song, library};
+        return {song, library, fileError};
       },
     );
 

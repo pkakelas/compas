@@ -32,5 +32,6 @@
   "updateDownloaded": "Version {version} wurde heruntergeladen. Starte Compás neu, um die Installation abzuschließen.",
   "updateLater": "Später",
   "updateRestarting": "Wird neu gestartet…",
-  "updateRestart": "Neu starten & aktualisieren"
+  "updateRestart": "Neu starten & aktualisieren",
+  "ok": "OK"
 }

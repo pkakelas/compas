@@ -32,5 +32,6 @@
   "updateDownloaded": "Версия {version} загружена. Перезапустите Compás, чтобы завершить установку.",
   "updateLater": "Позже",
   "updateRestarting": "Перезапуск…",
-  "updateRestart": "Перезапустить и обновить"
+  "updateRestart": "Перезапустить и обновить",
+  "ok": "ОК"
 }
