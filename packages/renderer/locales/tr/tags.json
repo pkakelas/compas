@@ -1,5 +1,5 @@
 {
-  "catType": "Tür",
+  "catType": "Tip",
   "catAge": "Dönem",
   "catOrquesta": "Orkestra",
   "catMood": "Ruh hali",
@@ -8,6 +8,6 @@
   "useSuggestedTags": "Önerilen etiketleri kullan",
   "removeTag": "Etiketi kaldır",
   "addTag": "Etiket ekle…",
-  "addTagsHint": "Etiket ekleyin — tür, dönem, orkestra, ruh hali ya da kendi etiketiniz…",
+  "addTagsHint": "Etiket ekleyin — tip, dönem, orkestra, ruh hali ya da kendi etiketiniz…",
   "addAs": "“{label}” şu kategoriye eklensin:"
 }

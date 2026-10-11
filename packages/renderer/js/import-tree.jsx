@@ -87,7 +87,7 @@ function TypePicker({ resolved, explicit, onPick, onClear }) {
         <button className="it-pickbtn it-unset"
           onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
           title={tr("importTree.pickerUnsetTitle")}>
-          {tr("importTree.setStyle")} <I.chev s={11} />
+          {tr("importTree.setGenre")} <I.chev s={11} />
         </button>
       )}
       {open && (
@@ -100,9 +100,9 @@ function TypePicker({ resolved, explicit, onPick, onClear }) {
             ))}
           </div>
           <div className="it-pop-custom">
-            <input value={custom} placeholder={tr("importTree.customStylePlaceholder")} onChange={(e) => setCustom(e.target.value)}
+            <input value={custom} placeholder={tr("importTree.customGenrePlaceholder")} onChange={(e) => setCustom(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && custom.trim()) pick(custom.trim().toLowerCase()); }} />
-            <button disabled={!custom.trim()} onClick={() => custom.trim() && pick(custom.trim().toLowerCase())}>{tr("importTree.customStyleSet")}</button>
+            <button disabled={!custom.trim()} onClick={() => custom.trim() && pick(custom.trim().toLowerCase())}>{tr("importTree.customGenreSet")}</button>
           </div>
           {explicit && <button className="it-pop-clear" onClick={() => { onClear(); setOpen(false); }}>{tr("importTree.clearInherit")}</button>}
         </div>

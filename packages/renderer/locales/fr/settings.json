@@ -57,7 +57,7 @@
   "collapseLabel": "Replier les dossiers par défaut",
   "collapseDesc": "Tous les dossiers sont fermés à l’ouverture de la Bibliothèque ou de l’atelier de tandas, pour ne déplier que ceux dont vous avez besoin. Sinon, les dossiers de premier niveau s’ouvrent automatiquement.",
   "cortinasInFiltersLabel": "Cortinas dans les filtres",
-  "cortinasInFiltersDesc": "Propose les orchestres, chanteurs, styles et années des cortinas dans les menus de filtres de la bibliothèque. Si l’option est désactivée, les menus ne proposent que votre musique à danser — les cortinas restent visibles quand vous parcourez la bibliothèque ou faites une recherche.",
+  "cortinasInFiltersDesc": "Propose les orchestres, chanteurs, genres et années des cortinas dans les menus de filtres de la bibliothèque. Si l’option est désactivée, les menus ne proposent que votre musique à danser — les cortinas restent visibles quand vous parcourez la bibliothèque ou faites une recherche.",
   "stripsIntro": "Retire, à l’affichage uniquement, les éléments parasites qui se glissent dans les tags de titre :",
   "stripArtist": "Artiste en début de titre <i>“Di Sarli – ”</i>",
   "stripTrackNo": "Numéros de piste <i>“07. ”</i>",
@@ -91,6 +91,6 @@
   "filesTitle": "Vos fichiers musicaux",
   "filesDesc": "Si les modifications faites dans Compás sont aussi écrites dans les fichiers des morceaux sur votre ordinateur.",
   "writeTagsLabel": "Enregistrer aussi les modifications dans les fichiers musicaux",
-  "writeTagsDesc": "Activé : les informations que vous modifiez (titre, orchestre, chanteur, année, album, style) sont aussi écrites dans le fichier lui-même, pour qu’iTunes et les autres applications affichent les mêmes noms. Désactivé : vos modifications restent dans Compás et rien n’est touché sur votre ordinateur.",
+  "writeTagsDesc": "Activé : les informations que vous modifiez (titre, orchestre, chanteur, année, album, genre) sont aussi écrites dans le fichier lui-même, pour qu’iTunes et les autres applications affichent les mêmes noms. Désactivé : vos modifications restent dans Compás et rien n’est touché sur votre ordinateur.",
   "writeTagsNote": "Votre musique n’est jamais altérée, seulement ses étiquettes. Orchestre et chanteur sont enregistrés ensemble sous la forme « Orchestre - Chanteur », comme la plupart des collections de tango le sont déjà. Cela s’applique aux morceaux modifiés un par un ; l’Organisation intelligente garde toujours ses modifications dans Compás."
 }
