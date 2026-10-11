@@ -295,7 +295,7 @@ function SongEditRow({ s, onClose }) {
             {(() => {
               const base = window.STYLE_TYPES || ["tango", "vals", "milonga", "cortina"];
               // Keep the song's current value selectable even if it's a custom/
-              // non-preset style, so editing never silently changes it.
+              // non-preset genre, so editing never silently changes it.
               const opts = base.indexOf(draft.genre) === -1 && draft.genre ? base.concat([draft.genre]) : base;
               const label = window.genreLabel || ((g) => g);
               return opts.map((g) => <option key={g} value={g}>{label(g)}</option>);
@@ -726,7 +726,7 @@ const SORTS = [
   { key: "title", labelKey: "parts.sortTitle" },
   { key: "orq", labelKey: "parts.sortOrchestra" },
   { key: "singer", labelKey: "parts.sortSinger" },
-  { key: "genre", labelKey: "parts.sortStyle" },
+  { key: "genre", labelKey: "parts.sortGenre" },
   { key: "year_desc", labelKey: "parts.sortYearDesc" },
   { key: "year_asc", labelKey: "parts.sortYearAsc" },
   { key: "dur_desc", labelKey: "parts.sortLongest" },
@@ -843,7 +843,7 @@ function normalizePickOptions(options) {
 const PICK_FACETS = {
   orq: { labelKey: "parts.orchestra", allKey: "parts.allOrchestras", clearKey: "parts.clearOrchestra", searchKey: "parts.searchOrchestra", emptyKey: "parts.noOrchestrasYet" },
   singer: { labelKey: "parts.singer", allKey: "parts.allSingers", clearKey: "parts.clearSinger", searchKey: "parts.searchSinger", emptyKey: "parts.noSingersYet" },
-  genre: { labelKey: "parts.style", allKey: "parts.allStyles", clearKey: "parts.clearStyle", searchKey: "parts.searchStyle", emptyKey: "parts.noStylesYet" },
+  genre: { labelKey: "parts.genre", allKey: "parts.allGenres", clearKey: "parts.clearGenre", searchKey: "parts.searchGenre", emptyKey: "parts.noGenresYet" },
   year: { labelKey: "parts.year", allKey: "parts.allYears", clearKey: "parts.clearYear", searchKey: "parts.searchYear", emptyKey: "parts.noYearsYet" },
   type: { labelKey: "parts.type", allKey: "parts.allTypes", clearKey: "parts.clearType", searchKey: "parts.searchType", emptyKey: "parts.noTypesYet" },
   mood: { labelKey: "parts.mood", allKey: "parts.allMoods", clearKey: "parts.clearMood", searchKey: "parts.searchMood", emptyKey: "parts.noMoodsYet" },
@@ -1271,7 +1271,7 @@ const LIST_COLS = [
   { key: "title", labelKey: "parts.title", sort: "title" },
   { key: "orq", labelKey: "parts.orchestra", sort: "orq" },
   { key: "singer", labelKey: "parts.singer", sort: "singer" },
-  { key: "genre", labelKey: "parts.style", sort: "genre" },
+  { key: "genre", labelKey: "parts.genre", sort: "genre" },
   { key: "yr", labelKey: "parts.year", sort: "year_asc" },
   { key: "du", labelKey: "parts.time", sort: "dur_desc" },
 ];

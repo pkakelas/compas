@@ -57,7 +57,7 @@
   "collapseLabel": "Comprimi le cartelle di default",
   "collapseDesc": "Parti con tutte le cartelle chiuse quando apri la Libreria o l’area di composizione delle tandas, così espandi solo quelle che ti servono. Altrimenti le cartelle di primo livello si aprono automaticamente.",
   "cortinasInFiltersLabel": "Cortinas nei filtri",
-  "cortinasInFiltersDesc": "Includi orchestre, cantanti, stili e anni delle cortinas nei menu dei filtri della libreria. Se l’opzione è disattivata, i menu elencano solo la tua musica da ballo; le cortinas compaiono comunque quando sfogli o cerchi.",
+  "cortinasInFiltersDesc": "Includi orchestre, cantanti, generi e anni delle cortinas nei menu dei filtri della libreria. Se l’opzione è disattivata, i menu elencano solo la tua musica da ballo; le cortinas compaiono comunque quando sfogli o cerchi.",
   "stripsIntro": "Toglie, solo nella visualizzazione, il superfluo che spesso finisce nei tag del titolo:",
   "stripArtist": "Artista all’inizio <i>“Di Sarli – ”</i>",
   "stripTrackNo": "Numeri di traccia <i>“07. ”</i>",
@@ -91,6 +91,6 @@
   "filesTitle": "I tuoi file musicali",
   "filesDesc": "Se le modifiche fatte in Compás vengono scritte anche nei file dei brani sul tuo computer.",
   "writeTagsLabel": "Salva le modifiche anche nei file musicali",
-  "writeTagsDesc": "Se attivo, i dati che modifichi (titolo, orchestra, cantante, anno, album, stile) vengono scritti anche dentro il file stesso, così iTunes e le altre app mostrano gli stessi nomi. Se disattivo, le tue modifiche restano dentro Compás e nulla sul tuo computer viene toccato.",
+  "writeTagsDesc": "Se attivo, i dati che modifichi (titolo, orchestra, cantante, anno, album, genere) vengono scritti anche dentro il file stesso, così iTunes e le altre app mostrano gli stessi nomi. Se disattivo, le tue modifiche restano dentro Compás e nulla sul tuo computer viene toccato.",
   "writeTagsNote": "La tua musica non viene mai alterata, solo le sue etichette. Orchestra e cantante vengono salvati insieme come “Orchestra - Cantante”, come già sono etichettate la maggior parte delle collezioni di tango. Vale per i brani che modifichi uno a uno; il Riordino intelligente tiene sempre le sue modifiche dentro Compás."
 }

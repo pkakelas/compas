@@ -57,7 +57,7 @@
   "collapseLabel": "Collapse folders by default",
   "collapseDesc": "Start with every folder closed when you open the Library or the Tanda builder, so you can expand only the ones you need. Otherwise the top-level folders open automatically.",
   "cortinasInFiltersLabel": "Cortinas in filters",
-  "cortinasInFiltersDesc": "Offer cortinas’ orchestras, singers, styles and years in the library’s filter dropdowns. When off, the dropdowns only list your dance music — cortinas still appear when you browse or search.",
+  "cortinasInFiltersDesc": "Offer cortinas’ orchestras, singers, genres and years in the library’s filter dropdowns. When off, the dropdowns only list your dance music — cortinas still appear when you browse or search.",
   "stripsIntro": "Strips, on display only, the kinds of clutter that creep into title tags:",
   "stripArtist": "Leading artist <i>“Di Sarli – ”</i>",
   "stripTrackNo": "Track numbers <i>“07. ”</i>",
@@ -91,6 +91,6 @@
   "filesTitle": "Your music files",
   "filesDesc": "Whether the edits you make in Compás also go into the song files on your computer.",
   "writeTagsLabel": "Also save changes to the music files",
-  "writeTagsDesc": "When on, the song details you edit (title, orchestra, singer, year, album, style) are also written into the file itself, so iTunes and other apps show the same names. When off, your changes stay inside Compás and nothing on your computer is touched.",
+  "writeTagsDesc": "When on, the song details you edit (title, orchestra, singer, year, album, genre) are also written into the file itself, so iTunes and other apps show the same names. When off, your changes stay inside Compás and nothing on your computer is touched.",
   "writeTagsNote": "Your music is never altered, only its labels. Orchestra and singer are saved together as “Orchestra - Singer”, the way most tango collections are already tagged. This applies to songs you edit one by one; Smart Organize always keeps its changes inside Compás."
 }

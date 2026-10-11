@@ -53,7 +53,7 @@ test.beforeAll(async () => {
   await stubFolderDialog(app, musicRoot);
   await gotoView(page, 'Tandas');
   await page.getByRole('button', {name: /Choose a folder/i}).click();
-  await expect(page.getByText(/Import — set folder types/i)).toBeVisible();
+  await expect(page.getByText(/Import — set folder genres/i)).toBeVisible();
   await page.getByRole('button', {name: 'Import', exact: true}).click();
   await expect
     .poll(async () => page.evaluate(async () => (await (window as any).compas.getLibrary()).songs.length), {timeout: 15_000})
