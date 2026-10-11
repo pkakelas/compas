@@ -144,8 +144,8 @@ function importCancel() {
 }
 
 /** Set the style (genre) of many existing songs at once. Returns the fresh library. */
-function setSongGenres(updates: {id: string; genre: string}[]) {
-  return ipcRenderer.invoke('songs:setGenres', updates);
+function setSongGenres(updates: {id: string; genre: string}[], opts?: {writeFile?: boolean}) {
+  return ipcRenderer.invoke('songs:setGenres', updates, opts);
 }
 
 function listTandas() {

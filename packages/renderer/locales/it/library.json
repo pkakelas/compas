@@ -21,5 +21,7 @@
   "scanning": "Scansione…",
   "addFolder": "Aggiungi cartella",
   "updatedSongsSaved_one": "{count} brano aggiornato — salvato in Compás",
-  "updatedSongsSaved_other": "{count} brani aggiornati — salvati in Compás"
+  "updatedSongsSaved_other": "{count} brani aggiornati — salvati in Compás",
+  "filesNotUpdated_one": "Salvato in Compás. {count} file non è stato aggiornato (mancante o di sola lettura).",
+  "filesNotUpdated_other": "Salvato in Compás. {count} file non sono stati aggiornati (mancanti o di sola lettura)."
 }

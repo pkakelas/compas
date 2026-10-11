@@ -21,5 +21,7 @@
   "scanning": "Taranıyor…",
   "addFolder": "Klasör ekle",
   "updatedSongsSaved_one": "{count} şarkı güncellendi — Compás’a kaydedildi",
-  "updatedSongsSaved_other": "{count} şarkı güncellendi — Compás’a kaydedildi"
+  "updatedSongsSaved_other": "{count} şarkı güncellendi — Compás’a kaydedildi",
+  "filesNotUpdated_one": "Compás’a kaydedildi. {count} dosya güncellenemedi (eksik veya salt okunur).",
+  "filesNotUpdated_other": "Compás’a kaydedildi. {count} dosya güncellenemedi (eksik veya salt okunur)."
 }

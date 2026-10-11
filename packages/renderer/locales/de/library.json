@@ -21,5 +21,7 @@
   "scanning": "Wird gescannt…",
   "addFolder": "Ordner hinzufügen",
   "updatedSongsSaved_one": "{count} Song aktualisiert – in Compás gespeichert",
-  "updatedSongsSaved_other": "{count} Songs aktualisiert – in Compás gespeichert"
+  "updatedSongsSaved_other": "{count} Songs aktualisiert – in Compás gespeichert",
+  "filesNotUpdated_one": "In Compás gespeichert. {count} Datei konnte nicht aktualisiert werden (fehlt oder schreibgeschützt).",
+  "filesNotUpdated_other": "In Compás gespeichert. {count} Dateien konnten nicht aktualisiert werden (fehlen oder schreibgeschützt)."
 }

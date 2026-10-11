@@ -21,5 +21,7 @@
   "scanning": "Analyse…",
   "addFolder": "Ajouter un dossier",
   "updatedSongsSaved_one": "{count} morceau mis à jour — enregistré dans Compás",
-  "updatedSongsSaved_other": "{count} morceaux mis à jour — enregistrés dans Compás"
+  "updatedSongsSaved_other": "{count} morceaux mis à jour — enregistrés dans Compás",
+  "filesNotUpdated_one": "Enregistré dans Compás. {count} fichier n’a pas pu être mis à jour (introuvable ou en lecture seule).",
+  "filesNotUpdated_other": "Enregistré dans Compás. {count} fichiers n’ont pas pu être mis à jour (introuvables ou en lecture seule)."
 }

@@ -21,5 +21,6 @@
   "scanning": "スキャン中…",
   "addFolder": "フォルダを追加",
   "updatedSongsSaved_one": "{count}曲を更新し、Compás に保存しました",
-  "updatedSongsSaved_other": "{count}曲を更新し、Compás に保存しました"
+  "updatedSongsSaved_other": "{count}曲を更新し、Compás に保存しました",
+  "filesNotUpdated_other": "Compás に保存しました。{count} 件のファイルを更新できませんでした（見つからないか読み取り専用です）。"
 }

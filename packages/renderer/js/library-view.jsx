@@ -46,11 +46,13 @@ function LibraryView() {
   const doRetype = async (payload) => {
     setRetypeRoots(null);
     const { updates = [], cortinaOn = [], cortinaOff = [] } = payload || {};
-    if (updates.length) await Store.setSongGenres(updates);
+    const res = updates.length ? await Store.setSongGenres(updates) : null;
     if (cortinaOn.length) await Store.setSongCortina(cortinaOn, true);
     if (cortinaOff.length) await Store.setSongCortina(cortinaOff, false);
     const n = updates.length + cortinaOn.length + cortinaOff.length;
-    if (n) flash(tr("library.updatedSongs", { count: n }));
+    // Saved either way; say so when some files couldn't be written too.
+    if (res && res.fileErrors > 0) flash(tr("library.filesNotUpdated", { count: res.fileErrors }));
+    else if (n) flash(tr("library.updatedSongs", { count: n }));
   };
 
   return (

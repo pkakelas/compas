@@ -21,5 +21,7 @@
   "scanning": "Explorando…",
   "addFolder": "Añadir carpeta",
   "updatedSongsSaved_one": "{count} canción actualizada y guardada en Compás",
-  "updatedSongsSaved_other": "{count} canciones actualizadas y guardadas en Compás"
+  "updatedSongsSaved_other": "{count} canciones actualizadas y guardadas en Compás",
+  "filesNotUpdated_one": "Guardado en Compás. {count} archivo no se pudo actualizar (falta o es de solo lectura).",
+  "filesNotUpdated_other": "Guardado en Compás. {count} archivos no se pudieron actualizar (faltan o son de solo lectura)."
 }

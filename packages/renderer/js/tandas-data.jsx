@@ -274,18 +274,23 @@ const Store = {
   async cancelImport() {
     if (window.compas.importCancel) { try { await window.compas.importCancel(); } catch (_e) { /* ignore */ } }
   },
-  // Re-type existing songs: set genres for many songs at once (Compás-only).
+  // Re-type existing songs: set genres for many songs at once. Honors the
+  // "also save to the music files" setting like applySmartOrganize; resolves to
+  // {writeFile, filesUpdated, fileErrors}.
   async setSongGenres(updates) {
-    if (!window.compas.setSongGenres || !updates || !updates.length) return;
-    const library = await window.compas.setSongGenres(updates);
-    if (library) {
-      _applyLibrary(library);
+    if (!window.compas.setSongGenres || !updates || !updates.length) return null;
+    let writeFile = false;
+    try { writeFile = localStorage.getItem("compas.writeTagsToFiles") === "1"; } catch (e) { /* ignore */ }
+    const res = await window.compas.setSongGenres(updates, { writeFile });
+    if (res && res.library) {
+      _applyLibrary(res.library);
       const [tandas, playlists] = await Promise.all([
         window.compas.listTandas(),
         window.compas.listPlaylists(),
       ]);
       _set({ tandas: tandas || [], playlists: playlists || [] });
     }
+    return { writeFile, filesUpdated: (res && res.filesUpdated) || 0, fileErrors: (res && res.fileErrors) || 0 };
   },
   async clearLibrary() {
     const lib = await window.compas.clearLibrary();
