@@ -36,10 +36,11 @@ const appxOptions = process.env.APPX_IDENTITY_NAME
       displayName: process.env.APPX_DISPLAY_NAME || 'Compás',
       // The tile images in buildResources/appx carry their own rounded plate.
       backgroundColor: 'transparent',
-      // The x64 and arm64 packages go into one bundle, which needs them to
-      // declare the same Windows versions; electron-builder's default differs
-      // per architecture (arm64 needs at least 10.0.16299, Windows 10 1709).
-      minVersion: '10.0.16299.0',
+      // The x64 and arm64 packages go into one .msixbundle, which needs them to
+      // declare the same Windows versions (electron-builder's default differs
+      // per architecture), and the Store only accepts .msix bundles targeting
+      // Windows 10 1809 (10.0.17763) or later.
+      minVersion: '10.0.17763.0',
     }
   : undefined;
 
