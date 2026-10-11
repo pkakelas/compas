@@ -56,6 +56,20 @@ test('the Community tab appears when a backend is configured', async () => {
   await expect(page.locator('.tp-nav-dot')).toHaveCount(0);
 });
 
+test('the welcome tour tells new DJs about the Community', async () => {
+  await gotoView(page, 'Settings');
+  await page.getByRole('button', {name: 'Replay tour'}).click();
+  // The last slide before the sign-off.
+  const dots = page.locator('.tp-ob-dot');
+  await dots.nth((await dots.count()) - 2).click();
+  await expect(page.locator('.tp-ob-title')).toHaveText('Share tandas with other DJs');
+  await expect(page.locator('.tp-ob-new')).toHaveText('New');
+  await expect(page.locator('.tp-ob-how')).toContainText('Open the Community tab');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.tp-ob-scrim')).toHaveCount(0);
+  await gotoView(page, 'Community');
+});
+
 test('a wrong password is explained, the right one signs in', async () => {
   await page.getByLabel('Email').fill(STUB_ACCOUNT.email);
   await page.getByLabel('Password').fill('not-the-password');

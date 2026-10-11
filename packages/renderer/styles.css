@@ -2728,6 +2728,12 @@ button.tp-nav {
   margin: 9px auto 0; max-width: 350px;
 }
 
+/* A feature that has only just arrived (the Community) says so. */
+.tp-ob-new {
+  display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: 999px; vertical-align: 1px;
+  font: 700 10px var(--sans); letter-spacing: .06em; color: var(--on-accent); background: var(--accent);
+}
+
 /* ---- live demo: a framed inset that previews the real UI ---- */
 .tp-ob-demo {
   margin: 18px 0 0; padding: 14px; text-align: left;
@@ -2788,6 +2794,25 @@ button.tp-nav {
 .tp-ob-out.floor .ic { color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-line); }
 .tp-ob-out.cue .ic { color: var(--cue); background: var(--cue-soft); border: 1px solid var(--cue-line); }
 .tp-ob-out.cue { border-color: var(--cue-line); }
+
+/* Community: another DJ's post, the way it reads in the feed */
+.tp-ob-post { display: flex; flex-direction: column; gap: 9px; }
+.tp-ob-phead { display: flex; align-items: center; gap: 10px; }
+.tp-ob-phead .tx { flex: 1; min-width: 0; }
+.tp-ob-phead .t { font-size: 13px; color: var(--ink); }
+.tp-ob-phead .t b { font-weight: 700; }
+.tp-ob-phead .d { font-size: 11.5px; color: var(--ink-2); margin-top: 1px; }
+.tp-ob-pnote { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+.tp-ob-ptanda {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.tp-ob-ptanda > svg { color: var(--ink-3s); flex: 0 0 auto; }
+.tp-ob-ptanda .nm { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-ob-ptanda .n { flex: 0 0 auto; font-size: 11.5px; color: var(--ink-2); }
+.tp-ob-pacts { display: flex; gap: 16px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.tp-ob-pacts span { display: inline-flex; align-items: center; gap: 5px; }
+.tp-ob-pacts .on { color: var(--accent-deep); }
 
 /* smart organize: a verified song with the credits it proposes to fill in */
 .tp-ob-org { display: flex; flex-direction: column; gap: 9px; }
