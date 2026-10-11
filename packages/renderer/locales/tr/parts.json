@@ -157,5 +157,9 @@
   "modeChange": "Değiştir",
   "fileNotUpdatedMissing": "Compás’a kaydedildi. Dosyanın kendisi güncellenemedi: eski yerinde değil. Sürücü bağlı mı?",
   "fileNotUpdatedReadonly": "Compás’a kaydedildi. Dosyanın kendisi güncellenemedi: Compás’ın bu dosyaya yazma izni yok.",
-  "fileNotUpdatedOther": "Compás’a kaydedildi. Dosyanın kendisi güncellenemedi."
+  "fileNotUpdatedOther": "Compás’a kaydedildi. Dosyanın kendisi güncellenemedi.",
+  "sortTandas": "Tandaları sırala",
+  "tandaSortName": "Ad A–Z",
+  "tandaSortNewest": "Önce en yeni",
+  "tandaSortOldest": "Önce en eski"
 }

@@ -157,5 +157,9 @@
   "modeChange": "बदलें",
   "fileNotUpdatedMissing": "Compás में सहेज लिया गया। फ़ाइल खुद अपडेट नहीं हो सकी: वह अपनी जगह पर नहीं है। क्या ड्राइव जुड़ी हुई है?",
   "fileNotUpdatedReadonly": "Compás में सहेज लिया गया। फ़ाइल खुद अपडेट नहीं हो सकी: Compás को उसमें लिखने की अनुमति नहीं है।",
-  "fileNotUpdatedOther": "Compás में सहेज लिया गया। फ़ाइल खुद अपडेट नहीं हो सकी।"
+  "fileNotUpdatedOther": "Compás में सहेज लिया गया। फ़ाइल खुद अपडेट नहीं हो सकी।",
+  "sortTandas": "Tandas क्रम से लगाएँ",
+  "tandaSortName": "नाम A–Z",
+  "tandaSortNewest": "सबसे नए पहले",
+  "tandaSortOldest": "सबसे पुराने पहले"
 }

@@ -157,5 +157,9 @@
   "modeChange": "変更",
   "fileNotUpdatedMissing": "Compás には保存しました。ファイル自体は更新できませんでした：元の場所に見つかりません。ドライブは接続されていますか？",
   "fileNotUpdatedReadonly": "Compás には保存しました。ファイル自体は更新できませんでした：Compás に書き込みが許可されていません。",
-  "fileNotUpdatedOther": "Compás には保存しました。ファイル自体は更新できませんでした。"
+  "fileNotUpdatedOther": "Compás には保存しました。ファイル自体は更新できませんでした。",
+  "sortTandas": "tanda を並べ替え",
+  "tandaSortName": "名前 A–Z",
+  "tandaSortNewest": "新しい順",
+  "tandaSortOldest": "古い順"
 }

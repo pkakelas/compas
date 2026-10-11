@@ -91,6 +91,9 @@ export type Tanda = {
   tags: TandaTag[];
   // False for a tanda that exists only inside an imported playlist.
   inCollection: boolean;
+  // Epoch milliseconds when the tanda was first saved (the DB's created_at),
+  // so the views can order by creation as well as by name.
+  createdAt: number;
 };
 
 /** A playlist item is either a saved tanda or a single cortina song. */
@@ -643,6 +646,7 @@ export function listTandas(): Tanda[] {
     songs: (songStmt.all(t.id) as SongRow[]).map(rowToSong),
     tags: tagStmt.all(t.id) as TandaTag[],
     inCollection: t.in_collection !== 0,
+    createdAt: t.created_at,
   }));
 }
 

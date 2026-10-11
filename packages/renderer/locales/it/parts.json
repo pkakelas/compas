@@ -157,5 +157,9 @@
   "modeChange": "Cambia",
   "fileNotUpdatedMissing": "Salvato in Compás. Il file stesso non è stato aggiornato: non è più dov’era. Il disco è collegato?",
   "fileNotUpdatedReadonly": "Salvato in Compás. Il file stesso non è stato aggiornato: Compás non ha il permesso di scriverci.",
-  "fileNotUpdatedOther": "Salvato in Compás. Il file stesso non è stato aggiornato."
+  "fileNotUpdatedOther": "Salvato in Compás. Il file stesso non è stato aggiornato.",
+  "sortTandas": "Ordina le tandas",
+  "tandaSortName": "Nome A–Z",
+  "tandaSortNewest": "Più recenti prima",
+  "tandaSortOldest": "Più vecchie prima"
 }

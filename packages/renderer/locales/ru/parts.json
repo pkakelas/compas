@@ -175,5 +175,9 @@
   "modeChange": "Изменить",
   "fileNotUpdatedMissing": "Сохранено в Compás. Сам файл обновить не удалось: его нет на прежнем месте. Диск подключен?",
   "fileNotUpdatedReadonly": "Сохранено в Compás. Сам файл обновить не удалось: у Compás нет разрешения на запись в него.",
-  "fileNotUpdatedOther": "Сохранено в Compás. Сам файл обновить не удалось."
+  "fileNotUpdatedOther": "Сохранено в Compás. Сам файл обновить не удалось.",
+  "sortTandas": "Сортировать tandas",
+  "tandaSortName": "Название А–Я",
+  "tandaSortNewest": "Сначала новые",
+  "tandaSortOldest": "Сначала старые"
 }

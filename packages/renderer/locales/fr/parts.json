@@ -157,5 +157,9 @@
   "modeChange": "Changer",
   "fileNotUpdatedMissing": "Enregistré dans Compás. Le fichier lui-même n’a pas pu être mis à jour : il n’est plus à sa place. Le disque est-il branché ?",
   "fileNotUpdatedReadonly": "Enregistré dans Compás. Le fichier lui-même n’a pas pu être mis à jour : Compás n’a pas le droit d’y écrire.",
-  "fileNotUpdatedOther": "Enregistré dans Compás. Le fichier lui-même n’a pas pu être mis à jour."
+  "fileNotUpdatedOther": "Enregistré dans Compás. Le fichier lui-même n’a pas pu être mis à jour.",
+  "sortTandas": "Trier les tandas",
+  "tandaSortName": "Nom A–Z",
+  "tandaSortNewest": "Plus récentes d’abord",
+  "tandaSortOldest": "Plus anciennes d’abord"
 }

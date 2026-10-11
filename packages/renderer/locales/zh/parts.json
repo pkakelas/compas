@@ -157,5 +157,9 @@
   "modeChange": "更改",
   "fileNotUpdatedMissing": "已保存到 Compás。文件本身无法更新：它不在原来的位置。硬盘是否已连接？",
   "fileNotUpdatedReadonly": "已保存到 Compás。文件本身无法更新：Compás 没有写入该文件的权限。",
-  "fileNotUpdatedOther": "已保存到 Compás。文件本身无法更新。"
+  "fileNotUpdatedOther": "已保存到 Compás。文件本身无法更新。",
+  "sortTandas": "tanda 排序",
+  "tandaSortName": "名称 A–Z",
+  "tandaSortNewest": "最新优先",
+  "tandaSortOldest": "最早优先"
 }

@@ -157,5 +157,9 @@
   "modeChange": "Ändern",
   "fileNotUpdatedMissing": "In Compás gespeichert. Die Datei selbst konnte nicht aktualisiert werden: Sie ist nicht mehr an ihrem Platz. Ist das Laufwerk angeschlossen?",
   "fileNotUpdatedReadonly": "In Compás gespeichert. Die Datei selbst konnte nicht aktualisiert werden: Compás darf sie nicht beschreiben.",
-  "fileNotUpdatedOther": "In Compás gespeichert. Die Datei selbst konnte nicht aktualisiert werden."
+  "fileNotUpdatedOther": "In Compás gespeichert. Die Datei selbst konnte nicht aktualisiert werden.",
+  "sortTandas": "Tandas sortieren",
+  "tandaSortName": "Name A–Z",
+  "tandaSortNewest": "Neueste zuerst",
+  "tandaSortOldest": "Älteste zuerst"
 }
