@@ -12,6 +12,7 @@
 // The session is encrypted with the OS keychain (safeStorage) and kept in
 // userData, one file per backend so a staging session never meets production.
 import {safeStorage, shell} from 'electron';
+import {createHash, randomBytes} from 'node:crypto';
 import {createServer, type Server} from 'node:http';
 import {existsSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -203,6 +204,34 @@ class SessionStore {
 const CALLBACK_PORTS = [47821, 47822, 47823];
 const CALLBACK_PATH = '/auth/callback';
 const SIGN_IN_TIMEOUT_MS = 5 * 60_000;
+
+// The app's own Google OAuth client (a "Desktop app" client in Google Cloud),
+// baked in at build time like the backend. With it the browser talks to Google
+// directly, so Google's account picker names Compás instead of the backend's
+// supabase.co address; the ID token it hands back is then traded for a
+// session. The client ID must be listed under the backend's Google provider
+// (Auth → Providers → Google → Client IDs). Without it the backend runs the
+// Google flow itself.
+const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+
+type GoogleClient = {clientId: string; clientSecret: string};
+
+function googleClient(): GoogleClient | null {
+  const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '').trim();
+  // Google calls it a secret, but for a desktop client it ships inside the app
+  // and isn't one — PKCE is what protects the code.
+  const clientSecret = (import.meta.env.VITE_GOOGLE_CLIENT_SECRET ?? '').trim();
+  return clientId && clientSecret ? {clientId, clientSecret} : null;
+}
+
+const randomToken = (bytes: number) => randomBytes(bytes).toString('base64url');
+const sha256 = (value: string, encoding: 'hex' | 'base64url') => createHash('sha256').update(value).digest(encoding);
+
+/** A Google sign-in about to start: where to send the browser, the `state` the
+ *  callback must carry (null when the backend checks it), and how to turn the
+ *  returned code into a session — resolving to the error, or null. */
+type GoogleStart = {url: string; state: string | null; finish: (code: string) => Promise<unknown>};
 
 function listenOn(port: number): Promise<Server> {
   return new Promise((resolve, reject) => {
@@ -455,6 +484,7 @@ export class CommunityService {
 
     type Outcome = {code: string} | {failed: true} | {cancelled: true};
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let expectedState: string | null = null;
     const outcome = new Promise<Outcome>(resolve => {
       timer = setTimeout(() => resolve({cancelled: true}), SIGN_IN_TIMEOUT_MS);
       this.#pendingSignIn = {cancel: () => resolve({cancelled: true})};
@@ -465,42 +495,35 @@ export class CommunityService {
           return;
         }
         const code = url.searchParams.get('code');
-        if (!code) {
+        const stateOk = expectedState === null || url.searchParams.get('state') === expectedState;
+        if (!code || !stateOk) {
           debug('Google sign-in: callback had no code:', {
+            stateOk,
             error: url.searchParams.get('error'),
             error_code: url.searchParams.get('error_code'),
             error_description: url.searchParams.get('error_description'),
           });
         }
+        const ok = !!code && stateOk;
         res.writeHead(200, {'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store'});
-        res.end(callbackPage(!!code));
-        resolve(code ? {code} : {failed: true});
+        res.end(callbackPage(ok));
+        resolve(ok ? {code: code!} : {failed: true});
       });
     });
 
     try {
-      const {data, error} = await client.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `http://127.0.0.1:${port}${CALLBACK_PATH}`,
-          skipBrowserRedirect: true,
-          queryParams: {prompt: 'select_account'},
-        },
-      });
-      if (error || !data?.url) return {ok: false, error: friendly(error, 'communityErrors.googleStart')};
-      // Only ever hand the OS our own backend's authorize URL.
-      if (new URL(data.url).origin !== this.#config.url) {
-        return {ok: false, error: 'communityErrors.googleStart'};
-      }
+      const start = await this.#startGoogle(client, `http://127.0.0.1:${port}${CALLBACK_PATH}`);
+      if ('error' in start) return {ok: false, error: start.error};
+      expectedState = start.state;
       debug(`Google sign-in: browser opened, waiting on http://127.0.0.1:${port}${CALLBACK_PATH}`);
-      await shell.openExternal(data.url);
+      await shell.openExternal(start.url);
 
       const result = await outcome;
       debug('Google sign-in: browser came back —', 'code' in result ? 'with a code' : 'cancelled' in result ? 'cancelled / timed out' : 'without a code');
       if ('cancelled' in result) return {ok: false, error: 'communityErrors.signInCancelled', cancelled: true};
       if ('failed' in result) return {ok: false, error: 'communityErrors.googleIncomplete'};
-      const {error: exchangeError} = await client.auth.exchangeCodeForSession(result.code);
-      if (exchangeError) return {ok: false, error: friendly(exchangeError, 'communityErrors.googleIncomplete')};
+      const finishError = await start.finish(result.code);
+      if (finishError) return {ok: false, error: friendly(finishError, 'communityErrors.googleIncomplete')};
       return await this.#done();
     } catch (e) {
       return {ok: false, error: friendly(e, 'communityErrors.googleIncomplete')};
@@ -510,6 +533,70 @@ export class CommunityService {
       server.close();
       server.closeAllConnections();
     }
+  }
+
+  /** Prepare a Google sign-in that comes back to `redirectTo`. With the app's
+   *  own Google client (see googleClient) the browser goes to Google itself;
+   *  otherwise to the backend, which goes to Google for us. */
+  async #startGoogle(client: SupabaseClient, redirectTo: string): Promise<GoogleStart | {error: string}> {
+    const google = googleClient();
+    if (!google) {
+      const {data, error} = await client.auth.signInWithOAuth({
+        provider: 'google',
+        options: {redirectTo, skipBrowserRedirect: true, queryParams: {prompt: 'select_account'}},
+      });
+      if (error || !data?.url) return {error: friendly(error, 'communityErrors.googleStart')};
+      // Only ever hand the OS our own backend's authorize URL.
+      if (new URL(data.url).origin !== this.#config?.url) return {error: 'communityErrors.googleStart'};
+      return {
+        url: data.url,
+        state: null,
+        finish: async code => (await client.auth.exchangeCodeForSession(code)).error,
+      };
+    }
+
+    const verifier = randomToken(32);
+    const nonce = randomToken(16);
+    const state = randomToken(16);
+    const url = new URL(GOOGLE_AUTHORIZE_URL);
+    url.search = new URLSearchParams({
+      client_id: google.clientId,
+      redirect_uri: redirectTo,
+      response_type: 'code',
+      scope: 'openid email profile',
+      code_challenge: sha256(verifier, 'base64url'),
+      code_challenge_method: 'S256',
+      state,
+      // Google puts this in the ID token; the backend hashes the raw nonce we
+      // give it and checks the two match.
+      nonce: sha256(nonce, 'hex'),
+      prompt: 'select_account',
+    }).toString();
+
+    return {
+      url: url.href,
+      state,
+      finish: async code => {
+        const res = await fetch(GOOGLE_TOKEN_URL, {
+          method: 'POST',
+          headers: {'content-type': 'application/x-www-form-urlencoded'},
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            code,
+            code_verifier: verifier,
+            redirect_uri: redirectTo,
+            client_id: google.clientId,
+            client_secret: google.clientSecret,
+          }),
+        });
+        const body = (await res.json().catch(() => ({}))) as {id_token?: unknown; error?: unknown; error_description?: unknown};
+        if (!res.ok || typeof body.id_token !== 'string') {
+          debug('Google sign-in: token exchange failed:', {status: res.status, error: body.error, error_description: body.error_description});
+          return {message: 'Google token exchange failed'};
+        }
+        return (await client.auth.signInWithIdToken({provider: 'google', token: body.id_token, nonce})).error;
+      },
+    };
   }
 
   /** Abandon a Google sign-in that is waiting on the browser. */

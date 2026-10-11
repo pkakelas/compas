@@ -26,6 +26,14 @@ interface ImportMetaEnv {
    */
   readonly VITE_SUPABASE_URL: undefined | string;
   readonly VITE_SUPABASE_ANON_KEY: undefined | string;
+
+  /**
+   * The app's own Google OAuth client (type "Desktop app"), used for Google
+   * sign-in so Google shows Compás rather than the Supabase project's
+   * address. Empty falls back to Supabase's hosted Google flow.
+   */
+  readonly VITE_GOOGLE_CLIENT_ID: undefined | string;
+  readonly VITE_GOOGLE_CLIENT_SECRET: undefined | string;
 }
 
 interface ImportMeta {
