@@ -144,5 +144,18 @@
   "buildTanda": "Tanda erstellen",
   "browseSuggestions_one": "{count} Vorschlag ansehen",
   "browseSuggestions_other": "{count} Vorschläge ansehen",
-  "newTanda": "Neue Tanda"
+  "newTanda": "Neue Tanda",
+  "fileWriteTitle": "Wo soll Compás deine Änderungen speichern?",
+  "fileWriteMsg": "Deine Musik wird nie verändert – nur ihre Beschriftung (Titel, Orchester, Sänger, Jahr …).",
+  "fileWriteAppOnlyLabel": "Nur in Compás",
+  "fileWriteAppOnlyDesc": "Empfohlen. Auf deinem Computer ändert sich nichts.",
+  "fileWriteFilesLabel": "Auch in den Musikdateien",
+  "fileWriteFilesDesc": "iTunes und andere Apps zeigen dann dieselben Namen.",
+  "fileWriteLater": "Du kannst das jederzeit in den Einstellungen ändern.",
+  "modeAppOnly": "Nur in Compás gespeichert",
+  "modeFiles": "Auch in der Musikdatei gespeichert",
+  "modeChange": "Ändern",
+  "fileNotUpdatedMissing": "In Compás gespeichert. Die Datei selbst konnte nicht aktualisiert werden: Sie ist nicht mehr an ihrem Platz. Ist das Laufwerk angeschlossen?",
+  "fileNotUpdatedReadonly": "In Compás gespeichert. Die Datei selbst konnte nicht aktualisiert werden: Compás darf sie nicht beschreiben.",
+  "fileNotUpdatedOther": "In Compás gespeichert. Die Datei selbst konnte nicht aktualisiert werden."
 }

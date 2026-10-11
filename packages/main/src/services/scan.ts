@@ -1,8 +1,9 @@
 import {existsSync} from 'node:fs';
-import {readdir} from 'node:fs/promises';
+import {readdir, stat} from 'node:fs/promises';
 import {basename, extname, join, relative, sep} from 'node:path';
 import {parseFile} from 'music-metadata';
 import type {ScannedSong} from '../modules/Database.js';
+import {splitArtistTag} from './enrich.js';
 
 const AUDIO_EXTENSIONS = new Set([
   '.mp3',
@@ -174,16 +175,32 @@ export async function scanFile(root: string, file: string): Promise<ScannedSong>
 
   let title = basename(file, extname(file));
   let artist = '';
+  let singer = '';
   let album: string | null = null;
   let year: number | null = null;
   let durationSec: number | null = null;
   let tagStyle: string | null = null;
+  // The file's modification time, remembered so the startup reconcile can tell
+  // which known files were edited while the app was closed (see watcher.ts).
+  let mtimeMs: number | null = null;
+  try {
+    mtimeMs = Math.round((await stat(file)).mtimeMs);
+  } catch {
+    // Vanished between listing and scanning — the watcher will sort it out.
+  }
 
   try {
     const meta = await parseFile(file, {duration: true});
     const c = meta.common;
     if (c.title) title = c.title;
     if (c.artist) artist = c.artist;
+    // An artist tag crediting "Orchestra - Singer" (the convention Compás also
+    // writes) is split into the two fields it really holds.
+    const split = splitArtistTag(artist);
+    if (split) {
+      artist = split.orq;
+      singer = split.singer;
+    }
     if (c.album) album = c.album;
     if (typeof c.year === 'number') year = c.year;
     tagStyle = styleFromGenreTag(c.genre);
@@ -200,10 +217,11 @@ export async function scanFile(root: string, file: string): Promise<ScannedSong>
     path: file,
     title,
     artist,
-    singer: '',
+    singer,
     album,
     year,
     durationSec,
+    mtimeMs,
     genre: mapGenre(segments, tagStyle),
     tagStyle,
     isCortina: segmentsAreCortina(segments),

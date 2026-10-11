@@ -182,9 +182,15 @@ function TandaLibCard({ t, preview, onAdd, added, addTitle, drag, dragging }) {
 }
 
 /* ============================ SONG EDITOR ============================
- * The inline metadata editor that replaces a SongRow while editing. Saving
- * writes both the file's tags (on disk) and the database (via Store.updateSong),
- * so the change is durable and reflected everywhere the song appears. */
+ * The inline metadata editor that opens beneath a SongRow. Saving always
+ * updates the database (via Store.updateSong), so the change is reflected
+ * everywhere the song appears; whether it is also written into the music file
+ * is the DJ's choice — asked once here on the first save, changeable in
+ * Settings. A failed file write keeps the edit in Compás and says so. */
+const fileErrorText = (code) =>
+  code === "missing" ? tr("parts.fileNotUpdatedMissing")
+    : code === "readonly" ? tr("parts.fileNotUpdatedReadonly")
+    : tr("parts.fileNotUpdatedOther");
 function SongEditRow({ s, onClose }) {
   const [draft, setDraft] = useState({
     title: s.title || "",
@@ -197,6 +203,14 @@ function SongEditRow({ s, onClose }) {
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(false);
+  // The "also write to the music files" preference, and whether it has been
+  // decided yet. Undecided → the first save asks (see FileWriteChoiceModal).
+  const writeToFiles = useBoolPref("writeTagsToFiles");
+  const asked = useBoolPref("writeTagsAsked");
+  const [choosing, setChoosing] = useState(false);
+  // Set when the edit was saved in Compás but the file could not be updated;
+  // the editor stays open to show why, then closes on OK.
+  const [fileError, setFileError] = useState(null);
   const set = (k) => (e) => setDraft((d) => ({ ...d, [k]: e.target.value }));
   const setVal = (k) => (v) => setDraft((d) => ({ ...d, [k]: v }));
 
@@ -214,14 +228,13 @@ function SongEditRow({ s, onClose }) {
     return { orqOptions: [...orqs].sort(cmp), singerOptions: [...singers].sort(cmp) };
   }, []);
 
-  const save = async () => {
-    if (saving) return;
+  const doSave = async (writeFile) => {
     setSaving(true);
     setErr(false);
     const yearTrim = draft.year.trim();
     const yearNum = yearTrim ? parseInt(yearTrim, 10) : null;
     try {
-      const updated = await Store.updateSong({
+      const res = await Store.updateSong({
         id: s.id,
         title: draft.title.trim() || s.title,
         orq: draft.orq.trim(),
@@ -230,17 +243,36 @@ function SongEditRow({ s, onClose }) {
         year: Number.isFinite(yearNum) ? yearNum : null,
         genre: draft.genre,
         isCortina: draft.isCortina,
+        writeFile: !!writeFile,
       });
-      if (!updated) { setErr(true); setSaving(false); return; }
+      if (!res || !res.song) { setErr(true); setSaving(false); return; }
+      if (res.fileError) { setFileError(res.fileError); setSaving(false); return; }
       onClose();
     } catch (e) {
       setErr(true);
       setSaving(false);
     }
   };
+  const save = () => {
+    if (saving || fileError) return;
+    if (!asked) { setChoosing(true); return; }
+    doSave(writeToFiles);
+  };
+  // The first-save answer becomes the preference (and marks it decided), then
+  // the save goes ahead with that choice.
+  const choose = (v) => {
+    setChoosing(false);
+    if (window.setAppTweak) window.setAppTweak({ writeTagsToFiles: v, writeTagsAsked: true });
+    doSave(v);
+  };
+  const openSettings = (e) => {
+    e.preventDefault();
+    window.dispatchEvent(new CustomEvent("compas:nav", { detail: "Settings" }));
+  };
 
   const onKey = (e) => {
-    if (e.key === "Enter" && e.target.tagName !== "SELECT") { e.preventDefault(); save(); }
+    if (choosing) return;
+    if (e.key === "Enter" && e.target.tagName !== "SELECT") { e.preventDefault(); if (fileError) onClose(); else save(); }
     else if (e.key === "Escape") { e.preventDefault(); if (!saving) onClose(); }
   };
 
@@ -278,12 +310,29 @@ function SongEditRow({ s, onClose }) {
         </label>
       </div>
       <div className="tv-song-edit-foot">
-        {err && <span className="tv-song-edit-err">{tr("parts.saveFailed")}</span>}
-        <button className="tv-song-edit-cancel" onClick={onClose} disabled={saving}>{tr("common.cancel")}</button>
-        <button className="tv-song-edit-save" onClick={save} disabled={saving}>
-          {saving ? tr("parts.saving") : <><I.check s={14} /> {tr("parts.save")}</>}
-        </button>
+        {fileError ? (
+          <>
+            <span className="tv-song-edit-notice"><I.check s={13} /> {fileErrorText(fileError)}</span>
+            <button className="tv-song-edit-save" onClick={onClose} autoFocus>{tr("common.ok")}</button>
+          </>
+        ) : (
+          <>
+            {err ? <span className="tv-song-edit-err">{tr("parts.saveFailed")}</span>
+              : asked ? (
+                <span className="tv-song-edit-mode">
+                  {writeToFiles ? <I.folder s={12} /> : <I.lock s={12} />}
+                  {writeToFiles ? tr("parts.modeFiles") : tr("parts.modeAppOnly")}
+                  <a href="#" onClick={openSettings}>{tr("parts.modeChange")}</a>
+                </span>
+              ) : null}
+            <button className="tv-song-edit-cancel" onClick={onClose} disabled={saving}>{tr("common.cancel")}</button>
+            <button className="tv-song-edit-save" onClick={save} disabled={saving}>
+              {saving ? tr("parts.saving") : <><I.check s={14} /> {tr("parts.save")}</>}
+            </button>
+          </>
+        )}
       </div>
+      {choosing && <FileWriteChoiceModal onChoose={choose} onCancel={() => setChoosing(false)} />}
     </div>
   );
 }

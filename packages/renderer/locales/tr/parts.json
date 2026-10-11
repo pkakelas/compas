@@ -144,5 +144,18 @@
   "buildTanda": "Tanda oluştur",
   "browseSuggestions_one": "{count} öneriye göz at",
   "browseSuggestions_other": "{count} öneriye göz at",
-  "newTanda": "Yeni tanda"
+  "newTanda": "Yeni tanda",
+  "fileWriteTitle": "Compás değişikliklerinizi nerede saklasın?",
+  "fileWriteMsg": "Müziğiniz asla değiştirilmez — yalnızca etiketleri (başlık, orkestra, şarkıcı, yıl…).",
+  "fileWriteAppOnlyLabel": "Yalnızca Compás içinde",
+  "fileWriteAppOnlyDesc": "Önerilen. Bilgisayarınızda hiçbir şey değişmez.",
+  "fileWriteFilesLabel": "Müzik dosyalarında da",
+  "fileWriteFilesDesc": "iTunes ve diğer uygulamalar da aynı adları gösterir.",
+  "fileWriteLater": "Bunu istediğiniz zaman Ayarlar’dan değiştirebilirsiniz.",
+  "modeAppOnly": "Yalnızca Compás’a kaydedilir",
+  "modeFiles": "Müzik dosyasına da kaydedilir",
+  "modeChange": "Değiştir",
+  "fileNotUpdatedMissing": "Compás’a kaydedildi. Dosyanın kendisi güncellenemedi: eski yerinde değil. Sürücü bağlı mı?",
+  "fileNotUpdatedReadonly": "Compás’a kaydedildi. Dosyanın kendisi güncellenemedi: Compás’ın bu dosyaya yazma izni yok.",
+  "fileNotUpdatedOther": "Compás’a kaydedildi. Dosyanın kendisi güncellenemedi."
 }

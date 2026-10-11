@@ -80,6 +80,29 @@ function splitCombinedArtist(raw: string): {orq: string; credit: string} | null 
   return {orq, credit};
 }
 
+/**
+ * The on-disk convention for the singer: there is no standard tag for a
+ * vocalist, so Compás follows what most tango collections already do and
+ * credits orchestra and singer together in the artist tag — "Orchestra - Singer"
+ * (singers joined with ", "), or just the orchestra when instrumental.
+ * `joinArtistTag` builds that string for the tag writer; `splitArtistTag` reads
+ * it back on import (reusing the same conservative split Smart Organize uses,
+ * so a hyphenated band name is left alone). Returns null when the tag doesn't
+ * credit a known orchestra and a singer.
+ */
+export const ARTIST_TAG_SEP = ' - ';
+export function joinArtistTag(orq: string, singer: string): string {
+  const o = (orq || '').trim();
+  const s = (singer || '').trim();
+  return s ? `${o}${ARTIST_TAG_SEP}${s}` : o;
+}
+export function splitArtistTag(raw: string): {orq: string; singer: string} | null {
+  const combined = splitCombinedArtist((raw || '').trim());
+  if (!combined) return null;
+  if (isInstrumentalCredit(combined.credit)) return {orq: combined.orq, singer: ''};
+  return {orq: combined.orq, singer: splitVoices(combined.credit).join(SINGER_JOIN)};
+}
+
 /** Trim leading/trailing dashes and whitespace left behind after stripping the
  *  year/decorators out of a title segment. */
 function cleanSegment(s: string): string {

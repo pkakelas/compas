@@ -12,7 +12,9 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "songNameOnly": false,
   "songNameOnlyCortinas": false,
   "collapseFoldersByDefault": false,
-  "cortinasInFilters": false
+  "cortinasInFilters": false,
+  "writeTagsToFiles": false,
+  "writeTagsAsked": false
 }/*EDITMODE-END*/;
 
 // Text size is a whole-app zoom (everything is sized in px, so scaling the page
@@ -101,6 +103,8 @@ function AppShell() {
       seed.songNameOnlyCortinas = localStorage.getItem("compas.songNameOnlyCortinas") === "1";
       seed.collapseFoldersByDefault = localStorage.getItem("compas.collapseFoldersByDefault") === "1";
       seed.cortinasInFilters = localStorage.getItem("compas.cortinasInFilters") === "1";
+      seed.writeTagsToFiles = localStorage.getItem("compas.writeTagsToFiles") === "1";
+      seed.writeTagsAsked = localStorage.getItem("compas.writeTagsAsked") === "1";
       return seed;
     } catch (e) { return TWEAK_DEFAULTS; }
   })());
@@ -147,6 +151,20 @@ function AppShell() {
     try { localStorage.setItem("compas.collapseFoldersByDefault", t.collapseFoldersByDefault ? "1" : "0"); } catch (e) { /* ignore */ }
   }, [t.collapseFoldersByDefault]);
 
+  // Persist whether song edits are also written into the music files, and
+  // whether the DJ has answered that question yet (the song editor asks once,
+  // on the first save; Settings can change it any time).
+  React.useEffect(() => {
+    try { localStorage.setItem("compas.writeTagsToFiles", t.writeTagsToFiles ? "1" : "0"); } catch (e) { /* ignore */ }
+  }, [t.writeTagsToFiles]);
+  React.useEffect(() => {
+    try { localStorage.setItem("compas.writeTagsAsked", t.writeTagsAsked ? "1" : "0"); } catch (e) { /* ignore */ }
+  }, [t.writeTagsAsked]);
+
+  // Let deeply nested UI (the song editor's first-save question) set a
+  // preference without threading setTweak through every view.
+  React.useEffect(() => { window.setAppTweak = setTweak; }, [setTweak]);
+
   // Persist whether cortinas show up in the library's filter dropdowns.
   React.useEffect(() => {
     try { localStorage.setItem("compas.cortinasInFilters", t.cortinasInFilters ? "1" : "0"); } catch (e) { /* ignore */ }
@@ -179,6 +197,13 @@ function AppShell() {
 
 function AppBody({ t, setTweak }) {
   const [view, setView] = useState(TWEAK_DEFAULTS.startView);
+  // Nested UI can ask for a tab ("Change" next to the song editor's save mode
+  // opens Settings) via a window event, since the nav isn't threaded down.
+  React.useEffect(() => {
+    const onNav = (e) => { if (e.detail) setView(e.detail); };
+    window.addEventListener("compas:nav", onNav);
+    return () => window.removeEventListener("compas:nav", onNav);
+  }, []);
   const player = usePlayer();
   const [update, dismissUpdate] = useUpdateNotice();
   const [showOnboarding, dismissOnboarding, startOnboarding] = useOnboarding();

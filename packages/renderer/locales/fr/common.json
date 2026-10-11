@@ -31,5 +31,6 @@
   "updateDownloaded": "La version {version} a été téléchargée. Redémarrez Compás pour terminer l’installation.",
   "updateLater": "Plus tard",
   "updateRestarting": "Redémarrage…",
-  "updateRestart": "Redémarrer et mettre à jour"
+  "updateRestart": "Redémarrer et mettre à jour",
+  "ok": "OK"
 }

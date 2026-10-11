@@ -31,5 +31,6 @@
   "updateDownloaded": "वर्शन {version} डाउनलोड हो गया है। इंस्टॉल पूरा करने के लिए Compás को रीस्टार्ट करें।",
   "updateLater": "बाद में",
   "updateRestarting": "रीस्टार्ट हो रहा है…",
-  "updateRestart": "रीस्टार्ट करके अपडेट करें"
+  "updateRestart": "रीस्टार्ट करके अपडेट करें",
+  "ok": "ठीक है"
 }

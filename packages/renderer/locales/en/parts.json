@@ -144,5 +144,18 @@
   "buildTanda": "Build a tanda",
   "browseSuggestions_one": "Browse {count} suggestion",
   "browseSuggestions_other": "Browse {count} suggestions",
-  "newTanda": "New tanda"
+  "newTanda": "New tanda",
+  "fileWriteTitle": "Where should Compás keep your changes?",
+  "fileWriteMsg": "Your music is never altered — only its labels (title, orchestra, singer, year…).",
+  "fileWriteAppOnlyLabel": "Only inside Compás",
+  "fileWriteAppOnlyDesc": "Recommended. Nothing on your computer changes.",
+  "fileWriteFilesLabel": "Also in the music files",
+  "fileWriteFilesDesc": "iTunes and other apps will show the same names.",
+  "fileWriteLater": "You can change this any time in Settings.",
+  "modeAppOnly": "Saved in Compás only",
+  "modeFiles": "Also saved to the music file",
+  "modeChange": "Change",
+  "fileNotUpdatedMissing": "Saved in Compás. The file itself couldn’t be updated: it isn’t where it used to be. Is the drive connected?",
+  "fileNotUpdatedReadonly": "Saved in Compás. The file itself couldn’t be updated: Compás isn’t allowed to write to it.",
+  "fileNotUpdatedOther": "Saved in Compás. The file itself couldn’t be updated."
 }

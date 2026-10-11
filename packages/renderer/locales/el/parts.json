@@ -144,5 +144,18 @@
   "buildTanda": "Δημιουργία tanda",
   "browseSuggestions_one": "Δείτε {count} πρόταση",
   "browseSuggestions_other": "Δείτε {count} προτάσεις",
-  "newTanda": "Νέα tanda"
+  "newTanda": "Νέα tanda",
+  "fileWriteTitle": "Πού να κρατά το Compás τις αλλαγές σας;",
+  "fileWriteMsg": "Η μουσική σας δεν αλλοιώνεται ποτέ — μόνο οι ετικέτες της (τίτλος, ορχήστρα, τραγουδιστής, έτος…).",
+  "fileWriteAppOnlyLabel": "Μόνο μέσα στο Compás",
+  "fileWriteAppOnlyDesc": "Προτείνεται. Τίποτα στον υπολογιστή σας δεν αλλάζει.",
+  "fileWriteFilesLabel": "Και στα αρχεία μουσικής",
+  "fileWriteFilesDesc": "Το iTunes και άλλες εφαρμογές θα δείχνουν τα ίδια ονόματα.",
+  "fileWriteLater": "Μπορείτε να το αλλάξετε οποτεδήποτε στις Ρυθμίσεις.",
+  "modeAppOnly": "Αποθηκεύεται μόνο στο Compás",
+  "modeFiles": "Αποθηκεύεται και στο αρχείο μουσικής",
+  "modeChange": "Αλλαγή",
+  "fileNotUpdatedMissing": "Αποθηκεύτηκε στο Compás. Το ίδιο το αρχείο δεν ενημερώθηκε: δεν βρίσκεται εκεί που ήταν. Είναι συνδεδεμένος ο δίσκος;",
+  "fileNotUpdatedReadonly": "Αποθηκεύτηκε στο Compás. Το ίδιο το αρχείο δεν ενημερώθηκε: το Compás δεν έχει άδεια εγγραφής σε αυτό.",
+  "fileNotUpdatedOther": "Αποθηκεύτηκε στο Compás. Το ίδιο το αρχείο δεν ενημερώθηκε."
 }

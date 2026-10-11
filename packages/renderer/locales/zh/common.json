@@ -31,5 +31,6 @@
   "updateDownloaded": "版本 {version} 已下载。重启 Compás 即可完成安装。",
   "updateLater": "稍后",
   "updateRestarting": "正在重启…",
-  "updateRestart": "重启并更新"
+  "updateRestart": "重启并更新",
+  "ok": "好"
 }
