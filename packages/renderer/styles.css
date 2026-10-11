@@ -1372,6 +1372,7 @@ button.tp-nav {
 .tp-modal-confirm.danger:hover,
 .tp-modal-confirm.accent:hover { background: var(--accent-deep); opacity: 1; }
 /* two big choices instead of confirm/cancel (the first-save "where do edits go?") */
+.tp-modal-scrim.top { z-index: 300; }
 .tp-modal-choice { max-width: 420px; }
 .tp-modal-options { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 .tp-modal-option {

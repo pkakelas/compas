@@ -276,7 +276,7 @@ function FileWriteChoiceModal({ onChoose, onCancel }) {
     return () => document.removeEventListener("keydown", onKey, true);
   }, [onCancel]);
   return (
-    <div className="tp-modal-scrim" onMouseDown={(e) => { e.stopPropagation(); onCancel(); }}>
+    <div className="tp-modal-scrim top" onMouseDown={(e) => { e.stopPropagation(); onCancel(); }}>
       <div className="tp-modal tp-modal-choice" role="dialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
         <div className="tp-modal-icon"><I.folder s={20} /></div>
         <div className="tp-modal-title">{tr("parts.fileWriteTitle")}</div>
@@ -294,6 +294,51 @@ function FileWriteChoiceModal({ onChoose, onCancel }) {
         <div className="tp-modal-foot">{tr("parts.fileWriteLater")}</div>
       </div>
     </div>
+  );
+}
+
+/* One place that asks the first-save question for every edit path — the song
+   editor, Smart Organize, the bulk right-click edits and the re-type tool.
+   Mount <FileWriteChoiceHost/> once in the shell. Before saving, call
+   window.askFileWriteChoice(): it resolves to the preference (true = also
+   write the music files) — showing the dialog only while it is undecided —
+   or to null when the DJ dismissed the question, in which case nothing should
+   be saved. The answer is stored through setAppTweak, like the Settings switch. */
+function FileWriteChoiceHost() {
+  const [pending, setPending] = useState(null); // {resolve}
+  const pref = useRef({ asked: false, on: false });
+  useEffect(() => {
+    try {
+      pref.current = {
+        asked: localStorage.getItem("compas.writeTagsAsked") === "1",
+        on: localStorage.getItem("compas.writeTagsToFiles") === "1",
+      };
+    } catch (e) { /* ignore */ }
+    // Keep in step with Settings (and our own answer) without waiting for the
+    // localStorage write, which happens in a later effect.
+    const onTweak = (e) => {
+      const d = e.detail || {};
+      if ("writeTagsAsked" in d) pref.current.asked = !!d.writeTagsAsked;
+      if ("writeTagsToFiles" in d) pref.current.on = !!d.writeTagsToFiles;
+    };
+    window.addEventListener("tweakchange", onTweak);
+    // While the question is open, further callers share the same answer.
+    let open = null;
+    window.askFileWriteChoice = () => {
+      if (pref.current.asked) return Promise.resolve(pref.current.on);
+      if (!open) {
+        open = new Promise((resolve) => setPending({ resolve: (v) => { open = null; resolve(v); } }));
+      }
+      return open;
+    };
+    return () => { window.removeEventListener("tweakchange", onTweak); delete window.askFileWriteChoice; };
+  }, []);
+  if (!pending) return null;
+  const finish = (v) => { const p = pending; setPending(null); p.resolve(v); };
+  return (
+    <FileWriteChoiceModal
+      onChoose={(v) => { if (window.setAppTweak) window.setAppTweak({ writeTagsToFiles: v, writeTagsAsked: true }); finish(v); }}
+      onCancel={() => finish(null)} />
   );
 }
 
@@ -396,4 +441,4 @@ const useCollapseFoldersByDefault = () => useBoolPref("collapseFoldersByDefault"
 // years are offered in the library's filter dropdowns.
 const useCortinasInFilters = () => useBoolPref("cortinasInFilters");
 
-Object.assign(window, { I, Waveform, EQ, Marquee, PreviewGlyph, previewTitle, clickKeys, GenreTag, useToast, Toast, ConfirmModal, useConfirm, FileWriteChoiceModal, useBoolPref, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, isCoreStyle, genreLabel, genreClass, cleanSongTitle, useSongTitle, useCollapseFoldersByDefault, useCortinasInFilters });
+Object.assign(window, { I, Waveform, EQ, Marquee, PreviewGlyph, previewTitle, clickKeys, GenreTag, useToast, Toast, ConfirmModal, useConfirm, FileWriteChoiceModal, FileWriteChoiceHost, useBoolPref, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, isCoreStyle, genreLabel, genreClass, cleanSongTitle, useSongTitle, useCollapseFoldersByDefault, useCortinasInFilters });

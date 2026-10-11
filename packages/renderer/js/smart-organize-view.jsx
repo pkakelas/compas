@@ -338,10 +338,13 @@ function SmartOrganizeModal({ onClose, onApplied }) {
         return c;
       });
     if (!changes.length) return;
+    // Undecided yet → ask where changes go first (dismissing applies nothing).
+    const writeFile = window.askFileWriteChoice ? await window.askFileWriteChoice() : undefined;
+    if (writeFile === null) return;
     setPhase("applying");
     setFileProgress(null);
     try {
-      const res = (await Store.applySmartOrganize(changes)) || { writeFile: false, fileErrors: 0 };
+      const res = (await Store.applySmartOrganize(changes, { writeFile })) || { writeFile: false, fileErrors: 0 };
       setFileProgress(null);
       setFileErrorsTotal((n) => n + res.fileErrors);
       const ids = new Set(changes.map((c) => c.id));

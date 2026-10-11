@@ -204,10 +204,9 @@ function SongEditRow({ s, onClose }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(false);
   // The "also write to the music files" preference, and whether it has been
-  // decided yet. Undecided → the first save asks (see FileWriteChoiceModal).
+  // decided yet. Undecided → the first save asks (see FileWriteChoiceHost).
   const writeToFiles = useBoolPref("writeTagsToFiles");
   const asked = useBoolPref("writeTagsAsked");
-  const [choosing, setChoosing] = useState(false);
   // Set when the edit was saved in Compás but the file could not be updated;
   // the editor stays open to show why, then closes on OK. Changing a field
   // again clears it and brings Save back, so a follow-up correction is saved
@@ -256,16 +255,13 @@ function SongEditRow({ s, onClose }) {
       setSaving(false);
     }
   };
-  const save = () => {
+  // Asks the first-save question when it is still undecided (the host stores
+  // the answer as the preference), then saves with that choice; a dismissed
+  // question saves nothing.
+  const save = async () => {
     if (saving || fileError) return;
-    if (!asked) { setChoosing(true); return; }
-    doSave(writeToFiles);
-  };
-  // The first-save answer becomes the preference (and marks it decided), then
-  // the save goes ahead with that choice.
-  const choose = (v) => {
-    setChoosing(false);
-    if (window.setAppTweak) window.setAppTweak({ writeTagsToFiles: v, writeTagsAsked: true });
+    const v = window.askFileWriteChoice ? await window.askFileWriteChoice() : writeToFiles;
+    if (v === null) return;
     doSave(v);
   };
   const openSettings = (e) => {
@@ -274,7 +270,6 @@ function SongEditRow({ s, onClose }) {
   };
 
   const onKey = (e) => {
-    if (choosing) return;
     if (e.key === "Enter" && e.target.tagName !== "SELECT") { e.preventDefault(); if (fileError) onClose(); else save(); }
     else if (e.key === "Escape") { e.preventDefault(); if (!saving) onClose(); }
   };
@@ -335,7 +330,6 @@ function SongEditRow({ s, onClose }) {
           </>
         )}
       </div>
-      {choosing && <FileWriteChoiceModal onChoose={choose} onCancel={() => setChoosing(false)} />}
     </div>
   );
 }
@@ -1715,10 +1709,12 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, library
               ? bulkOpts.orchestras
               : bulkOpts.singers.filter((s) => s !== INSTRUMENTAL)}
             onBack={() => setBulkField(null)}
-            onPick={(value) => {
+            onPick={async (value) => {
               const ids = songIds, field = bulkField;
               closeMenu();
-              Store.applySmartOrganize(ids.map((id) => ({ id, [field]: value })));
+              const writeFile = window.askFileWriteChoice ? await window.askFileWriteChoice() : undefined;
+              if (writeFile === null) return;
+              Store.applySmartOrganize(ids.map((id) => ({ id, [field]: value })), { writeFile });
             }}
           />
         ) : (
@@ -1731,7 +1727,13 @@ function LibraryTree({ builderIds, onAdd, makeDrag, draggingId, preview, library
           <div className="tv-ctx-genres">
             {genreOpts.map((g) => (
               <button key={g} className="tv-ctx-genre"
-                onClick={() => { const ids = songIds; closeMenu(); Store.setSongGenres(ids.map((id) => ({ id, genre: g }))); }}>
+                onClick={async () => {
+                  const ids = songIds;
+                  closeMenu();
+                  const writeFile = window.askFileWriteChoice ? await window.askFileWriteChoice() : undefined;
+                  if (writeFile === null) return;
+                  Store.setSongGenres(ids.map((id) => ({ id, genre: g })), { writeFile });
+                }}>
                 {genreLabel(g)}
               </button>
             ))}

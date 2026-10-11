@@ -104,6 +104,13 @@ function _applyLibrary(lib) {
   });
 }
 
+// Whether a bulk edit also writes the music files: the caller's explicit
+// answer (fresh from the first-save question) wins, else the stored setting.
+function _writeFilePref(opts) {
+  if (opts && typeof opts.writeFile === "boolean") return opts.writeFile;
+  try { return localStorage.getItem("compas.writeTagsToFiles") === "1"; } catch (e) { return false; }
+}
+
 const Store = {
   get: () => _state,
   subscribe(fn) {
@@ -233,10 +240,9 @@ const Store = {
   // returns the fresh library; re-apply it and refresh tandas/playlists since
   // they embed copies of the songs. Resolves to {writeFile, filesUpdated,
   // fileErrors} so the caller can say where the changes went.
-  async applySmartOrganize(changes) {
+  async applySmartOrganize(changes, opts) {
     if (!window.compas.applySmartOrganize || !changes || !changes.length) return null;
-    let writeFile = false;
-    try { writeFile = localStorage.getItem("compas.writeTagsToFiles") === "1"; } catch (e) { /* ignore */ }
+    const writeFile = _writeFilePref(opts);
     const res = await window.compas.applySmartOrganize(changes, { writeFile });
     if (res && res.library) _applyLibrary(res.library);
     const [tandas, playlists] = await Promise.all([
@@ -277,10 +283,9 @@ const Store = {
   // Re-type existing songs: set genres for many songs at once. Honors the
   // "also save to the music files" setting like applySmartOrganize; resolves to
   // {writeFile, filesUpdated, fileErrors}.
-  async setSongGenres(updates) {
+  async setSongGenres(updates, opts) {
     if (!window.compas.setSongGenres || !updates || !updates.length) return null;
-    let writeFile = false;
-    try { writeFile = localStorage.getItem("compas.writeTagsToFiles") === "1"; } catch (e) { /* ignore */ }
+    const writeFile = _writeFilePref(opts);
     const res = await window.compas.setSongGenres(updates, { writeFile });
     if (res && res.library) {
       _applyLibrary(res.library);

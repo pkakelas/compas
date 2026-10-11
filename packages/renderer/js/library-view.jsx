@@ -46,7 +46,12 @@ function LibraryView() {
   const doRetype = async (payload) => {
     setRetypeRoots(null);
     const { updates = [], cortinaOn = [], cortinaOff = [] } = payload || {};
-    const res = updates.length ? await Store.setSongGenres(updates) : null;
+    let writeFile;
+    if (updates.length && window.askFileWriteChoice) {
+      writeFile = await window.askFileWriteChoice();
+      if (writeFile === null) return; // question dismissed: change nothing
+    }
+    const res = updates.length ? await Store.setSongGenres(updates, { writeFile }) : null;
     if (cortinaOn.length) await Store.setSongCortina(cortinaOn, true);
     if (cortinaOff.length) await Store.setSongCortina(cortinaOff, false);
     const n = updates.length + cortinaOn.length + cortinaOff.length;
