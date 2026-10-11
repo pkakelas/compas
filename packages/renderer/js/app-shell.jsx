@@ -10,6 +10,7 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "fontScale": 100,
   "tandaLayout": "grid",
   "songNameOnly": false,
+  "songNameOnlyCortinas": false,
   "collapseFoldersByDefault": false,
   "cortinasInFilters": false
 }/*EDITMODE-END*/;
@@ -97,6 +98,7 @@ function AppShell() {
       const savedLayout = localStorage.getItem("compas.tandaView");
       if (savedLayout === "list" || savedLayout === "grid") seed.tandaLayout = savedLayout;
       seed.songNameOnly = localStorage.getItem("compas.songNameOnly") === "1";
+      seed.songNameOnlyCortinas = localStorage.getItem("compas.songNameOnlyCortinas") === "1";
       seed.collapseFoldersByDefault = localStorage.getItem("compas.collapseFoldersByDefault") === "1";
       seed.cortinasInFilters = localStorage.getItem("compas.cortinasInFilters") === "1";
       return seed;
@@ -133,6 +135,11 @@ function AppShell() {
   React.useEffect(() => {
     try { localStorage.setItem("compas.songNameOnly", t.songNameOnly ? "1" : "0"); } catch (e) { /* ignore */ }
   }, [t.songNameOnly]);
+
+  // Persist whether the song-name clean-up also touches cortinas (off by default).
+  React.useEffect(() => {
+    try { localStorage.setItem("compas.songNameOnlyCortinas", t.songNameOnlyCortinas ? "1" : "0"); } catch (e) { /* ignore */ }
+  }, [t.songNameOnlyCortinas]);
 
   // Persist whether folder trees (Library + Builder) start collapsed, so the
   // preference survives restarts and the seed read above can pick it up.
