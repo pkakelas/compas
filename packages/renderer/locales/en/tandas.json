@@ -24,6 +24,7 @@
   "deleteTitle": "Delete this tanda?",
   "untitled": "Untitled tanda",
   "deleteMessage": "“{name}” will be removed from your collection.",
+  "deleteMessageShared": "“{name}” will be removed from your collection, and its Community post taken down with its likes and comments.",
   "deleteTanda": "Delete tanda",
   "deleted": "Tanda deleted",
   "sectionLabel": "Tandas",

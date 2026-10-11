@@ -261,6 +261,191 @@ function onZoomCommand(cb: (dir: 'in' | 'out' | 'reset') => void) {
   return () => ipcRenderer.removeListener('app:zoom', listener);
 }
 
+/** Compás Community (accounts + shared tandas). Every call resolves to
+ *  `{ok: true, state}` or `{ok: false, error}`; `state` is
+ *  `{configured, user}` with `user` null when signed out. */
+function communityState() {
+  return ipcRenderer.invoke('community:state');
+}
+
+/** Sign in with Google in the system browser. Resolves when the browser comes
+ *  back, the DJ cancels (communityCancelSignIn), or the attempt times out. */
+function communitySignInGoogle() {
+  return ipcRenderer.invoke('community:signInGoogle');
+}
+
+function communityCancelSignIn() {
+  return ipcRenderer.invoke('community:cancelSignIn');
+}
+
+function communitySignInPassword(email: string, password: string) {
+  return ipcRenderer.invoke('community:signInPassword', email, password);
+}
+
+/** Create an account. `pending: 'confirm-email'` on the result means the DJ
+ *  must finish with communityConfirmSignUp(email, code). */
+function communitySignUp(email: string, password: string) {
+  return ipcRenderer.invoke('community:signUp', email, password);
+}
+
+function communityConfirmSignUp(email: string, code: string) {
+  return ipcRenderer.invoke('community:confirmSignUp', email, code);
+}
+
+function communityResendSignUpCode(email: string) {
+  return ipcRenderer.invoke('community:resendSignUpCode', email);
+}
+
+function communitySignOut() {
+  return ipcRenderer.invoke('community:signOut');
+}
+
+function communityUpdateProfile(input: {displayName: string; handle: string; city: string | null; bio: string | null}) {
+  return ipcRenderer.invoke('community:updateProfile', input);
+}
+
+/** Set the profile picture: "preset:<n>", the Google photo's URL, or null. */
+function communityAvatarSet(value: string | null) {
+  return ipcRenderer.invoke('community:avatarSet', value);
+}
+/** Choose an image file and upload it as the profile picture. Resolves to
+ *  `{ok, state}`, or `{ok: false, cancelled: true}` if the dialog was closed. */
+function communityAvatarPick() {
+  return ipcRenderer.invoke('community:avatarPick');
+}
+
+/** Permanently delete the signed-in account and everything it posted. */
+function communityDeleteAccount() {
+  return ipcRenderer.invoke('community:deleteAccount');
+}
+
+/** Exactly what sharing a tanda would post (song details only), or why it
+ *  can't be shared yet. Resolves to `{ok, tanda}` or `{ok: false, error}`. */
+function communitySharePreview(tandaId: string, includeTags: boolean) {
+  return ipcRenderer.invoke('community:sharePreview', tandaId, includeTags);
+}
+
+/** Share one of the DJ's tandas. Resolves to `{ok, postId, tandas}`. */
+function communityShare(tandaId: string, note: string, includeTags: boolean) {
+  return ipcRenderer.invoke('community:share', tandaId, note, includeTags);
+}
+
+/** Take a shared tanda back down. Resolves to `{ok, tandas}`. */
+function communityUnshare(tandaId: string) {
+  return ipcRenderer.invoke('community:unshare', tandaId);
+}
+
+function communityAsk(text: string) {
+  return ipcRenderer.invoke('community:ask', text);
+}
+
+/** One page of the feed, each shared tanda already matched against the local
+ *  library. `show` filters it, `sort` orders it, `offset` is the `nextOffset`
+ *  of the previous page. Resolves to `{ok, posts, nextOffset, hasMore}`. */
+function communityFeed(opts: {
+  scope: 'all' | 'mine' | 'saved' | 'following';
+  sort?: 'popular' | 'new' | 'liked';
+  show?: 'all' | 'ready' | 'missing' | 'questions';
+  orq?: string | null;
+  postId?: string | null;
+  // One DJ's posts (their profile page).
+  author?: string | null;
+  offset?: number;
+}) {
+  return ipcRenderer.invoke('community:feed', opts);
+}
+
+/** What other DJs did with the signed-in DJ's posts and comments, newest first.
+ *  Resolves to `{ok, items}`; each item says whether it is `unread`. */
+function communityNotifications() {
+  return ipcRenderer.invoke('community:notifications');
+}
+
+/** How many notifications are new since the last look. Resolves to `{ok, unread}`. */
+function communityNotificationsUnread() {
+  return ipcRenderer.invoke('community:notificationsUnread');
+}
+
+/** Record that the DJ has looked at their notifications. */
+function communityNotificationsSeen() {
+  return ipcRenderer.invoke('community:notificationsSeen');
+}
+
+/** The orchestras that appear in shared tandas, most shared first. Resolves to
+ *  `{ok, orchestras: [{key, name, tandas}]}`. */
+function communityOrchestras() {
+  return ipcRenderer.invoke('community:orchestras');
+}
+
+/** When the newest visible post was made — to notice new posts without
+ *  reloading the feed. Resolves to `{ok, latestAt}`. */
+function communityLatest() {
+  return ipcRenderer.invoke('community:latest');
+}
+
+function communityLike(postId: string, on: boolean) {
+  return ipcRenderer.invoke('community:like', postId, on);
+}
+
+function communitySave(postId: string, on: boolean) {
+  return ipcRenderer.invoke('community:save', postId, on);
+}
+
+/** Earlier comments of a post, a page at a time. `before` is the created_at of
+ *  the oldest comment already shown. Resolves to `{ok, comments, hasMore}`. */
+function communityComments(postId: string, before: {createdAt: string; id: string} | null) {
+  return ipcRenderer.invoke('community:comments', postId, before);
+}
+
+/** Add a comment (or, with `parentId`, a reply). Resolves to `{ok, comment}`. */
+function communityComment(postId: string, body: string, parentId: string | null) {
+  return ipcRenderer.invoke('community:comment', postId, body, parentId);
+}
+
+function communityDeleteComment(commentId: string, postId: string) {
+  return ipcRenderer.invoke('community:deleteComment', commentId, postId);
+}
+
+/** Delete one of the DJ's own posts. Resolves to `{ok, tandas}`. */
+/** Change the words of one of the DJ's own posts. Resolves to
+ *  `{ok, note, editedAt}`. */
+function communityEditPost(postId: string, note: string) {
+  return ipcRenderer.invoke('community:editPost', postId, note);
+}
+
+function communityDeletePost(postId: string) {
+  return ipcRenderer.invoke('community:deletePost', postId);
+}
+
+function communityReport(target: {postId?: string; commentId?: string}, reason: string) {
+  return ipcRenderer.invoke('community:report', target, reason);
+}
+
+function communityBlock(userId: string) {
+  return ipcRenderer.invoke('community:block', userId);
+}
+
+/** One DJ as their page shows them. Resolves to `{ok, profile}` (null profile
+ *  when there is no such DJ). */
+function communityProfile(userId: string) {
+  return ipcRenderer.invoke('community:profile', userId);
+}
+function communityFollow(userId: string, on: boolean) {
+  return ipcRenderer.invoke('community:follow', userId, on);
+}
+/** Who follows a DJ, or whom they follow. Resolves to `{ok, people, hasMore, nextOffset}`. */
+function communityFollows(userId: string, which: 'followers' | 'following', offset: number) {
+  return ipcRenderer.invoke('community:follows', userId, which, offset);
+}
+
+/** Subscribe to sign-in state changes (sign in/out, profile edits). The
+ *  callback receives the fresh state. Returns an unsubscribe function. */
+function onCommunityChanged(cb: (state: unknown) => void) {
+  const listener = (_event: unknown, state: unknown) => cb(state);
+  ipcRenderer.on('community:changed', listener);
+  return () => ipcRenderer.removeListener('community:changed', listener);
+}
+
 export {
   getAppVersion,
   openExternal,
@@ -304,4 +489,39 @@ export {
   installUpdate,
   onUpdateDownloaded,
   setKeepAwake,
+  communityState,
+  communitySignInGoogle,
+  communityCancelSignIn,
+  communitySignInPassword,
+  communitySignUp,
+  communityConfirmSignUp,
+  communityResendSignUpCode,
+  communitySignOut,
+  communityUpdateProfile,
+  communityDeleteAccount,
+  communityAvatarSet,
+  communityAvatarPick,
+  onCommunityChanged,
+  communitySharePreview,
+  communityShare,
+  communityUnshare,
+  communityAsk,
+  communityFeed,
+  communityLatest,
+  communityOrchestras,
+  communityNotifications,
+  communityNotificationsUnread,
+  communityNotificationsSeen,
+  communityLike,
+  communitySave,
+  communityComments,
+  communityComment,
+  communityDeleteComment,
+  communityDeletePost,
+  communityEditPost,
+  communityReport,
+  communityBlock,
+  communityProfile,
+  communityFollow,
+  communityFollows,
 };

@@ -28,6 +28,7 @@
   "deleteTitle": "Удалить эту tanda?",
   "untitled": "Tanda без названия",
   "deleteMessage": "«{name}» будет удалена из вашей коллекции.",
+  "deleteMessageShared": "«{name}» будет удалена из вашей коллекции, а её публикация в Сообществе будет снята вместе с лайками и комментариями.",
   "deleteTanda": "Удалить tanda",
   "deleted": "Tanda удалена",
   "sectionLabel": "Tandas",

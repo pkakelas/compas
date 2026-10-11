@@ -26,12 +26,17 @@ export type LaunchedApp = {
  * makes the entry point crash-fast on unhandled errors.
  *
  * Pass the `userDataDir` of an earlier launch to reopen that same library.
+ *
+ * Community is switched off by default (an empty COMPAS_COMMUNITY_URL overrides
+ * whatever backend the build was made with), so no test ever talks to a real
+ * Community server. A spec that needs it passes a local stub's URL in `opts.env`.
  */
 export async function launchApp(
   userDataDir = mkdtempSync(join(tmpdir(), 'compas-e2e-')),
+  opts: {env?: Record<string, string>; args?: string[]} = {},
 ): Promise<LaunchedApp> {
   const app = await electron.launch({
-    args: ['.', `--user-data-dir=${userDataDir}`],
+    args: ['.', `--user-data-dir=${userDataDir}`, ...(opts.args ?? [])],
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -39,6 +44,9 @@ export async function launchApp(
       NODE_ENV: 'test',
       MODE: 'test',
       CI: process.env.CI ?? '',
+      COMPAS_COMMUNITY_URL: '',
+      COMPAS_COMMUNITY_KEY: '',
+      ...opts.env,
     },
   });
   const page = await app.firstWindow();
@@ -71,7 +79,9 @@ export async function stubFolderDialog(app: ElectronApplication, folder: string)
   }, folder);
 }
 
-/** Click a top-nav tab by its visible label (the tabs are clickable divs). */
+/** Click a top-nav tab by its label. Matched by role within the nav, and by the
+ *  start of its name, because the Community tab's name grows a count when
+ *  there are notifications ("Community 1 new notifications"). */
 export async function gotoView(page: Page, label: string): Promise<void> {
-  await page.getByText(label, {exact: true}).first().click();
+  await page.locator('.tp-navset').getByRole('tab', {name: new RegExp(`^${label}`)}).click();
 }

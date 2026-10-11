@@ -2,7 +2,8 @@
 //   - every locale has exactly the keys English has (plural forms aside),
 //   - every plural family has the forms its language's plural rules select,
 //   - every message keeps the {placeholders} and <tags> of its English source,
-//   - every tr("…") / trx("…") key used in the renderer exists in English,
+//   - every tr("…") / trx("…") key used in the renderer exists in English (and
+//     every communityErrors.* key the main process sends),
 //   - English keys nothing references are listed as a warning.
 // Run with `pnpm run i18n:check`. Exits non-zero on errors.
 import {readdirSync, readFileSync} from 'node:fs';
@@ -88,6 +89,13 @@ for (const file of sources) {
   }
   // Keys kept in data (e.g. `labelKey: "ns.key"`) and resolved by a later tr(x).
   for (const m of code.matchAll(/\b\w*Key:\s*(["'])([\w]+\.[\w.]+)\1/g)) used.add(m[2]);
+}
+// The main process words nothing about Community itself: it sends message keys
+// ('communityErrors.…') that the renderer translates.
+const mainSrc = fileURLToPath(new URL('../packages/main/src/', import.meta.url));
+for (const file of ['services/community.ts', 'services/community-share.ts', 'modules/Community.ts']) {
+  const code = readFileSync(join(mainSrc, file), 'utf8');
+  for (const m of code.matchAll(/'(communityErrors\.\w+)'/g)) used.add(m[1]);
 }
 for (const key of used) {
   if (!sourceBases.has(key)) errors.push(`code: tr("${key}") has no English message`);

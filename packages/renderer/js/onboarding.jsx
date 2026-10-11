@@ -147,6 +147,34 @@ function DemoOutputs() {
   );
 }
 
+// A post in the Community feed: another DJ's tanda with a few words, the likes
+// and comments it drew, and a way to save it.
+function DemoCommunity() {
+  return (
+    <div className="tp-ob-post">
+      <div className="tp-ob-phead">
+        <CommunityAvatar id="tour" avatar="preset:1" size="sm" />
+        <div className="tx">
+          <div className="t">{trx("community.headlineSharedNamed", { name: <b>Lucía</b>, tanda: <b>Di Sarli 1941</b> })}</div>
+          <div className="d">Buenos Aires</div>
+        </div>
+      </div>
+      <p className="tp-ob-pnote">{tr("onboarding.demoCommunityNote")}</p>
+      <div className="tp-ob-ptanda">
+        <I.note s={14} />
+        <span className="nm">Carlos Di Sarli · Roberto Rufino</span>
+        <span className="n">{tr("community.songs", { count: 4 })}</span>
+        <GenreTag genre="tango" small />
+      </div>
+      <div className="tp-ob-pacts">
+        <span className="on"><I.heartFill s={15} /> 24</span>
+        <span><I.chat s={15} /> 5</span>
+        <span><I.bookmark s={15} /></span>
+      </div>
+    </div>
+  );
+}
+
 // Where a setting lives, shown as a breadcrumb so "Settings ▸ Cortinas" reads at
 // a glance. Pass the trail as an array of crumbs.
 function Where({ trail }) {
@@ -235,6 +263,14 @@ const ONBOARDING_STEPS = [
     how: () => trx("onboarding.outputsHow", { b: (s) => <b>{s}</b>, where: <Where trail={[tr("common.nav.Settings"), tr("onboarding.crumbAudioOutputs")]} /> }),
   },
   {
+    // Only in builds that have a Community backend (see OnboardingWizard).
+    icon: "users", eyebrowKey: "onboarding.eyebrowCommunity", isNew: true, community: true,
+    titleKey: "onboarding.communityTitle",
+    bodyKey: "onboarding.communityBody",
+    demo: DemoCommunity,
+    how: () => trx("onboarding.communityHow", { where: <Where trail={[tr("common.nav.Community")]} /> }),
+  },
+  {
     signoff: true,
     titleKey: "onboarding.signoffTitle",
     bodyKey: "onboarding.signoffBody",
@@ -262,8 +298,11 @@ function useOnboarding() {
 }
 
 function OnboardingWizard({ onClose }) {
-  const steps = ONBOARDING_STEPS;
-  const [i, setI] = useState(0);
+  // The Community slide shows only where the Community tab does.
+  const community = useCommunity();
+  const steps = ONBOARDING_STEPS.filter((s) => !s.community || community.configured);
+  const [index, setI] = useState(0);
+  const i = Math.min(index, steps.length - 1);
   const step = steps[i];
   const first = i === 0;
   const last = i === steps.length - 1;
@@ -294,7 +333,11 @@ function OnboardingWizard({ onClose }) {
 
         {Icon && <div className={"tp-ob-icon" + (step.welcome ? " welcome" : "")}><Icon s={26} /></div>}
         {step.signoff && <div className="tp-ob-sign" aria-hidden="true">♥</div>}
-        {step.eyebrowKey && <div className="tp-ob-eyebrow">{tr(step.eyebrowKey)}</div>}
+        {step.eyebrowKey && (
+          <div className="tp-ob-eyebrow">
+            {tr(step.eyebrowKey)}{step.isNew && <span className="tp-ob-new">{tr("community.new")}</span>}
+          </div>
+        )}
         <div className="tp-ob-title">{tr(step.titleKey)}</div>
         <div className="tp-ob-body">{tr(step.bodyKey)}</div>
 

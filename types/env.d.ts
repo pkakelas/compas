@@ -18,6 +18,14 @@ interface ImportMetaEnv {
 
   /** Current app version */
   readonly VITE_APP_VERSION: string;
+
+  /**
+   * The Compás Community backend (a Supabase project) this build talks to.
+   * Set per mode in packages/main/.env.development / .env.production; empty
+   * means the Community feature is absent from the build.
+   */
+  readonly VITE_SUPABASE_URL: undefined | string;
+  readonly VITE_SUPABASE_ANON_KEY: undefined | string;
 }
 
 interface ImportMeta {

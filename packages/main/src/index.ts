@@ -9,6 +9,7 @@ import {allowInternalOrigins} from './modules/BlockNotAllowdOrigins.js';
 import {allowExternalUrls} from './modules/ExternalUrls.js';
 import {databaseModule} from './modules/Database.js';
 import {ipcModule} from './modules/Ipc.js';
+import {communityModule} from './modules/Community.js';
 import {audioProtocolModule, registerAudioScheme} from './modules/AudioProtocol.js';
 import {mediaDevicePermissionsModule} from './modules/MediaDevicePermissions.js';
 import {powerSaveBlockerModule} from './modules/PowerSaveBlocker.js';
@@ -26,6 +27,7 @@ export async function initApp(initConfig: AppInitConfig) {
     .init(mediaDevicePermissionsModule())
     .init(powerSaveBlockerModule())
     .init(ipcModule())
+    .init(communityModule())
     .init(createWindowManagerModule({initConfig, openDevTools: import.meta.env.DEV}))
     .init(disallowMultipleAppInstance())
     .init(terminateAppOnLastWindowClose())

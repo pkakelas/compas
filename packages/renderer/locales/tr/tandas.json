@@ -24,6 +24,7 @@
   "deleteTitle": "Bu tanda silinsin mi?",
   "untitled": "Adsız tanda",
   "deleteMessage": "“{name}” koleksiyonunuzdan kaldırılacak.",
+  "deleteMessageShared": "“{name}” koleksiyonunuzdan kaldırılacak ve Topluluk'taki gönderisi beğenileri ve yorumlarıyla birlikte kaldırılacak.",
   "deleteTanda": "Tandayı sil",
   "deleted": "Tanda silindi",
   "sectionLabel": "Tandalar",

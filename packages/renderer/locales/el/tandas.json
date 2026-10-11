@@ -24,6 +24,7 @@
   "deleteTitle": "Διαγραφή αυτής της tanda;",
   "untitled": "Tanda χωρίς τίτλο",
   "deleteMessage": "Η «{name}» θα αφαιρεθεί από τη συλλογή σας.",
+  "deleteMessageShared": "Η «{name}» θα αφαιρεθεί από τη συλλογή σας και η ανάρτησή της στην Κοινότητα θα κατέβει μαζί με τα «μου αρέσει» και τα σχόλιά της.",
   "deleteTanda": "Διαγραφή tanda",
   "deleted": "Η tanda διαγράφηκε",
   "sectionLabel": "Tandas",

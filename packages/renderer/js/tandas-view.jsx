@@ -253,13 +253,40 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
   const editTanda = (t) => { setBuilder({ songs: t.songs.slice(), name: t.name || "", tags: (t.tags || []).slice(), editingId: t.id }); goBuild(); };
   const newTanda = () => { clear(); goBuild(); };
   const playTanda = (t) => player.playTanda(t);
+  // Community sharing — only offered in builds that have a Community backend.
+  const community = useCommunity();
+  const [sharing, setSharing] = useState(null);
+  const shareTanda = (t) => setSharing(t);
+  const unshareTanda = (t) => {
+    ask({
+      title: tr("community.unshareTitle"),
+      message: tr("community.unshareMsg", { name: t.name || tr("tandas.untitled") }),
+      confirmLabel: tr("community.unshare"),
+      onConfirm: async () => {
+        const res = await CommunityStore.unshareTanda(t.id);
+        flash(res.ok ? tr("community.unshared") : res.error);
+      },
+    });
+  };
+
   const deleteTanda = (t) => {
     ask({
       title: tr("tandas.deleteTitle"),
-      message: tr("tandas.deleteMessage", { name: t.name || tr("tandas.untitled") }),
+      // A shared tanda's post goes too, for good: Undo brings back the tanda
+      // but not the post (its likes and comments are gone with it).
+      message: t.sharedPostId
+        ? tr("tandas.deleteMessageShared", { name: t.name || tr("tandas.untitled") })
+        : tr("tandas.deleteMessage", { name: t.name || tr("tandas.untitled") }),
       confirmLabel: tr("tandas.deleteTanda"),
-      onConfirm: () => {
-        const snapshot = tandas.slice();
+      onConfirm: async () => {
+        // A shared tanda is taken down first, so no post outlives its tanda.
+        if (t.sharedPostId) {
+          const res = await CommunityStore.unshareTanda(t.id);
+          if (!res.ok) { flash(res.error); return; }
+        }
+        // Taken after the unshare, so Undo restores the tanda as it now is —
+        // no longer shared — rather than with a marker for a post that is gone.
+        const snapshot = Store.get().tandas.slice();
         Store.deleteTanda(t.id);
         flash(tr("tandas.deleted"), () => Store.setTandasLocal(snapshot));
       },
@@ -349,6 +376,7 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
         <>
           {header}
           <ManageGrid tab={tab} tandas={tandas} suggestions={sugg} onEdit={editTanda} onDelete={deleteTanda} onNew={newTanda} onPlay={playTanda}
+            onShare={community.configured ? shareTanda : undefined} onUnshare={unshareTanda}
             onSaveSuggestion={saveSuggestion} onDismissSuggestion={dismissSuggestion} onBrowseSuggestions={browseSuggestions} preview={preview} view={tandaView} />
         </>
       )}
@@ -359,6 +387,10 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
 
       <Toast toast={toast} onDismiss={dismiss} />
       {modal}
+      {sharing && (
+        <ShareTandaModal tanda={sharing} onClose={() => setSharing(null)}
+          onShared={() => { setSharing(null); flash(tr("community.sharedToCommunity")); }} />
+      )}
     </div>
   );
 }

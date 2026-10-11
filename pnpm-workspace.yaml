@@ -2,8 +2,10 @@ packages:
   - 'packages/*'
 
 # Allow these dependencies to run their install/build scripts (pnpm blocks them
-# by default). Electron downloads its binary; esbuild compiles its native build.
+# by default). Electron downloads its binary; esbuild compiles its native build;
+# supabase downloads the Supabase CLI used for database migrations.
 onlyBuiltDependencies:
   - electron
   - esbuild
   - better-sqlite3
+  - supabase

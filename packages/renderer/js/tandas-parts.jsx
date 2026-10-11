@@ -2028,7 +2028,22 @@ function TandaSearchBar({ filters, onChange, options, countLabel, sortControl })
 }
 
 /* ============================ MANAGE GRID ============================ */
-function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, onDismiss }) {
+/* Share control for one of the DJ's own tandas: "Share" until it is shared,
+ * then a quiet "Shared" that takes it down again (the view confirms first).
+ * Rendered only when the view passes the handlers, which it does only in
+ * builds that have Community. */
+function TandaShareButton({ t, onShare, onUnshare }) {
+  if (!onShare) return null;
+  return t.sharedPostId ? (
+    <button type="button" className="tv-share on" onClick={() => onUnshare(t)}
+      title={tr("community.sharedHint")}><I.check s={12} /> {tr("community.shared")}</button>
+  ) : (
+    <button type="button" className="tv-share" onClick={() => onShare(t)} disabled={!t.songs.length}
+      title={tr("community.shareHint")}><I.upload s={12} /> {tr("community.share")}</button>
+  );
+}
+
+function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, onDismiss, onShare, onUnshare }) {
   const m = tandaMeta(t);
   const songTitle = useSongTitle();
   const viaMonitor = preview && preview.viaMonitor;
@@ -2060,6 +2075,7 @@ function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, on
             </div>
           )}
         </div>
+        {!suggested && <TandaShareButton t={t} onShare={onShare} onUnshare={onUnshare} />}
       </div>
       <div className="tv-tcard-songs">
         {t.songs.map((s, i) => {
@@ -2106,7 +2122,7 @@ function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, on
 /* Full-width list row — an alternative to the grid card for when long song
  * titles (often with the orquesta/year prepended) get truncated in the narrow
  * columns. Here each song gets the full row width, so it reads in full. */
-function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, onDismiss }) {
+function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, onDismiss, onShare, onUnshare }) {
   const m = tandaMeta(t);
   const songTitle = useSongTitle();
   const viaMonitor = preview && preview.viaMonitor;
@@ -2148,6 +2164,7 @@ function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave
             </>
           ) : (
             <>
+              <TandaShareButton t={t} onShare={onShare} onUnshare={onUnshare} />
               <button className="tv-tcbtn" onClick={() => onEdit(t)}><I.pencil s={14} /> {tr("parts.edit")}</button>
               <button className="tv-tcbtn del" onClick={() => onDelete(t)} title={tr("parts.deleteTanda")}><I.trash s={15} /></button>
             </>
@@ -2172,7 +2189,7 @@ function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave
   );
 }
 
-function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew, onPlay, onSaveSuggestion, onDismissSuggestion, onBrowseSuggestions, preview, view = "grid" }) {
+function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew, onPlay, onShare, onUnshare, onSaveSuggestion, onDismissSuggestion, onBrowseSuggestions, preview, view = "grid" }) {
   const suggs = suggestions || [];
   const list = view === "list";
   const wrapCls = list ? "tv-list" : "tv-grid";
@@ -2265,7 +2282,7 @@ function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew
         <div className="tv-manage">
           {filtered.length ? (
             <div className="tv-list">
-              {filtered.map((t) => <TandaListItem key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} onPlay={onPlay} preview={preview} />)}
+              {filtered.map((t) => <TandaListItem key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} onPlay={onPlay} onShare={onShare} onUnshare={onUnshare} preview={preview} />)}
               {!searching && <button className="tv-newrow" onClick={onNew}><I.plus s={17} /> {tr("parts.newTanda")}</button>}
             </div>
           ) : noMatch}
@@ -2279,7 +2296,7 @@ function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew
       <div className="tv-manage">
         {filtered.length ? (
           <div className="tv-grid">
-            {filtered.map((t) => <TandaCard key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} onPlay={onPlay} preview={preview} />)}
+            {filtered.map((t) => <TandaCard key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} onPlay={onPlay} onShare={onShare} onUnshare={onUnshare} preview={preview} />)}
             {!searching && (
               <button className="tv-newcard" onClick={onNew}>
                 <span className="ic"><I.plus s={22} /></span>
