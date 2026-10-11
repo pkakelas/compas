@@ -3183,6 +3183,10 @@ button.tp-nav {
 .cm-post-author span { color: var(--ink-2); }
 .cm-post-where { font-size: 12px; color: var(--ink-2); }
 .cm-post-note { margin: 12px 0 0; font-size: 15px; line-height: 1.45; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* editing a post's words, in place */
+.cm-post-edit { margin-top: 12px; }
+.cm-post-edit .cm-textarea { display: block; width: 100%; font-size: 15px; }
+.cm-post-edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 /* a question is the post — let it be the loudest thing in it */
 .cm-post.is-question .cm-post-note { font-size: 19px; font-weight: 600; line-height: 1.35; letter-spacing: -.01em; }
 

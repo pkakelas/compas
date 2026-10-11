@@ -27,7 +27,7 @@ const str = (v: unknown, max: number): string => (typeof v === 'string' ? v.slic
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const uuid = (v: unknown): string | null => (typeof v === 'string' && UUID_RE.test(v) ? v : null);
-const BAD_REQUEST = {ok: false as const, error: 'Something went wrong. Try again.'};
+const BAD_REQUEST = {ok: false as const, error: 'communityErrors.somethingWrong'};
 
 const FEED_PAGE = 20;
 // An orchestra key as the backend files it: a lowercased surname.
@@ -67,6 +67,8 @@ type FeedPost = {
   kind: 'tanda' | 'question';
   note: string;
   createdAt: string;
+  // When the author last changed the words, or null.
+  editedAt: string | null;
   likeCount: number;
   commentCount: number;
   liked: boolean;
@@ -204,11 +206,11 @@ export class CommunityModule implements AppModule {
       try {
         bytes = await readFile(picked.filePaths[0]);
       } catch {
-        return {ok: false, error: 'Couldn’t read that file.'};
+        return {ok: false, error: 'communityErrors.fileUnreadable'};
       }
-      if (bytes.length > 25_000_000) return {ok: false, error: 'That picture is too large. Try one under 25 MB.'};
+      if (bytes.length > 25_000_000) return {ok: false, error: 'communityErrors.pictureFileTooLarge'};
       const image = nativeImage.createFromBuffer(bytes);
-      if (image.isEmpty()) return {ok: false, error: 'That file isn’t a picture Compás can read.'};
+      if (image.isEmpty()) return {ok: false, error: 'communityErrors.notAPicture'};
       const {width, height} = image.getSize();
       const side = Math.min(width, height);
       const square = image
@@ -227,17 +229,17 @@ export class CommunityModule implements AppModule {
     // can't be shared yet — shown in the share dialog before anything is sent.
     ipcMain.handle('community:sharePreview', (_event, tandaId: unknown, includeTags: unknown) => {
       const tanda = findTanda(tandaId);
-      if (!tanda) return {ok: false, error: 'That tanda no longer exists.'};
+      if (!tanda) return {ok: false, error: 'communityErrors.tandaGone'};
       return buildSharedTanda(tanda, includeTags !== false);
     });
 
     ipcMain.handle(
       'community:share',
       async (_event, tandaId: unknown, note: unknown, includeTags: unknown) => {
-        if (!(await signedIn())) return {ok: false, error: 'Sign in first.'};
+        if (!(await signedIn())) return {ok: false, error: 'communityErrors.signInFirst'};
         const tanda = findTanda(tandaId);
-        if (!tanda) return {ok: false, error: 'That tanda no longer exists.'};
-        if (tanda.sharedPostId) return {ok: false, error: 'This tanda is already shared.'};
+        if (!tanda) return {ok: false, error: 'communityErrors.tandaGone'};
+        if (tanda.sharedPostId) return {ok: false, error: 'communityErrors.alreadyShared'};
         const built = buildSharedTanda(tanda, includeTags !== false);
         if (!built.ok) return built;
         const posted = await community.createPost({
@@ -254,9 +256,9 @@ export class CommunityModule implements AppModule {
 
     ipcMain.handle('community:unshare', async (_event, tandaId: unknown) => {
       const me = await signedIn();
-      if (!me) return {ok: false, error: 'Sign in first.'};
+      if (!me) return {ok: false, error: 'communityErrors.signInFirst'};
       const tanda = findTanda(tandaId);
-      if (!tanda) return {ok: false, error: 'That tanda no longer exists.'};
+      if (!tanda) return {ok: false, error: 'communityErrors.tandaGone'};
       if (tanda.sharedPostId) {
         const removed = await community.deletePost(tanda.sharedPostId);
         if (!removed.ok) return removed;
@@ -265,9 +267,16 @@ export class CommunityModule implements AppModule {
       return {ok: true, tandas: listCollectionTandas()};
     });
 
+    // Change the words of one of the DJ's own posts.
+    ipcMain.handle('community:editPost', (_event, postId: unknown, note: unknown) => {
+      const id = uuid(postId);
+      if (!id || typeof note !== 'string') return BAD_REQUEST;
+      return community.editPost(id, note.slice(0, 500).trim());
+    });
+
     ipcMain.handle('community:ask', (_event, text: unknown) => {
       const note = str(text, 500).trim();
-      if (!note) return {ok: false, error: 'Write something first.'};
+      if (!note) return {ok: false, error: 'communityErrors.writeSomething'};
       return community.createPost({kind: 'question', note});
     });
 
@@ -317,6 +326,7 @@ export class CommunityModule implements AppModule {
               kind: r.kind === 'question' ? 'question' : 'tanda',
               note: str(r.note, 500),
               createdAt: r.created_at,
+              editedAt: r.edited_at ?? null,
               likeCount: Math.max(0, Number(r.like_count) || 0),
               commentCount: Math.max(0, Number(r.comment_count) || 0),
               liked: !!r.viewer_liked,
@@ -418,7 +428,7 @@ export class CommunityModule implements AppModule {
         const id = uuid(postId);
         const text = str(body, 1000).trim();
         if (!id) return BAD_REQUEST;
-        if (!text) return {ok: false, error: 'Write a comment first.'};
+        if (!text) return {ok: false, error: 'communityErrors.writeComment'};
         const state = await community.getState();
         const added = await community.addComment(id, text, uuid(parentId));
         if (!added.ok) return added;
@@ -449,7 +459,7 @@ export class CommunityModule implements AppModule {
         const commentId = uuid(target?.commentId);
         const text = str(reason, 500).trim();
         if ((postId ? 1 : 0) + (commentId ? 1 : 0) !== 1) return BAD_REQUEST;
-        if (!text) return {ok: false, error: 'Say briefly what is wrong.'};
+        if (!text) return {ok: false, error: 'communityErrors.reportReason'};
         return community.report({postId, commentId}, text);
       },
     );

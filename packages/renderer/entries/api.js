@@ -97,6 +97,7 @@ window.compas = {
     comment: preload.communityComment,
     deleteComment: preload.communityDeleteComment,
     deletePost: preload.communityDeletePost,
+    editPost: preload.communityEditPost,
     report: preload.communityReport,
     block: preload.communityBlock,
     profile: preload.communityProfile,

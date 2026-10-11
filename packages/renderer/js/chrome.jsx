@@ -47,18 +47,18 @@ function TopBar({ active = "Live", onNav, community = false, bell = null, commun
             {tr("common.nav." + n)}
             {/* New notifications show on the Community tab itself, too. */}
             {n === "Community" && bell && bell.count > 0 && (
-              <span className="tp-nav-n" aria-label={`${bell.count} new notifications`}>{bell.count > 9 ? "9+" : bell.count}</span>
+              <span className="tp-nav-n" aria-label={tr("community.tabNew", { count: bell.count })}>{bell.count > 9 ? "9+" : bell.count}</span>
             )}
             {/* …and, before the DJ has ever opened it, a plain "new" dot. */}
-            {n === "Community" && communityNew && <span className="tp-nav-dot" role="img" aria-label="New" />}
+            {n === "Community" && communityNew && <span className="tp-nav-dot" role="img" aria-label={tr("community.new")} />}
           </button>
         ))}
       </div>
       <div className="tp-spacer"></div>
       {/* Community notifications: `bell` is {count, onOpen}, or null when signed out. */}
       {bell && (
-        <button type="button" className="tp-bell" onClick={bell.onOpen} title="Notifications"
-          aria-label={bell.count > 0 ? `Notifications, ${bell.count} new` : "Notifications"}>
+        <button type="button" className="tp-bell" onClick={bell.onOpen} title={tr("community.navNotifications")}
+          aria-label={bell.count > 0 ? tr("community.bellNew", { count: bell.count }) : tr("community.navNotifications")}>
           <I.bell s={17} />
           {bell.count > 0 && <span className="tp-bell-n">{bell.count > 9 ? "9+" : bell.count}</span>}
         </button>

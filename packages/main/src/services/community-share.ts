@@ -95,11 +95,11 @@ function sharedTitle(rawTitle: string, orqSurname: string, year: number | null):
 export function buildSharedTanda(
   tanda: Tanda,
   includeTags: boolean,
-): {ok: true; tanda: SharedTanda} | {ok: false; error: string} {
+): {ok: true; tanda: SharedTanda} | {ok: false; error: string; errorVars?: Record<string, number>} {
   const songs = tanda.songs.filter(s => !s.isCortina);
-  if (songs.length === 0) return {ok: false, error: 'This tanda has no songs to share.'};
+  if (songs.length === 0) return {ok: false, error: 'communityErrors.tandaEmpty'};
   if (songs.length > MAX_SONGS) {
-    return {ok: false, error: `A shared tanda can have at most ${MAX_SONGS} songs.`};
+    return {ok: false, error: 'communityErrors.tandaTooLong', errorVars: {max: MAX_SONGS}};
   }
 
   const shared: SharedSong[] = [];

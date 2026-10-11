@@ -2,7 +2,8 @@
 // the Community view and Settings. The main process owns the session and does
 // all the network work; this just mirrors `{configured, user}` and forwards
 // actions. Every action resolves to `{ok: true, state}` or `{ok: false, error}`
-// so callers can show the message as-is.
+// so callers can show the message as-is: the main process sends a message key
+// (communityErrors.*), and it is worded here, in the DJ's language.
 // `feedVersion` ticks whenever something was posted or removed from outside the
 // feed (sharing from the Tandas tab), so an open feed knows to reload.
 // `unread` is the number of new notifications (the bell in the top bar);
@@ -30,16 +31,23 @@ function _cmApply(s) {
 }
 function _cmApi() { return window.compas && window.compas.community; }
 
+// A failed result's message, in words: keys from the main process are
+// translated (with their `errorVars`); anything else is left as it is.
+function _cmWorded(res) {
+  if (!res || res.ok !== false || typeof res.error !== "string" || !res.error.startsWith("communityErrors.")) return res;
+  return { ...res, error: tr(res.error, res.errorVars) };
+}
+const _cmFailed = () => _cmWorded({ ok: false, error: "communityErrors.somethingWrong" });
+
 async function _cmCall(name, ...args) {
   const api = _cmApi();
-  const failed = { ok: false, error: "Something went wrong. Try again." };
-  if (!api || !api[name]) return failed;
+  if (!api || !api[name]) return _cmFailed();
   try {
     const res = await api[name](...args);
     if (res && res.ok) _cmApply(res.state);
-    return res || failed;
+    return res ? _cmWorded(res) : _cmFailed();
   } catch (e) {
-    return failed;
+    return _cmFailed();
   }
 }
 
@@ -57,9 +65,13 @@ async function _cmRefreshUnread() {
 // are handed back untouched.
 async function _cmData(name, ...args) {
   const api = _cmApi();
-  const failed = { ok: false, error: "Something went wrong. Try again." };
-  if (!api || !api[name]) return failed;
-  try { return (await api[name](...args)) || failed; } catch (e) { return failed; }
+  if (!api || !api[name]) return _cmFailed();
+  try {
+    const res = await api[name](...args);
+    return res ? _cmWorded(res) : _cmFailed();
+  } catch (e) {
+    return _cmFailed();
+  }
 }
 // Sharing, unsharing and deleting a post change which of the DJ's tandas are
 // marked "Shared": the main process returns the fresh list with the result.
@@ -107,6 +119,7 @@ const CommunityStore = {
   shareTanda: (tandaId, note, includeTags) => _cmDataTandas("share", tandaId, note, includeTags),
   unshareTanda: (tandaId) => _cmDataTandas("unshare", tandaId),
   deletePost: (postId) => _cmDataTandas("deletePost", postId),
+  editPost: (postId, note) => _cmData("editPost", postId, note),
   ask: (text) => _cmData("ask", text),
   feed: (opts) => _cmData("feed", opts),
   latest: () => _cmData("latest"),
@@ -134,18 +147,19 @@ function navigateTo(view) {
 }
 
 /* "just now", "5 minutes ago", "2 hours ago", "yesterday", "3 days ago", then
-   a short date — the way a person would say it. */
+   a short date — the way a person would say it, in the DJ's language (the
+   browser's own relative-time wording for the language in use). */
 function communityAgo(iso) {
   const then = new Date(iso).getTime();
   if (!then) return "";
   const s = Math.max(0, (Date.now() - then) / 1000);
-  const n = (count, unit) => `${count} ${unit}${count === 1 ? "" : "s"} ago`;
-  if (s < 60) return "just now";
-  if (s < 3600) return n(Math.floor(s / 60), "minute");
-  if (s < 86400) return n(Math.floor(s / 3600), "hour");
-  if (s < 2 * 86400) return "yesterday";
-  if (s < 7 * 86400) return n(Math.floor(s / 86400), "day");
-  return new Date(then).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  if (s < 60) return tr("community.justNow");
+  const lang = document.documentElement.lang || undefined;
+  const rel = new Intl.RelativeTimeFormat(lang, { numeric: "auto" });
+  if (s < 3600) return rel.format(-Math.floor(s / 60), "minute");
+  if (s < 86400) return rel.format(-Math.floor(s / 3600), "hour");
+  if (s < 7 * 86400) return rel.format(-Math.floor(s / 86400), "day");
+  return new Date(then).toLocaleDateString(lang, { day: "numeric", month: "short" });
 }
 
 /* ---------- profile pictures ----------

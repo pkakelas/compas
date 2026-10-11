@@ -42,14 +42,17 @@ function ShareTandaModal({ tanda, onClose, onShared }) {
         <div className="cm-share-head">
           <div className="cm-share-ic"><I.upload s={18} /></div>
           <div className="tp-flex1">
-            <h2 id="cm-share-title">Share to Community</h2>
+            <h2 id="cm-share-title">{tr("community.shareTitle")}</h2>
             {community.user && (
               <div className="cm-share-sub">
-                Posting as <b>{community.user.displayName || "@" + (community.user.handle || "you")}</b> · visible to everyone signed in
+                {trx("community.postingAs", {
+                  name: community.user.displayName || (community.user.handle ? "@" + community.user.handle : tr("community.you")),
+                  b: (s) => <b>{s}</b>,
+                })}
               </div>
             )}
           </div>
-          <button type="button" className="tv-tcbtn del" onClick={onClose} disabled={busy} aria-label="Close"><I.x s={16} /></button>
+          <button type="button" className="tv-tcbtn del" onClick={onClose} disabled={busy} aria-label={tr("community.close")}><I.x s={16} /></button>
         </div>
         {children}
       </form>
@@ -61,11 +64,11 @@ function ShareTandaModal({ tanda, onClose, onShared }) {
     return shell(
       <>
         <div className="cm-share-body">
-          <div className="cm-notice">Sign in to Community to share your tandas. Your library and tandas stay on this computer either way.</div>
+          <div className="cm-notice">{tr("community.signInToShare")}</div>
         </div>
         <div className="cm-share-foot">
-          <button type="button" className="tp-btn" onClick={onClose}>Not now</button>
-          <button type="button" className="tp-btn primary" onClick={() => { navigateTo("Community"); onClose(); }}>Go to sign in</button>
+          <button type="button" className="tp-btn" onClick={onClose}>{tr("community.notNow")}</button>
+          <button type="button" className="tp-btn primary" onClick={() => { navigateTo("Community"); onClose(); }}>{tr("community.goToSignIn")}</button>
         </div>
       </>
     );
@@ -77,14 +80,14 @@ function ShareTandaModal({ tanda, onClose, onShared }) {
       <div className="cm-share-body">
         {/* what gets posted */}
         <div className="cm-share-preview">
-          {!preview && <div className="cm-share-loading">Preparing preview…</div>}
+          {!preview && <div className="cm-share-loading">{tr("community.preparingPreview")}</div>}
           {preview && !preview.ok && <div className="cm-error" role="alert">{preview.error}</div>}
           {shared && (
             <>
               <div className="cm-share-preview-top">
                 <div className="cm-post-tanda-name">{shared.name || shared.songs[0].orq}</div>
                 <div className="cm-post-tanda-sub">
-                  {[...new Set(shared.songs.map((s) => s.orq).filter(Boolean))].slice(0, 2).join(" · ") || "Orchestra unknown"}
+                  {[...new Set(shared.songs.map((s) => s.orq).filter(Boolean))].slice(0, 2).join(" · ") || tr("community.orchestraUnknown")}
                 </div>
                 {shared.tags.length > 0 && <div className="tv-tcard-tags"><TagPills tags={shared.tags} /></div>}
               </div>
@@ -103,30 +106,30 @@ function ShareTandaModal({ tanda, onClose, onShared }) {
 
         <div className="cm-field">
           <div className="cm-share-notehead">
-            <label htmlFor="cm-share-note">Add a note <span className="cm-opt">(optional)</span></label>
+            <label htmlFor="cm-share-note">{tr("community.addNote")} <span className="cm-opt">{tr("community.optional")}</span></label>
             <span className="tp-mono cm-share-count">{note.length} / {SHARE_NOTE_MAX}</span>
           </div>
           <textarea id="cm-share-note" className="cm-input cm-textarea" rows={3} maxLength={SHARE_NOTE_MAX}
-            placeholder="When do you play it? What makes it work?"
+            placeholder={tr("community.notePh")}
             value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
 
         <label className="cm-check">
           <input type="checkbox" checked={includeTags} onChange={(e) => setIncludeTags(e.target.checked)} />
-          Include my tags
+          {tr("community.includeTags")}
         </label>
 
         <div className="cm-share-private">
           <I.lock s={15} />
-          <span><b>Only song details are shared</b> — title, orchestra, singer and year. Audio files never leave this computer; other DJs play the tanda from their own library.</span>
+          <span>{trx("community.sharePrivate", { b: (s) => <b>{s}</b> })}</span>
         </div>
 
         {error && <div className="cm-error" role="alert">{error}</div>}
       </div>
       <div className="cm-share-foot">
-        <button type="button" className="tp-btn" onClick={onClose} disabled={busy}>Cancel</button>
+        <button type="button" className="tp-btn" onClick={onClose} disabled={busy}>{tr("common.cancel")}</button>
         <button type="submit" className="tp-btn primary" disabled={busy || !shared}>
-          <I.upload s={15} /> {busy ? "Sharing…" : "Share tanda"}
+          <I.upload s={15} /> {busy ? tr("community.sharing") : tr("community.shareTanda")}
         </button>
       </div>
     </>

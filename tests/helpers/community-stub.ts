@@ -20,6 +20,7 @@ export type StubPost = {
   note: string;
   tanda: unknown;
   created_at: string;
+  edited_at?: string | null;
 };
 export type StubComment = {
   id: string;
@@ -216,6 +217,7 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
       orq_keys: orqKeys(p),
       author_followed: follows.has(`${me}|${p.author_id}`),
       author_avatar: a?.avatar_url ?? null,
+      edited_at: p.edited_at ?? null,
     };
   };
   // What the real `profile_cards` view returns for one DJ.
@@ -524,6 +526,17 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
         };
         posts.push(post);
         return created({id: post.id});
+      }
+      // Editing words: only your own post, and a post without a tanda can't be
+      // emptied (the real check constraint); the time of the edit is recorded.
+      if (table === 'posts' && req.method === 'PATCH') {
+        const p = posts.find(x => x.id === eq(url, 'id') && x.author_id === me);
+        if (!p) return json(res, 200, []);
+        const note = String(body.note ?? '');
+        if (p.kind === 'question' && !note.trim()) return json(res, 400, {code: '23514', message: 'violates check constraint "posts_kind_shape"'});
+        if (note !== p.note) p.edited_at = new Date().toISOString();
+        p.note = note;
+        return json(res, 200, [{note: p.note, edited_at: p.edited_at ?? null}]);
       }
       if (table === 'posts' && req.method === 'DELETE') {
         const id = eq(url, 'id');

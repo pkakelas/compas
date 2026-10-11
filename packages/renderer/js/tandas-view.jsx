@@ -259,12 +259,12 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
   const shareTanda = (t) => setSharing(t);
   const unshareTanda = (t) => {
     ask({
-      title: "Take this tanda down?",
-      message: `“${t.name || "Untitled tanda"}” will be removed from the Community, along with its likes and comments. It stays in your tandas.`,
-      confirmLabel: "Unshare",
+      title: tr("community.unshareTitle"),
+      message: tr("community.unshareMsg", { name: t.name || tr("tandas.untitled") }),
+      confirmLabel: tr("community.unshare"),
       onConfirm: async () => {
         const res = await CommunityStore.unshareTanda(t.id);
-        flash(res.ok ? "Removed from Community" : res.error);
+        flash(res.ok ? tr("community.unshared") : res.error);
       },
     });
   };
@@ -389,7 +389,7 @@ function TandasView({ builderWidth, onBuilderWidthChange, tandaLayout, onTandaLa
       {modal}
       {sharing && (
         <ShareTandaModal tanda={sharing} onClose={() => setSharing(null)}
-          onShared={() => { setSharing(null); flash("Shared to Community"); }} />
+          onShared={() => { setSharing(null); flash(tr("community.sharedToCommunity")); }} />
       )}
     </div>
   );

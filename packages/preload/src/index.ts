@@ -403,6 +403,12 @@ function communityDeleteComment(commentId: string, postId: string) {
 }
 
 /** Delete one of the DJ's own posts. Resolves to `{ok, tandas}`. */
+/** Change the words of one of the DJ's own posts. Resolves to
+ *  `{ok, note, editedAt}`. */
+function communityEditPost(postId: string, note: string) {
+  return ipcRenderer.invoke('community:editPost', postId, note);
+}
+
 function communityDeletePost(postId: string) {
   return ipcRenderer.invoke('community:deletePost', postId);
 }
@@ -508,6 +514,7 @@ export {
   communityComment,
   communityDeleteComment,
   communityDeletePost,
+  communityEditPost,
   communityReport,
   communityBlock,
   communityProfile,

@@ -1933,10 +1933,10 @@ function TandaShareButton({ t, onShare, onUnshare }) {
   if (!onShare) return null;
   return t.sharedPostId ? (
     <button type="button" className="tv-share on" onClick={() => onUnshare(t)}
-      title="Shared with the Community — click to take it down"><I.check s={12} /> Shared</button>
+      title={tr("community.sharedHint")}><I.check s={12} /> {tr("community.shared")}</button>
   ) : (
     <button type="button" className="tv-share" onClick={() => onShare(t)} disabled={!t.songs.length}
-      title="Share this tanda with the Community"><I.upload s={12} /> Share</button>
+      title={tr("community.shareHint")}><I.upload s={12} /> {tr("community.share")}</button>
   );
 }
 

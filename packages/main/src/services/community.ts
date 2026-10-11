@@ -62,6 +62,7 @@ export type FeedRow = {
   viewer_saved: boolean;
   author_followed: boolean;
   author_avatar: string | null;
+  edited_at: string | null;
 };
 
 /** A row of the backend's `profile_cards` view: a DJ as their page shows them. */
@@ -276,47 +277,55 @@ function googlePicture(meta: Record<string, unknown> | undefined): string | null
 // backend refuses the query as ambiguous.
 const COMMENT_COLUMNS =
   'id, post_id, parent_id, author_id, body, created_at, author:profiles!author_id(handle, display_name, avatar_url)';
-const NOT_CONFIGURED_MESSAGE = 'Community isn’t available in this build.';
+// Messages for the DJ are keys into the renderer's translations
+// (locales/<locale>/communityErrors.json) — the renderer words them in the
+// DJ's language. Placeholders travel as `errorVars`.
+const NOT_CONFIGURED_MESSAGE = 'communityErrors.notConfigured';
 const NOT_CONFIGURED: CommunityResult = {ok: false, error: NOT_CONFIGURED_MESSAGE};
 
-/** Turn a backend error into a sentence a DJ can act on. */
+/** Turn a backend error into a message (key) a DJ can act on. */
 function friendly(error: unknown, fallback: string): string {
   const e = (error ?? {}) as {message?: string; code?: string; status?: number; name?: string};
   const msg = e.message ?? '';
   debug('error:', {name: e.name, code: e.code, status: e.status, message: msg});
   if (e.name === 'AuthRetryableFetchError' || /fetch failed|network|ENOTFOUND|ECONNREFUSED|ETIMEDOUT/i.test(msg)) {
-    return 'Can’t reach the Community server. Check your connection and try again.';
+    return 'communityErrors.offline';
   }
   switch (e.code) {
     case 'invalid_credentials':
-      return 'That email and password don’t match.';
+      return 'communityErrors.wrongPassword';
     case 'email_not_confirmed':
-      return 'Confirm your email first — enter the code we sent you.';
+      return 'communityErrors.confirmEmailFirst';
     case 'user_already_exists':
     case 'email_exists':
-      return 'There’s already an account with that email. Sign in instead.';
+      return 'communityErrors.emailTaken';
     case 'weak_password':
-      return 'Choose a longer password (at least 8 characters).';
+      return 'communityErrors.weakPassword';
     case 'otp_expired':
-      return 'That code is wrong or has expired. Ask for a new one.';
+      return 'communityErrors.codeExpired';
     case 'email_address_not_authorized':
-      return 'The Community server isn’t set up to send email to that address yet.';
+      return 'communityErrors.emailNotAllowed';
     case 'over_email_send_rate_limit':
     case 'over_request_rate_limit':
-      return 'Too many attempts. Wait a minute and try again.';
+      return 'communityErrors.tooManyAttempts';
     case 'email_address_invalid':
     case 'validation_failed':
-      return 'That doesn’t look like a valid email address.';
+      return 'communityErrors.invalidEmail';
     case '23505':
-      return 'That handle is taken. Try another.';
+      return 'communityErrors.handleTaken';
     case '42501':
-      return 'You can’t do that.';
+      return 'communityErrors.notAllowed';
     case 'PGRST301':
-      return 'Your session expired. Sign in again.';
+      return 'communityErrors.sessionExpired';
     case '23514':
-      return 'Check the name and handle: handles are 3–24 lowercase letters, numbers or underscores.';
+      return 'communityErrors.checkNameHandle';
     default:
-      return msg && msg.length < 140 ? msg : fallback;
+      // The database's own rate limits (supabase/migrations, limit_*_rate);
+      // anything else gets the caller's message — raw backend text is in the
+      // log above, never shown, since it can't be translated.
+      if (/daily post limit/i.test(msg)) return 'communityErrors.postLimit';
+      if (/too many comments/i.test(msg)) return 'communityErrors.commentLimit';
+      return fallback;
   }
 }
 
@@ -441,7 +450,7 @@ export class CommunityService {
     try {
       ({server, port} = await listenOnCallbackPort());
     } catch {
-      return {ok: false, error: 'Couldn’t start Google sign-in on this computer. Close other copies of Compás and try again.'};
+      return {ok: false, error: 'communityErrors.googleBusy'};
     }
 
     type Outcome = {code: string} | {failed: true} | {cancelled: true};
@@ -478,23 +487,23 @@ export class CommunityService {
           queryParams: {prompt: 'select_account'},
         },
       });
-      if (error || !data?.url) return {ok: false, error: friendly(error, 'Couldn’t start Google sign-in.')};
+      if (error || !data?.url) return {ok: false, error: friendly(error, 'communityErrors.googleStart')};
       // Only ever hand the OS our own backend's authorize URL.
       if (new URL(data.url).origin !== this.#config.url) {
-        return {ok: false, error: 'Couldn’t start Google sign-in.'};
+        return {ok: false, error: 'communityErrors.googleStart'};
       }
       debug(`Google sign-in: browser opened, waiting on http://127.0.0.1:${port}${CALLBACK_PATH}`);
       await shell.openExternal(data.url);
 
       const result = await outcome;
       debug('Google sign-in: browser came back —', 'code' in result ? 'with a code' : 'cancelled' in result ? 'cancelled / timed out' : 'without a code');
-      if ('cancelled' in result) return {ok: false, error: 'Sign-in was cancelled.', cancelled: true};
-      if ('failed' in result) return {ok: false, error: 'Google sign-in didn’t complete. Try again.'};
+      if ('cancelled' in result) return {ok: false, error: 'communityErrors.signInCancelled', cancelled: true};
+      if ('failed' in result) return {ok: false, error: 'communityErrors.googleIncomplete'};
       const {error: exchangeError} = await client.auth.exchangeCodeForSession(result.code);
-      if (exchangeError) return {ok: false, error: friendly(exchangeError, 'Google sign-in didn’t complete. Try again.')};
+      if (exchangeError) return {ok: false, error: friendly(exchangeError, 'communityErrors.googleIncomplete')};
       return await this.#done();
     } catch (e) {
-      return {ok: false, error: friendly(e, 'Google sign-in didn’t complete. Try again.')};
+      return {ok: false, error: friendly(e, 'communityErrors.googleIncomplete')};
     } finally {
       clearTimeout(timer);
       this.#pendingSignIn = null;
@@ -512,7 +521,7 @@ export class CommunityService {
     const client = this.#client();
     if (!client) return NOT_CONFIGURED;
     const {error} = await client.auth.signInWithPassword({email: email.trim(), password});
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t sign in. Try again.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.signInFailed')};
     return this.#done();
   }
 
@@ -522,9 +531,9 @@ export class CommunityService {
   async signUp(email: string, password: string): Promise<CommunityResult> {
     const client = this.#client();
     if (!client) return NOT_CONFIGURED;
-    if (password.length < 8) return {ok: false, error: 'Choose a password of at least 8 characters.'};
+    if (password.length < 8) return {ok: false, error: 'communityErrors.passwordTooShort'};
     const {data, error} = await client.auth.signUp({email: email.trim(), password});
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t create the account. Try again.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.signUpFailed')};
     // An address that is already registered (e.g. through Google) gets no error
     // and no email from the backend — just a placeholder user with no
     // identities. Say so, instead of sending the DJ to wait for a code.
@@ -532,7 +541,7 @@ export class CommunityService {
       debug('sign-up: that email is already registered — no confirmation email is sent');
       return {
         ok: false,
-        error: 'There’s already an account with that email. Sign in instead — with Google, if that’s how you joined.',
+        error: 'communityErrors.emailTakenGoogle',
       };
     }
     debug(data.session ? 'sign-up: account created and signed in' : 'sign-up: account created, confirmation email requested');
@@ -543,7 +552,7 @@ export class CommunityService {
     const client = this.#client();
     if (!client) return NOT_CONFIGURED;
     const {error} = await client.auth.verifyOtp({email: email.trim(), token: code.trim(), type: 'signup'});
-    if (error) return {ok: false, error: friendly(error, 'That code didn’t work. Try again.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.codeFailed')};
     return this.#done();
   }
 
@@ -551,7 +560,7 @@ export class CommunityService {
     const client = this.#client();
     if (!client) return NOT_CONFIGURED;
     const {error} = await client.auth.resend({type: 'signup', email: email.trim()});
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t send a new code. Try again in a minute.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.resendFailed')};
     return this.#done('confirm-email');
   }
 
@@ -572,24 +581,24 @@ export class CommunityService {
     const handle = (input.handle ?? '').trim().toLowerCase();
     const city = (input.city ?? '').trim() || null;
     const bio = (input.bio ?? '').trim() || null;
-    if (displayName.length < 1 || displayName.length > 60) return {ok: false, error: 'Your name should be 1–60 characters.'};
+    if (displayName.length < 1 || displayName.length > 60) return {ok: false, error: 'communityErrors.nameLength'};
     if (!HANDLE_RE.test(handle)) {
-      return {ok: false, error: 'Handles are 3–24 lowercase letters, numbers or underscores.'};
+      return {ok: false, error: 'communityErrors.handleFormat'};
     }
-    if (city && city.length > 60) return {ok: false, error: 'City should be at most 60 characters.'};
-    if (bio && bio.length > 280) return {ok: false, error: 'The bio should be at most 280 characters.'};
+    if (city && city.length > 60) return {ok: false, error: 'communityErrors.cityLength'};
+    if (bio && bio.length > 280) return {ok: false, error: 'communityErrors.bioLength'};
 
     const {data: session} = await client.auth.getSession();
     const userId = session.session?.user.id;
-    if (!userId) return {ok: false, error: 'Sign in first.'};
+    if (!userId) return {ok: false, error: 'communityErrors.signInFirst'};
     const {data: row, error} = await client
       .from('profiles')
       .update({display_name: displayName, handle, city, bio})
       .eq('id', userId)
       .select('handle, display_name, city, bio, avatar_url')
       .maybeSingle();
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t save your profile. Try again.')};
-    if (!row) return {ok: false, error: 'Couldn’t save your profile. Try again.'};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.profileSaveFailed')};
+    if (!row) return {ok: false, error: 'communityErrors.profileSaveFailed'};
     this.#profile = {userId, handle: row.handle, displayName: row.display_name, city: row.city, bio: row.bio, avatar: row.avatar_url};
     const state = await this.getState();
     this.#onChange(state);
@@ -603,11 +612,11 @@ export class CommunityService {
     if (!client) return NOT_CONFIGURED;
     const {data: session} = await client.auth.getSession();
     const userId = session.session?.user.id;
-    if (!userId) return {ok: false, error: 'Sign in first.'};
+    if (!userId) return {ok: false, error: 'communityErrors.signInFirst'};
     // Only a preset, or the picture Google gave this very account.
     const google = googlePicture(session.session?.user.user_metadata);
     const avatar = value && PRESET_RE.test(value) ? value : value && value === google ? value : null;
-    if (value && !avatar) return {ok: false, error: 'That picture can’t be used.'};
+    if (value && !avatar) return {ok: false, error: 'communityErrors.pictureNotAllowed'};
     return this.#saveAvatar(client, userId, avatar);
   }
 
@@ -619,12 +628,12 @@ export class CommunityService {
     if (!client) return NOT_CONFIGURED;
     const {data: session} = await client.auth.getSession();
     const userId = session.session?.user.id;
-    if (!userId) return {ok: false, error: 'Sign in first.'};
-    if (jpeg.length > 1_000_000) return {ok: false, error: 'That picture is too large.'};
+    if (!userId) return {ok: false, error: 'communityErrors.signInFirst'};
+    if (jpeg.length > 1_000_000) return {ok: false, error: 'communityErrors.pictureTooLarge'};
     const version = String(Date.now());
     const path = `${userId}/${version}.jpg`;
     const {error} = await client.storage.from('avatars').upload(path, jpeg, {contentType: 'image/jpeg'});
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t upload the picture. Try again.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.uploadFailed')};
     const saved = await this.#saveAvatar(client, userId, `upload:${version}`);
     // Not shown anywhere after all: don't leave it in the public bucket.
     if (!saved.ok) await this.#cleanUploads(client, userId, [path], false);
@@ -688,8 +697,8 @@ export class CommunityService {
       .eq('id', userId)
       .select('handle, display_name, city, bio, avatar_url')
       .maybeSingle();
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t save the picture. Try again.')};
-    if (!row) return {ok: false, error: 'Couldn’t save the picture. Try again.'};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.pictureSaveFailed')};
+    if (!row) return {ok: false, error: 'communityErrors.pictureSaveFailed'};
     this.#profile = {userId, handle: row.handle, displayName: row.display_name, city: row.city, bio: row.bio, avatar: row.avatar_url};
     // After the change, so a failed save leaves the old photo working. If the
     // delete fails, the picture has still changed; the file is deleted later
@@ -709,16 +718,16 @@ export class CommunityService {
     const client = this.#client();
     if (!client) return NOT_CONFIGURED;
     const userId = await this.#userId(client);
-    if (!userId) return {ok: false, error: 'Sign in first.'};
+    if (!userId) return {ok: false, error: 'communityErrors.signInFirst'};
     // Every uploaded photo goes first, the current one included.
     const files = await this.#listUploads(client, userId);
-    if (!files) return {ok: false, error: 'Couldn’t remove your photos. Try again.'};
+    if (!files) return {ok: false, error: 'communityErrors.photosRemoveFailed'};
     if (files.length) {
       const {error: removeError} = await client.storage.from('avatars').remove(files.map(f => f.path));
-      if (removeError) return {ok: false, error: friendly(removeError, 'Couldn’t remove your photos. Try again.')};
+      if (removeError) return {ok: false, error: friendly(removeError, 'communityErrors.photosRemoveFailed')};
     }
     const {error} = await client.rpc('delete_my_account');
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t delete the account. Try again.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.deleteAccountFailed')};
     await client.auth.signOut({scope: 'local'});
     this.#profile = null;
     return this.#done();
@@ -737,11 +746,11 @@ export class CommunityService {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
     const userId = await this.#userId(client);
-    if (!userId) return {ok: false, error: 'Sign in first.'};
+    if (!userId) return {ok: false, error: 'communityErrors.signInFirst'};
     const row: Record<string, unknown> = {kind: input.kind, note: input.note};
     if (input.kind === 'tanda') row.tanda = input.tanda;
     const {data, error} = await client.from('posts').insert(row).select('id').single();
-    if (error || !data) return {ok: false, error: friendly(error, 'Couldn’t post that. Try again.')};
+    if (error || !data) return {ok: false, error: friendly(error, 'communityErrors.postFailed')};
     return {ok: true, id: data.id as string, userId};
   }
 
@@ -752,13 +761,29 @@ export class CommunityService {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
     const {data, error} = await client.from('posts').delete().eq('id', id).select('id');
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t delete that post. Try again.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.deletePostFailed')};
     if ((data ?? []).length === 0) {
       const {data: still, error: checkError} = await client.from('posts').select('id').eq('id', id).limit(1);
-      if (checkError) return {ok: false, error: friendly(checkError, 'Couldn’t delete that post. Try again.')};
-      if ((still ?? []).length > 0) return {ok: false, error: 'That post was shared from another Community account.'};
+      if (checkError) return {ok: false, error: friendly(checkError, 'communityErrors.deletePostFailed')};
+      if ((still ?? []).length > 0) return {ok: false, error: 'communityErrors.postOtherAccount'};
     }
     return {ok: true};
+  }
+
+  /** Change the words of one of the signed-in DJ's own posts. Resolves to the
+   *  text as saved and when it was edited (the backend keeps that time). */
+  async editPost(id: string, note: string): Promise<Outcome<{note: string; editedAt: string | null}>> {
+    const client = this.#client();
+    if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
+    if (!(await this.#userId(client))) return {ok: false, error: 'communityErrors.signInFirst'};
+    const {data, error} = await client.from('posts').update({note}).eq('id', id).select('note, edited_at');
+    // A post without a tanda is only its words, so they can't be emptied.
+    if (error?.code === '23514') return {ok: false, error: 'communityErrors.writeSomething'};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.editFailed')};
+    const row = (data ?? [])[0] as {note: string; edited_at: string | null} | undefined;
+    // Nothing updated: the post is gone, or (by the rules) not this DJ's.
+    if (!row) return {ok: false, error: 'communityErrors.editGone'};
+    return {ok: true, note: row.note, editedAt: row.edited_at ?? null};
   }
 
   /** Which of these posts the signed-in DJ wrote. */
@@ -789,7 +814,7 @@ export class CommunityService {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
     const userId = await this.#userId(client);
-    if (!userId) return {ok: false, error: 'Sign in first.'};
+    if (!userId) return {ok: false, error: 'communityErrors.signInFirst'};
 
     const run = (sort: FeedSort) => {
       let query = client.from('feed_posts').select('*');
@@ -817,7 +842,7 @@ export class CommunityService {
       debug('feed: no popularity column on this backend yet — falling back to newest');
       ({data, error} = await run('new'));
     }
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t load the feed. Try again.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.feedFailed')};
     return {ok: true, rows: (data ?? []) as FeedRow[], userId};
   }
 
@@ -831,7 +856,7 @@ export class CommunityService {
       .select('*')
       .order('created_at', {ascending: false})
       .limit(limit);
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t load your notifications.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.notificationsFailed')};
     const {data: state} = await client.from('notification_state').select('seen_at').maybeSingle();
     return {ok: true, rows: (data ?? []) as NotificationRow[], seenAt: (state?.seen_at as string | undefined) ?? null};
   }
@@ -842,7 +867,7 @@ export class CommunityService {
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
     if (!(await this.#userId(client))) return {ok: true, unread: 0};
     const {data, error} = await client.rpc('unread_notifications');
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t check your notifications.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.notificationsCheckFailed')};
     return {ok: true, unread: Math.max(0, Number(data) || 0)};
   }
 
@@ -851,7 +876,7 @@ export class CommunityService {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
     const {error} = await client.rpc('mark_notifications_seen');
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t update your notifications.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.notificationsUpdateFailed')};
     return {ok: true};
   }
 
@@ -866,7 +891,7 @@ export class CommunityService {
       .order('tandas', {ascending: false})
       .order('name', {ascending: true})
       .limit(200);
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t load the orchestras.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.orchestrasFailed')};
     return {ok: true, rows: (data ?? []) as {key: string; name: string; tandas: number}[]};
   }
 
@@ -880,7 +905,7 @@ export class CommunityService {
       .select('created_at')
       .order('created_at', {ascending: false})
       .limit(1);
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t check for new posts.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.latestFailed')};
     return {ok: true, latestAt: (data?.[0]?.created_at as string | undefined) ?? null};
   }
 
@@ -897,7 +922,7 @@ export class CommunityService {
       .order('created_at', {referencedTable: 'comments', ascending: false})
       .order('id', {referencedTable: 'comments', ascending: false})
       .limit(perPost, {referencedTable: 'comments'});
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t load comments.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.commentsFailed')};
     const rows = ((data ?? []) as unknown as {comments: CommentRow[] | null}[]).flatMap(p => p.comments ?? []);
     return {ok: true, rows};
   }
@@ -922,7 +947,7 @@ export class CommunityService {
       .order('created_at', {ascending: false})
       .order('id', {ascending: false})
       .limit(limit);
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t load comments.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.commentsFailed')};
     return {ok: true, rows: (data ?? []) as unknown as CommentRow[]};
   }
 
@@ -934,7 +959,7 @@ export class CommunityService {
       .insert({post_id: postId, body, parent_id: parentId})
       .select(COMMENT_COLUMNS)
       .single();
-    if (error || !data) return {ok: false, error: friendly(error, 'Couldn’t post your comment. Try again.')};
+    if (error || !data) return {ok: false, error: friendly(error, 'communityErrors.commentFailed')};
     return {ok: true, row: data as unknown as CommentRow};
   }
 
@@ -945,7 +970,7 @@ export class CommunityService {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
     const {error} = await client.from('comments').delete().eq('id', id);
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t delete that comment. Try again.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.deleteCommentFailed')};
     const {data} = await client.from('feed_posts').select('comment_count').eq('id', postId).limit(1);
     const count = Number(data?.[0]?.comment_count);
     return {ok: true, commentCount: Number.isFinite(count) ? Math.max(0, count) : null};
@@ -956,12 +981,12 @@ export class CommunityService {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
     const userId = await this.#userId(client);
-    if (!userId) return {ok: false, error: 'Sign in first.'};
+    if (!userId) return {ok: false, error: 'communityErrors.signInFirst'};
     const {error} = on
       ? await client.from(table).insert({post_id: postId})
       : await client.from(table).delete().eq('post_id', postId).eq('user_id', userId);
     // 23505: already liked/saved — the state the DJ asked for.
-    if (error && error.code !== '23505') return {ok: false, error: friendly(error, 'That didn’t go through. Try again.')};
+    if (error && error.code !== '23505') return {ok: false, error: friendly(error, 'communityErrors.toggleFailed')};
     return {ok: true};
   }
 
@@ -980,9 +1005,9 @@ export class CommunityService {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
     const userId = await this.#userId(client);
-    if (!userId) return {ok: false, error: 'Sign in first.'};
+    if (!userId) return {ok: false, error: 'communityErrors.signInFirst'};
     const {data, error} = await client.from('profile_cards').select('*').eq('id', id).maybeSingle();
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t load that profile. Try again.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.profileLoadFailed')};
     return {ok: true, row: (data as ProfileRow | null) ?? null, userId};
   }
 
@@ -991,13 +1016,13 @@ export class CommunityService {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
     const userId = await this.#userId(client);
-    if (!userId) return {ok: false, error: 'Sign in first.'};
-    if (id === userId) return {ok: false, error: 'That’s you.'};
+    if (!userId) return {ok: false, error: 'communityErrors.signInFirst'};
+    if (id === userId) return {ok: false, error: 'communityErrors.thatsYou'};
     const {error} = on
       ? await client.from('follows').insert({followee_id: id})
       : await client.from('follows').delete().eq('follower_id', userId).eq('followee_id', id);
     if (error && error.code !== '23505') {
-      return {ok: false, error: friendly(error, on ? 'Couldn’t follow that DJ. Try again.' : 'Couldn’t unfollow. Try again.')};
+      return {ok: false, error: friendly(error, on ? 'communityErrors.followFailed' : 'communityErrors.unfollowFailed')};
     }
     return {ok: true};
   }
@@ -1012,7 +1037,7 @@ export class CommunityService {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
     const userId = await this.#userId(client);
-    if (!userId) return {ok: false, error: 'Sign in first.'};
+    if (!userId) return {ok: false, error: 'communityErrors.signInFirst'};
     // The other side of each row, embedded by the foreign key it means.
     const side = which === 'followers' ? 'follower_id' : 'followee_id';
     const {data, error} = await client
@@ -1021,7 +1046,7 @@ export class CommunityService {
       .eq(which === 'followers' ? 'followee_id' : 'follower_id', id)
       .order('created_at', {ascending: false})
       .range(offset, offset + limit - 1);
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t load that list. Try again.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.listFailed')};
     return {ok: true, rows: (data ?? []) as unknown as FollowRow[], userId};
   }
 
@@ -1039,7 +1064,7 @@ export class CommunityService {
     const {error} = await client
       .from('reports')
       .insert({post_id: target.postId ?? null, comment_id: target.commentId ?? null, reason});
-    if (error) return {ok: false, error: friendly(error, 'Couldn’t send the report. Try again.')};
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.reportFailed')};
     return {ok: true};
   }
 
@@ -1048,7 +1073,7 @@ export class CommunityService {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
     const {error} = await client.from('blocks').insert({blocked_id: userId});
-    if (error && error.code !== '23505') return {ok: false, error: friendly(error, 'Couldn’t block that DJ. Try again.')};
+    if (error && error.code !== '23505') return {ok: false, error: friendly(error, 'communityErrors.blockFailed')};
     return {ok: true};
   }
 }

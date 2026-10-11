@@ -4,12 +4,22 @@
 // Every shared tanda arrives already matched against this computer's library
 // (the main process does that locally), so a post knows which of its songs the
 // DJ owns: all of them → "Ready to play", otherwise how many are missing.
+//
+// Every string is a message in locales/<locale>/community.json (see
+// locales/README.md); tables keep message keys, never words.
 
-const CM_REPORT_REASONS = ["Spam", "Abusive or hateful", "Not about tango DJing", "Something else"];
+// What a report says is wrong. `value` is what the moderator reads (stored as
+// sent, in English); the DJ sees it in their own language.
+const CM_REPORT_REASONS = [
+  { value: "Spam", labelKey: "community.reportSpam" },
+  { value: "Abusive or hateful", labelKey: "community.reportAbusive" },
+  { value: "Not about tango DJing", labelKey: "community.reportOffTopic" },
+  { value: "Something else", labelKey: "community.reportOther" },
+];
 
 /* ---------- report a post ---------- */
 function ReportModal({ onCancel, onSend }) {
-  const [reason, setReason] = React.useState(CM_REPORT_REASONS[0]);
+  const [reason, setReason] = React.useState(CM_REPORT_REASONS[0].value);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const send = async (e) => {
@@ -21,21 +31,21 @@ function ReportModal({ onCancel, onSend }) {
   };
   return (
     <div className="tp-modal-scrim" onMouseDown={busy ? undefined : onCancel}>
-      <form className="tp-modal cm-report" role="dialog" aria-modal="true" aria-label="Report this post"
+      <form className="tp-modal cm-report" role="dialog" aria-modal="true" aria-label={tr("community.reportTitle")}
         onMouseDown={(e) => e.stopPropagation()} onSubmit={send}>
-        <div className="tp-modal-title">Report this post</div>
-        <div className="tp-modal-msg">What is wrong with it? Reports are private.</div>
-        <div className="cm-report-list" role="radiogroup" aria-label="Reason">
+        <div className="tp-modal-title">{tr("community.reportTitle")}</div>
+        <div className="tp-modal-msg">{tr("community.reportWhy")}</div>
+        <div className="cm-report-list" role="radiogroup" aria-label={tr("community.reportReason")}>
           {CM_REPORT_REASONS.map((r) => (
-            <label key={r} className="cm-check">
-              <input type="radio" name="cm-report-reason" checked={reason === r} onChange={() => setReason(r)} /> {r}
+            <label key={r.value} className="cm-check">
+              <input type="radio" name="cm-report-reason" checked={reason === r.value} onChange={() => setReason(r.value)} /> {tr(r.labelKey)}
             </label>
           ))}
         </div>
         {error && <div className="cm-error" role="alert">{error}</div>}
         <div className="tp-modal-actions">
-          <button type="button" className="tp-modal-cancel" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="submit" className="tp-modal-confirm accent" disabled={busy}>{busy ? "Sending…" : "Send report"}</button>
+          <button type="button" className="tp-modal-cancel" onClick={onCancel} disabled={busy}>{tr("common.cancel")}</button>
+          <button type="submit" className="tp-modal-confirm accent" disabled={busy}>{busy ? tr("community.sending") : tr("community.sendReport")}</button>
         </div>
       </form>
     </div>
@@ -53,7 +63,7 @@ function PostTanda({ post, inMyTandas, preview, onPlay, onAdd, onPickOrq }) {
     if (s.orq && !orqList.some((o) => o.key === s.orqKey)) orqList.push({ key: s.orqKey, name: s.orq });
   }
   const shownOrqs = orqList.slice(0, 2);
-  const singers = [...new Set(t.songs.map((s) => s.singer).filter(Boolean))].slice(0, 2).join(", ");
+  const singers = [...new Set(t.songs.map((s) => s.singer).filter(Boolean))].slice(0, 2).join(tr("common.listSeparator"));
   // Mood tags are the sharer's private shorthand; the feed leaves them out.
   // …and orchestra tags would only repeat the name printed beside them.
   const tags = t.tags.filter((g) => g.cat !== "mood" && g.cat !== "orquesta");
@@ -68,10 +78,10 @@ function PostTanda({ post, inMyTandas, preview, onPlay, onAdd, onPickOrq }) {
           {shownOrqs.map((o) => (
             o.key && onPickOrq
               ? <button type="button" key={o.key} className="cm-orq-link" onClick={() => onPickOrq(o.key)}
-                  title={`Show only tandas by ${o.name}`}>{o.name}</button>
+                  title={tr("community.showOnlyOrq", { name: o.name })}>{o.name}</button>
               : <span key={o.name}>{o.name}</span>
           ))}
-          {orqList.length === 0 && <span>Orchestra unknown</span>}
+          {orqList.length === 0 && <span>{tr("community.orchestraUnknown")}</span>}
           {singers && <span>{singers}</span>}
           {tags.length > 0 && <TagPills tags={tags} />}
         </div>
@@ -81,15 +91,15 @@ function PostTanda({ post, inMyTandas, preview, onPlay, onAdd, onPickOrq }) {
             {/* Someone else's tanda can be kept (a tick once it has been); the
                 DJ's own post needs neither. */}
             {!post.mine && (inMyTandas
-              ? <span className="cm-icon-btn is-done" role="img" aria-label="In your tandas" title="Already in your tandas"><I.check s={15} /></span>
+              ? <span className="cm-icon-btn is-done" role="img" aria-label={tr("community.inYourTandas")} title={tr("community.alreadyInYourTandas")}><I.check s={15} /></span>
               : <button type="button" className="cm-icon-btn" onClick={onAdd}
-                  aria-label="Add to my tandas" title="Add to my tandas"><I.download s={16} /></button>)}
+                  aria-label={tr("community.addToMyTandas")} title={tr("community.addToMyTandas")}><I.download s={16} /></button>)}
             <button type="button" className="cm-icon-btn" onClick={onPlay}
-              aria-label="Play tanda" title="Play tanda"><I.play s={15} /></button>
+              aria-label={tr("community.playTanda")} title={tr("community.playTanda")}><I.play s={15} /></button>
           </div>
         ) : (
           <div className="cm-match cm-match-partial">
-            {t.owned === 0 ? "None in your library" : `${t.owned} of ${total} in your library`}
+            {t.owned === 0 ? tr("community.noneInLibrary") : tr("community.someInLibrary", { owned: t.owned, total })}
           </div>
         )}
       </div>
@@ -110,8 +120,8 @@ function PostTanda({ post, inMyTandas, preview, onPlay, onAdd, onPickOrq }) {
               </span>
               <span className="t">{s.title}</span>
               {s.songId
-                ? <span className="own" role="img" aria-label="In your library"><I.check s={14} /></span>
-                : <span className="miss">{s.orq || orqList.length === 0 ? "Missing" : "Orchestra unknown"}</span>}
+                ? <span className="own" role="img" aria-label={tr("community.inYourLibrary")}><I.check s={14} /></span>
+                : <span className="miss">{s.orq || orqList.length === 0 ? tr("community.missing") : tr("community.orchestraUnknown")}</span>}
               <span className="d">{s.year || ""}</span>
             </div>
           );
@@ -135,13 +145,16 @@ function PostComment({ c, isReply, onReply, onDelete, onOpenProfile }) {
         </div>
         <div className="cm-comment-meta">
           <span>{communityAgo(c.createdAt)}</span>
-          <button type="button" className="cm-meta-btn" onClick={() => onReply(c)}>Reply</button>
-          {c.mine && <button type="button" className="cm-meta-btn" onClick={() => onDelete(c)}>Delete</button>}
+          <button type="button" className="cm-meta-btn" onClick={() => onReply(c)}>{tr("community.reply")}</button>
+          {c.mine && <button type="button" className="cm-meta-btn" onClick={() => onDelete(c)}>{tr("common.delete")}</button>}
         </div>
       </div>
     </div>
   );
 }
+
+// The longest a post's words can be (the backend's limit).
+const CM_NOTE_MAX = 500;
 
 /* ---------- a post ---------- */
 function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPickOrq, onOpenProfile, flash, ask }) {
@@ -162,6 +175,10 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
   const openComment = () => { setCommentOpen(true); setFocusTick((n) => n + 1); };
   // A like just given plays a small pop on its heart.
   const [likePop, setLikePop] = React.useState(false);
+  // Editing the words of one's own post: in place, where they are shown.
+  const [editing, setEditing] = React.useState(false);
+  const [editText, setEditText] = React.useState("");
+  const [savingEdit, setSavingEdit] = React.useState(false);
 
   const ownedIds = post.tanda ? post.tanda.songs.map((s) => s.songId).filter(Boolean) : [];
   const inMyTandas = ownedIds.length > 0 && tandaSigs.has(ownedIds.slice().sort().join(","));
@@ -173,7 +190,7 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
   const addToMine = async () => {
     const t = post.tanda;
     await Store.saveTanda({ name: t.name || null, songIds: ownedIds, tags: t.tags });
-    flash("Added to your tandas");
+    flash(tr("community.addedToTandas"));
   };
 
   // Likes and saves flip at once and are undone if the backend refuses.
@@ -234,11 +251,11 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
   const deleteComment = (c) => {
     const replies = loaded.filter((x) => x.parentId === c.id).length;
     ask({
-      title: "Delete this comment?",
+      title: tr("community.deleteCommentTitle"),
       message: replies
-        ? `It will be removed for everyone, along with ${replies === 1 ? "its reply" : `its ${replies} replies`}.`
-        : "It will be removed for everyone.",
-      confirmLabel: "Delete comment",
+        ? tr("community.deleteCommentWithReplies", { count: replies })
+        : tr("community.deleteCommentMsg"),
+      confirmLabel: tr("community.deleteComment"),
       onConfirm: async () => {
         const res = await CommunityStore.deleteComment(c.id, post.id);
         if (!res.ok) { flash(res.error); return; }
@@ -256,63 +273,85 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
     });
   };
 
+  // A post without a tanda is only its words, so they can't be emptied; a
+  // shared tanda's note can.
+  const startEdit = () => { setMenuOpen(false); setEditText(post.note || ""); setEditing(true); };
+  const cancelEdit = () => { if (!savingEdit) setEditing(false); };
+  const editUnchanged = editText.trim() === (post.note || "").trim();
+  const editEmptyQuestion = post.kind === "question" && !editText.trim();
+  const saveEdit = async (e) => {
+    e.preventDefault();
+    if (savingEdit || editUnchanged || editEmptyQuestion) return;
+    setSavingEdit(true);
+    const res = await CommunityStore.editPost(post.id, editText.trim());
+    setSavingEdit(false);
+    if (!res.ok) { flash(res.error); return; }
+    onChange(post.id, (p) => ({ ...p, note: res.note, editedAt: res.editedAt }));
+    setEditing(false);
+    flash(tr("community.postUpdated"));
+  };
+
   const deletePost = () => {
     setMenuOpen(false);
     ask({
-      title: "Delete this post?",
-      message: post.tanda
-        ? "It will be removed from the Community, along with its likes and comments. The tanda stays in your collection."
-        : "It will be removed from the Community, along with its likes and comments.",
-      confirmLabel: "Delete post",
+      title: tr("community.deletePostTitle"),
+      message: post.tanda ? tr("community.deletePostMsgTanda") : tr("community.deletePostMsg"),
+      confirmLabel: tr("community.deletePost"),
       onConfirm: async () => {
         const res = await CommunityStore.deletePost(post.id);
-        if (res.ok) { onRemove(post.id); flash("Post deleted"); } else flash(res.error);
+        if (res.ok) { onRemove(post.id); flash(tr("community.postDeleted")); } else flash(res.error);
       },
     });
   };
   const blockAuthor = () => {
     setMenuOpen(false);
     ask({
-      title: `Block ${post.author.name}?`,
-      message: "You won’t see their posts or comments any more. They are not told.",
-      confirmLabel: "Block",
+      title: tr("community.blockTitle", { name: post.author.name }),
+      message: tr("community.blockMsg"),
+      confirmLabel: tr("community.block"),
       onConfirm: async () => {
         const res = await CommunityStore.block(post.author.id);
-        if (res.ok) { flash(`${post.author.name} blocked`); onReload(); } else flash(res.error);
+        if (res.ok) { flash(tr("community.blocked", { name: post.author.name })); onReload(); } else flash(res.error);
       },
     });
   };
   const sendReport = async (reason) => {
     const res = await CommunityStore.report({ postId: post.id }, reason);
-    if (res.ok) { setReporting(false); flash("Report sent. Thank you."); }
+    if (res.ok) { setReporting(false); flash(tr("community.reportSent")); }
     return res;
   };
 
   const where = [post.author.city, communityAgo(post.createdAt)].filter(Boolean).join(" · ");
+  const name = <button type="button" className="cm-name-btn" onClick={() => onOpenProfile(post.author.id)}>{post.author.name}</button>;
   return (
     <article className={"cm-post" + (post.kind === "question" ? " is-question" : "")} data-post-id={post.id}>
       <div className="cm-post-head">
         <CommunityAvatar id={post.author.id} avatar={post.author.avatar} />
         <div className="tp-flex1">
           <div className="cm-post-author">
-            <button type="button" className="cm-name-btn" onClick={() => onOpenProfile(post.author.id)}>{post.author.name}</button>{" "}
-            {post.kind === "question" ? <span>posted</span>
-              : post.tanda && post.tanda.name ? <><span>shared</span> <b className="cm-post-tname">{post.tanda.name}</b></>
-              : <span>shared a tanda</span>}
+            {post.kind === "question" ? trx("community.headlinePosted", { name })
+              : post.tanda && post.tanda.name ? trx("community.headlineSharedNamed", { name, tanda: <b className="cm-post-tname">{post.tanda.name}</b> })
+              : trx("community.headlineShared", { name })}
           </div>
-          <div className="cm-post-where">{where}</div>
+          <div className="cm-post-where">
+            {where}
+            {post.editedAt && <span className="cm-post-edited" title={communityAgo(post.editedAt)}> · {tr("community.editedMark")}</span>}
+          </div>
         </div>
         <div className="cm-menu-wrap">
-          <button type="button" className="tv-tcbtn del" aria-label="Post options" aria-expanded={menuOpen}
+          <button type="button" className="tv-tcbtn del" aria-label={tr("community.postOptions")} aria-expanded={menuOpen}
             onClick={() => setMenuOpen((v) => !v)}><I.dots s={16} /></button>
           {menuOpen && (
             <div className="cm-menu" role="menu">
               {post.mine ? (
-                <button type="button" role="menuitem" onClick={deletePost}><I.trash s={14} /> Delete post</button>
+                <>
+                  <button type="button" role="menuitem" onClick={startEdit}><I.pencil s={14} /> {tr("community.editPost")}</button>
+                  <button type="button" role="menuitem" onClick={deletePost}><I.trash s={14} /> {tr("community.deletePost")}</button>
+                </>
               ) : (
                 <>
-                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setReporting(true); }}>Report post…</button>
-                  <button type="button" role="menuitem" onClick={blockAuthor}>Block {post.author.name}</button>
+                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setReporting(true); }}>{tr("community.reportPost")}</button>
+                  <button type="button" role="menuitem" onClick={blockAuthor}>{tr("community.blockName", { name: post.author.name })}</button>
                 </>
               )}
             </div>
@@ -320,7 +359,21 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
         </div>
       </div>
 
-      {post.note && <p className="cm-post-note">{post.note}</p>}
+      {editing ? (
+        <form className="cm-post-edit" onSubmit={saveEdit}
+          onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); cancelEdit(); } }}>
+          <textarea className="cm-input cm-textarea" rows={3} maxLength={CM_NOTE_MAX} autoFocus
+            aria-label={tr("community.editLabel")}
+            placeholder={post.kind === "question" ? tr("community.writePostPh") : tr("community.editNotePh")}
+            value={editText} onChange={(e) => setEditText(e.target.value)} />
+          <div className="cm-post-edit-actions">
+            <button type="button" className="tp-btn sm" onClick={cancelEdit} disabled={savingEdit}>{tr("common.cancel")}</button>
+            <button type="submit" className="tp-btn primary sm" disabled={savingEdit || editUnchanged || editEmptyQuestion}>
+              {savingEdit ? tr("community.saving") : tr("community.saveChanges")}
+            </button>
+          </div>
+        </form>
+      ) : post.note && <p className="cm-post-note">{post.note}</p>}
 
       {post.tanda && <PostTanda post={post} inMyTandas={inMyTandas} preview={player.preview} onPlay={play} onAdd={addToMine} onPickOrq={onPickOrq} />}
 
@@ -328,22 +381,22 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
       <div className="cm-post-actions">
         <button type="button" className={"cm-act" + (post.liked ? " on" : "") + (likePop ? " pop" : "")} aria-pressed={post.liked}
           onClick={() => { setLikePop(!post.liked); toggle("liked", "likeCount", CommunityStore.like); }}>
-          {post.liked ? <I.heartFill s={17} /> : <I.heart s={17} />} {post.liked ? "Liked" : "Like"}
+          {post.liked ? <I.heartFill s={17} /> : <I.heart s={17} />} {post.liked ? tr("community.liked") : tr("community.like")}
           {post.likeCount > 0 && <>{" "}<span className="cm-act-n">{post.likeCount}</span></>}
         </button>
         <button type="button" className="cm-act" onClick={openComment}>
-          <I.chat s={17} /> Comment
+          <I.chat s={17} /> {tr("community.comment")}
           {post.commentCount > 0 && <>{" "}<span className="cm-act-n">{post.commentCount}</span></>}
         </button>
         <button type="button" className={"cm-act" + (post.saved ? " on" : "")} aria-pressed={post.saved}
           onClick={() => toggle("saved", null, CommunityStore.save)}>
-          {post.saved ? <I.bookmarkFill s={17} /> : <I.bookmark s={17} />} {post.saved ? "Saved" : "Save"}
+          {post.saved ? <I.bookmarkFill s={17} /> : <I.bookmark s={17} />} {post.saved ? tr("community.saved") : tr("community.save")}
         </button>
       </div>
 
       {earlier > 0 && (
         <button type="button" className="cm-more" onClick={loadEarlier} disabled={loadingOlder}>
-          {loadingOlder ? "Loading…" : `View ${earlier} earlier ${earlier === 1 ? "comment" : "comments"}`}
+          {loadingOlder ? tr("community.loading") : tr("community.viewEarlier", { count: earlier })}
         </button>
       )}
       {tops.length > 0 && (
@@ -361,17 +414,17 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
 
       {replyTo && (
         <div className="cm-replying">
-          Replying to <b>{replyTo.author.name}</b>
-          <button type="button" className="cm-meta-btn" onClick={() => setReplyTo(null)}>Cancel</button>
+          {trx("community.replyingTo", { name: <b>{replyTo.author.name}</b> })}
+          <button type="button" className="cm-meta-btn" onClick={() => setReplyTo(null)}>{tr("common.cancel")}</button>
         </div>
       )}
       {(commentOpen || loaded.length > 0 || post.commentCount > 0) && (
         <form className="cm-comment-form" onSubmit={sendComment}>
           <CommunityAvatar id={me.id} avatar={me.avatar} size="sm" />
           <input ref={inputRef} className="cm-input cm-comment-input" type="text" maxLength={1000}
-            aria-label="Write a comment" placeholder={replyTo ? "Write a reply…" : "Write a comment…"}
+            aria-label={tr("community.writeComment")} placeholder={replyTo ? tr("community.writeReplyPh") : tr("community.writeCommentPh")}
             value={draft} onChange={(e) => setDraft(e.target.value)} />
-          <button type="submit" className="cm-send" aria-label="Post comment" disabled={sending || !draft.trim()}><I.send s={15} /></button>
+          <button type="submit" className="cm-send" aria-label={tr("community.postComment")} disabled={sending || !draft.trim()}><I.send s={15} /></button>
         </form>
       )}
 
@@ -381,6 +434,25 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
 }
 
 /* ---------- notifications ---------- */
+// What each notification says, with and without the post's title.
+const CM_NOTIF_TEXT = {
+  "like.tanda": { titledKey: "community.notifLikedTanda", untitledKey: "community.notifLikedTandaUntitled" },
+  "like.post": { titledKey: "community.notifLikedPost", untitledKey: "community.notifLikedPostUntitled" },
+  "comment.tanda": { titledKey: "community.notifCommentedTanda", untitledKey: "community.notifCommentedTandaUntitled" },
+  "comment.post": { titledKey: "community.notifCommentedPost", untitledKey: "community.notifCommentedPostUntitled" },
+  "reply": { titledKey: "community.notifReplied", untitledKey: "community.notifRepliedUntitled" },
+  "follow": { titledKey: "community.notifFollowed", untitledKey: "community.notifFollowed" },
+};
+function cmNotifText(n) {
+  const what = n.postKind === "question" ? "post" : "tanda";
+  const text = n.kind === "reply" || n.kind === "follow" ? CM_NOTIF_TEXT[n.kind]
+    : CM_NOTIF_TEXT[(n.kind === "like" ? "like." : "comment.") + what];
+  const name = <b>{n.actor.name}</b>;
+  return n.postTitle && n.kind !== "follow"
+    ? trx(text.titledKey, { name, title: <b>{n.postTitle}</b> })
+    : trx(text.untitledKey, { name });
+}
+
 /* What other DJs did with your posts and comments, newest first. Opening the
    list is "having looked": the bell clears, while the rows that were new keep
    their dot for this visit. */
@@ -397,20 +469,16 @@ function NotificationsList({ onOpenPost, onOpenFeed, onOpenProfile }) {
     return () => { alive = false; };
   }, []);
 
-  const what = (n) => (n.postKind === "question" ? "post" : "tanda");
-  const action = (n) => n.kind === "like" ? `liked your ${what(n)}`
-    : n.kind === "reply" ? "replied to your comment on"
-    : `commented on your ${what(n)}`;
   return (
     <>
-      <h2 className="cm-list-title">Notifications</h2>
+      <h2 className="cm-list-title">{tr("community.navNotifications")}</h2>
       {error && <div className="cm-error" role="alert">{error}</div>}
-      {!items && <div className="cm-skels" role="status" aria-label="Loading notifications"><PostSkeleton /></div>}
+      {!items && <div className="cm-skels" role="status" aria-label={tr("community.loadingNotifications")}><PostSkeleton /></div>}
       {items && items.length === 0 && !error && (
         <div className="cm-empty">
           <div className="cm-empty-ic"><I.bell s={20} /></div>
-          <div className="cm-empty-title">No notifications yet</div>
-          <div className="cm-empty-sub">When someone likes or comments on what you share, or follows you, you’ll see it here.</div>
+          <div className="cm-empty-title">{tr("community.noNotifications")}</div>
+          <div className="cm-empty-sub">{tr("community.noNotificationsSub")}</div>
         </div>
       )}
       {items && items.length > 0 && (
@@ -420,24 +488,22 @@ function NotificationsList({ onOpenPost, onOpenFeed, onOpenProfile }) {
             <button type="button" key={n.key} className={"cm-notif" + (n.unread ? " is-unread" : "")} onClick={onOpenFeed}>
               <span className="cm-avatar sm" aria-hidden="true"><I.note s={13} /></span>
               <span className="tp-flex1">
-                <span className="cm-notif-text"><b>Welcome to the Community.</b> This is where DJs share the tandas they are proud of.</span>
-                <span className="cm-notif-body">See what others are playing, then share one of yours.</span>
+                <span className="cm-notif-text">{trx("community.welcomeText", { b: (s) => <b>{s}</b> })}</span>
+                <span className="cm-notif-body">{tr("community.welcomeBody")}</span>
                 <span className="cm-notif-when">{communityAgo(n.createdAt)}</span>
               </span>
-              {n.unread && <span className="cm-notif-dot" role="img" aria-label="New" />}
+              {n.unread && <span className="cm-notif-dot" role="img" aria-label={tr("community.new")} />}
             </button>
           ) : (
             <button type="button" key={n.key} className={"cm-notif" + (n.unread ? " is-unread" : "")}
               onClick={() => (n.kind === "follow" ? onOpenProfile(n.actor.id) : onOpenPost(n.postId))}>
               <CommunityAvatar id={n.actor.id} avatar={n.actor.avatar} size="sm" />
               <span className="tp-flex1">
-                <span className="cm-notif-text">
-                  <b>{n.actor.name}</b> {n.kind === "follow" ? "started following you" : action(n)}{n.postTitle ? <> <b>{n.postTitle}</b></> : null}
-                </span>
+                <span className="cm-notif-text">{cmNotifText(n)}</span>
                 {n.body && <span className="cm-notif-body">{n.body}</span>}
                 <span className="cm-notif-when">{communityAgo(n.createdAt)}</span>
               </span>
-              {n.unread && <span className="cm-notif-dot" role="img" aria-label="New" />}
+              {n.unread && <span className="cm-notif-dot" role="img" aria-label={tr("community.new")} />}
             </button>
           ))}
         </div>
@@ -462,25 +528,28 @@ function FollowButton({ person, onChange, flash }) {
   return (
     <button type="button" className={"tp-btn sm cm-follow" + (person.followed ? "" : " primary")}
       aria-pressed={person.followed} onClick={toggle} disabled={busy}>
-      {person.followed ? <><I.check s={14} /> Following</> : "Follow"}
+      {person.followed ? <><I.check s={14} /> {tr("community.following")}</> : tr("community.follow")}
     </button>
   );
 }
 
+// The three counts on a DJ's page, which double as tabs.
 const CM_PROFILE_TABS = [
-  { id: "posts", count: (p) => p.posts, label: (n) => (n === 1 ? "post" : "posts") },
-  { id: "followers", count: (p) => p.followers, label: (n) => (n === 1 ? "follower" : "followers") },
-  { id: "following", count: (p) => p.following, label: () => "following" },
+  { id: "posts", count: (p) => p.posts, labelKey: "community.tabPosts" },
+  { id: "followers", count: (p) => p.followers, labelKey: "community.tabFollowers" },
+  { id: "following", count: (p) => p.following, labelKey: "community.tabFollowing" },
 ];
 
 /* Who the DJ is, and three counts that double as tabs for what is listed
    under the card: their posts, who follows them, whom they follow. */
 function ProfileCard({ profile, tab, onTab, onEdit, onFollowChange, flash }) {
   const joined = new Date(profile.joinedAt);
+  const lang = document.documentElement.lang || undefined;
   const sub = [
     profile.handle ? "@" + profile.handle : null,
     profile.city,
-    Number.isNaN(joined.getTime()) ? null : "Joined " + joined.toLocaleDateString(undefined, { month: "long", year: "numeric" }),
+    Number.isNaN(joined.getTime()) ? null
+      : tr("community.joined", { date: joined.toLocaleDateString(lang, { month: "long", year: "numeric" }) }),
   ].filter(Boolean).join(" · ");
   return (
     <section className="cm-profile" aria-label={profile.name}>
@@ -489,10 +558,10 @@ function ProfileCard({ profile, tab, onTab, onEdit, onFollowChange, flash }) {
         <div className="tp-flex1 cm-profile-id">
           <h2 className="cm-profile-name">{profile.name}</h2>
           <div className="cm-profile-sub">{sub}</div>
-          {profile.followsYou && !profile.mine && <span className="cm-profile-badge">Follows you</span>}
+          {profile.followsYou && !profile.mine && <span className="cm-profile-badge">{tr("community.followsYou")}</span>}
         </div>
         {profile.mine
-          ? (onEdit && <button type="button" className="tp-btn sm" onClick={onEdit}><I.pencil s={14} /> Edit profile</button>)
+          ? (onEdit && <button type="button" className="tp-btn sm" onClick={onEdit}><I.pencil s={14} /> {tr("community.editProfile")}</button>)
           : <FollowButton person={profile} onChange={onFollowChange} flash={flash} />}
       </div>
       {profile.bio && <p className="cm-profile-bio">{profile.bio}</p>}
@@ -502,7 +571,7 @@ function ProfileCard({ profile, tab, onTab, onEdit, onFollowChange, flash }) {
           return (
             <button type="button" role="tab" key={t.id} aria-selected={tab === t.id}
               className={"cm-ptab" + (tab === t.id ? " on" : "")} onClick={() => onTab(t.id)}>
-              <b>{n}</b> {t.label(n)}
+              {trx(t.labelKey, { count: n, b: (s) => <b>{s}</b> })}
             </button>
           );
         })}
@@ -537,13 +606,13 @@ function PeopleList({ userId, which, onOpen, flash }) {
     else flash(res.error);
   };
   const setFollowed = (id, on) => setPeople((cur) => cur.map((p) => (p.id === id ? { ...p, followed: on } : p)));
-  if (!people) return <div className="cm-skels" role="status" aria-label="Loading"><PostSkeleton /></div>;
+  if (!people) return <div className="cm-skels" role="status" aria-label={tr("community.loadingShort")}><PostSkeleton /></div>;
   if (error) return <div className="cm-error" role="alert">{error}</div>;
   if (people.length === 0) {
     return (
       <div className="cm-empty">
         <div className="cm-empty-ic"><I.users s={20} /></div>
-        <div className="cm-empty-title">{which === "followers" ? "No followers yet" : "Not following anyone yet"}</div>
+        <div className="cm-empty-title">{which === "followers" ? tr("community.noFollowers") : tr("community.notFollowing")}</div>
       </div>
     );
   }
@@ -561,43 +630,45 @@ function PeopleList({ userId, which, onOpen, flash }) {
           <FollowButton person={p} onChange={(on) => setFollowed(p.id, on)} flash={flash} />
         </div>
       ))}
-      {hasMore && <button type="button" className="tp-btn sm cm-people-more" onClick={more} disabled={loadingMore}>Show more</button>}
+      {hasMore && <button type="button" className="tp-btn sm cm-people-more" onClick={more} disabled={loadingMore}>{tr("community.showMore")}</button>}
     </div>
   );
 }
 
 /* ---------- the feed ---------- */
 const CM_SCOPES = [
-  { id: "all", label: "Feed", icon: "home" },
-  { id: "following", label: "Following", icon: "users" },
-  { id: "mine", label: "My posts", icon: "upload" },
-  { id: "saved", label: "Saved", icon: "bookmark" },
-  { id: "notifications", label: "Notifications", icon: "bell" },
+  { id: "all", labelKey: "community.navFeed", icon: "home" },
+  { id: "following", labelKey: "community.navFollowing", icon: "users" },
+  { id: "mine", labelKey: "community.navMine", icon: "upload" },
+  { id: "saved", labelKey: "community.navSaved", icon: "bookmark" },
+  { id: "notifications", labelKey: "community.navNotifications", icon: "bell" },
 ];
 // The two feed controls, worded for someone who has never seen the app.
 const CM_SHOW = [
-  { id: "all", label: "Everything" },
-  { id: "ready", label: "Tandas I can play" },
-  { id: "missing", label: "Tandas I can’t play yet" },
-  { id: "questions", label: "Discussions" },
+  { id: "all", labelKey: "community.showAll" },
+  { id: "ready", labelKey: "community.showReady" },
+  { id: "missing", labelKey: "community.showMissing" },
+  { id: "questions", labelKey: "community.showDiscussions" },
 ];
 const CM_SORT = [
-  { id: "popular", label: "Popular" },
-  { id: "new", label: "Newest" },
-  { id: "liked", label: "Most liked" },
+  { id: "popular", labelKey: "community.sortPopular" },
+  { id: "new", labelKey: "community.sortNew" },
+  { id: "liked", labelKey: "community.sortLiked" },
 ];
-// What an empty result means, per "Show" choice.
+// What an empty result means, per "Show" choice and per list.
 const CM_EMPTY_SHOW = {
-  ready: ["No tandas you can play yet", "A shared tanda shows up here when every one of its songs is in your library."],
-  missing: ["Nothing you can’t play", "You have every song of every tanda here."],
-  questions: ["No discussions yet", "Nobody has started one here yet."],
+  ready: { titleKey: "community.emptyReadyTitle", subKey: "community.emptyReadySub" },
+  missing: { titleKey: "community.emptyMissingTitle", subKey: "community.emptyMissingSub" },
+  questions: { titleKey: "community.emptyDiscussionsTitle", subKey: "community.emptyDiscussionsSub" },
 };
 const CM_EMPTY = {
-  all: ["Nothing has been shared yet", "Tandas shared by the community will appear here. Be the first."],
-  following: ["Nothing from the DJs you follow yet", "Open a DJ’s page and follow them: their tandas and posts will gather here."],
-  mine: ["You haven’t posted yet", "Share one of your tandas, or write something to the community."],
-  saved: ["No saved posts", "Use Save on a post to keep it here."],
+  all: { titleKey: "community.emptyAllTitle", subKey: "community.emptyAllSub" },
+  following: { titleKey: "community.emptyFollowingTitle", subKey: "community.emptyFollowingSub" },
+  mine: { titleKey: "community.emptyMineTitle", subKey: "community.emptyMineSub" },
+  saved: { titleKey: "community.emptySavedTitle", subKey: "community.emptySavedSub" },
 };
+const CM_EMPTY_POST_GONE = { titleKey: "community.emptyPostGoneTitle", subKey: "community.emptyPostGoneSub" };
+const CM_EMPTY_PROFILE = { titleKey: "community.emptyProfileTitle", subKey: "community.emptyProfileSub" };
 
 /* A grey stand-in for a post while the feed loads. */
 function PostSkeleton() {
@@ -825,7 +896,7 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
     if (!res.ok) { flash(res.error); return; }
     const wasTanda = !!attached;
     resetComposer();
-    flash(wasTanda ? "Shared to Community" : "Posted");
+    flash(wasTanda ? tr("community.sharedToCommunity") : tr("community.posted"));
     // Sharing a tanda refreshes the feed by itself; plain words need a nudge.
     if (!wasTanda) reload();
   };
@@ -844,8 +915,8 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
 
   // The quiet line beside it: what sharing a tanda sends, or (once there are
   // words and no tanda) a nudge that one can be added. Never a gate.
-  const composeHint = attached ? "Only the song details are shared, never the audio."
-    : postText.trim() && shareable.length > 0 ? "You can add one of your tandas to this." : "";
+  const composeHint = attached ? tr("community.composeHintTanda")
+    : postText.trim() && shareable.length > 0 ? tr("community.composeHintAdd") : "";
 
   // Song-id signatures of the DJ's own tandas, to tell "already in your tandas".
   const tandaSigs = React.useMemo(
@@ -858,35 +929,37 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
   const viewing = focusPost ? "post" : profileId ? "profile" : scope === "notifications" ? "notifications" : "list";
 
   const sub = [user.handle ? "@" + user.handle : null, user.city].filter(Boolean).join(" · ");
-  const empty = (focusPost && ["This post is no longer here", "It may have been deleted by the DJ who shared it."])
-    || (profileId && (profile && profile.mine ? ["You haven’t posted yet", "Share one of your tandas, or write something to the community."]
-      : ["Nothing posted yet", "When this DJ shares a tanda or writes something, it will be here."]))
-    || (scope !== "mine" && orq && [`No tandas by ${orqName || "this orchestra"} here`, "Try another orchestra, or see everything."])
-    || (scope !== "mine" && CM_EMPTY_SHOW[show]) || CM_EMPTY[scope];
+  const emptyOrq = { title: orqName ? tr("community.emptyOrqTitle", { name: orqName }) : tr("community.emptyOrqTitleAny"), sub: tr("community.emptyOrqSub") };
+  const emptyOf = (e) => ({ title: tr(e.titleKey), sub: tr(e.subKey) });
+  const empty = (focusPost && emptyOf(CM_EMPTY_POST_GONE))
+    || (profileId && emptyOf(profile && profile.mine ? CM_EMPTY.mine : CM_EMPTY_PROFILE))
+    || (scope !== "mine" && orq && emptyOrq)
+    || (scope !== "mine" && CM_EMPTY_SHOW[show] && emptyOf(CM_EMPTY_SHOW[show]))
+    || emptyOf(CM_EMPTY[scope] || CM_EMPTY.all);
   return (
     <div className="tv">
       <div className="cm-scroll" ref={scrollRef}>
         <div className="cm-feed">
           {/* left rail */}
           <aside className="cm-rail">
-            <button type="button" className="cm-me cm-me-btn" onClick={() => openProfile(user.id)} title="Your page">
+            <button type="button" className="cm-me cm-me-btn" onClick={() => openProfile(user.id)} title={tr("community.yourPage")}>
               <CommunityAvatar id={user.id} avatar={user.avatar} />
               <div className="tp-flex1">
-                <div className="cm-me-name">{user.displayName || user.email || "Signed in"}</div>
+                <div className="cm-me-name">{user.displayName || user.email || tr("community.signedIn")}</div>
                 {sub && <div className="cm-me-sub">{sub}</div>}
               </div>
             </button>
             {onOpenSettings && (
-              <button type="button" className="tp-btn sm block" onClick={onOpenSettings}><I.pencil s={14} /> Edit profile</button>
+              <button type="button" className="tp-btn sm block" onClick={onOpenSettings}><I.pencil s={14} /> {tr("community.editProfile")}</button>
             )}
-            <nav className="cm-nav" aria-label="Community">
+            <nav className="cm-nav" aria-label={tr("common.nav.Community")}>
               {CM_SCOPES.map((s) => {
                 const Icon = I[s.icon];
                 return (
                   <button type="button" key={s.id} className={"cm-nav-item" + (scope === s.id && !profileId ? " on" : "")}
                     aria-current={scope === s.id && !profileId ? "page" : undefined}
                     onClick={() => { setFocusPost(null); setProfileId(null); setScope(s.id); setShow("all"); setOrq(""); }}>
-                    <Icon s={17} /> {s.label}
+                    <Icon s={17} /> {tr(s.labelKey)}
                     {s.id === "notifications" && community.unread > 0 && <span className="cm-nav-n">{community.unread > 9 ? "9+" : community.unread}</span>}
                   </button>
                 );
@@ -897,9 +970,7 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
           {/* feed column */}
           <main className="cm-col">
             {!user.handle && (
-              <div className="cm-error" role="alert">
-                Your profile couldn’t be loaded. Check your connection — it will appear once Compás can reach the Community server.
-              </div>
+              <div className="cm-error" role="alert">{tr("community.profileNotLoaded")}</div>
             )}
 
             {/* Posting belongs to the feed, not to the "My posts" / "Saved" lists. */}
@@ -907,8 +978,8 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
               <form className={"cm-composer" + (composing ? " is-open" : "")} onSubmit={submitPost}>
                 <CommunityAvatar id={user.id} avatar={user.avatar} />
                 <div className="cm-composer-main">
-                  <textarea ref={composeRef} className="cm-input cm-textarea cm-composer-input" rows={composing ? 3 : 1} maxLength={500}
-                    aria-label="Write a post" placeholder="What are you playing this week?"
+                  <textarea ref={composeRef} className="cm-input cm-textarea cm-composer-input" rows={composing ? 3 : 1} maxLength={CM_NOTE_MAX}
+                    aria-label={tr("community.writePost")} placeholder={tr("community.writePostPh")}
                     value={postText} onChange={(e) => setPostText(e.target.value)} />
                   {/* One slot, two states: the button to add a tanda, or the tanda
                       that was added. "Post" is always there, so it is plain that
@@ -918,18 +989,18 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
                       <span className="cm-attached">
                         <span className="acc"><I.note s={15} /></span>
                         <b>{attached.name || tandaMeta(attached).orq}</b>
-                        <span className="n">{attached.songs.length} {attached.songs.length === 1 ? "song" : "songs"}</span>
+                        <span className="n">{tr("community.songs", { count: attached.songs.length })}</span>
                         <button type="button" className="cm-attached-x" onClick={() => setAttached(null)}
-                          aria-label="Remove the tanda" title="Remove the tanda"><I.x s={13} /></button>
+                          aria-label={tr("community.removeTanda")} title={tr("community.removeTanda")}><I.x s={13} /></button>
                       </span>
                     ) : (
                       <div className="cm-menu-wrap" ref={pickRef}>
                         <button type="button" className="cm-composer-btn" aria-haspopup="menu" aria-expanded={picking}
                           onClick={() => setPicking((v) => !v)}>
-                          <span className="acc"><I.note s={16} /></span> Add a tanda
+                          <span className="acc"><I.note s={16} /></span> {tr("community.addTanda")}
                         </button>
                         {picking && (
-                          <div className="cm-menu cm-tanda-menu" role="menu" aria-label="Your tandas">
+                          <div className="cm-menu cm-tanda-menu" role="menu" aria-label={tr("community.yourTandas")}>
                             {shareable.map((t) => {
                               const m = tandaMeta(t);
                               return (
@@ -938,15 +1009,13 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
                                     <span className="cm-pick-name">{t.name || m.orq}</span>
                                     <span className="cm-pick-sub">{[t.name ? m.orq : null, m.singer || null].filter(Boolean).join(" · ")}</span>
                                   </span>
-                                  <span className="cm-pick-n">{t.songs.length} {t.songs.length === 1 ? "song" : "songs"}</span>
+                                  <span className="cm-pick-n">{tr("community.songs", { count: t.songs.length })}</span>
                                 </button>
                               );
                             })}
                             {shareable.length === 0 && (
                               <div className="cm-tanda-menu-empty">
-                                {(store.tandas || []).length
-                                  ? "Every tanda you have is already shared."
-                                  : "You have no tandas yet. Build one in the Tandas tab, then add it here."}
+                                {(store.tandas || []).length ? tr("community.allShared") : tr("community.noTandas")}
                               </div>
                             )}
                           </div>
@@ -955,7 +1024,7 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
                     )}
                     {composeHint && <span className="cm-compose-hint">{composeHint}</span>}
                     <button type="submit" className="tp-btn primary sm" disabled={posting || (!postText.trim() && !attached)}>
-                      {posting ? "Posting…" : "Post"}
+                      {posting ? tr("community.posting") : tr("community.post")}
                     </button>
                   </div>
                 </div>
@@ -964,7 +1033,7 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
 
             {viewing === "list" && hasNew && (
               <button type="button" className="cm-newpill" onClick={showNew}>
-                <I.arrowDn s={14} /> New posts
+                <I.arrowDn s={14} /> {tr("community.newPosts")}
               </button>
             )}
 
@@ -972,47 +1041,47 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
                 keeps only the order — your own tandas are always in your library. */}
             {viewing === "list" && <div className="cm-filters">
               {scope === "mine" ? (
-                <h2 className="cm-list-title">My posts</h2>
+                <h2 className="cm-list-title">{tr("community.navMine")}</h2>
               ) : (
                 <label className="cm-filter">
-                  <span>Show</span>
+                  <span>{tr("community.show")}</span>
                   <select className="tp-set-select cm-select" value={show} onChange={(e) => setShow(e.target.value)}>
-                    {CM_SHOW.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                    {CM_SHOW.map((o) => <option key={o.id} value={o.id}>{tr(o.labelKey)}</option>)}
                   </select>
                 </label>
               )}
               {scope !== "mine" && (orchestras.length > 0 || orq) && (
                 <label className="cm-filter">
-                  <span>Orchestra</span>
+                  <span>{tr("community.orchestra")}</span>
                   <select className="tp-set-select cm-select" value={orq} onChange={(e) => pickOrq(e.target.value)}>
-                    <option value="">All orchestras</option>
+                    <option value="">{tr("community.allOrchestras")}</option>
                     {orq && !orchestras.some((o) => o.key === orq) && <option value={orq}>{orq}</option>}
                     {orchestras.map((o) => <option key={o.key} value={o.key}>{o.name}</option>)}
                   </select>
                 </label>
               )}
               <label className="cm-filter">
-                <span>Sort by</span>
+                <span>{tr("community.sortBy")}</span>
                 <select className="tp-set-select cm-select" value={sort} onChange={(e) => setSort(e.target.value)}>
-                  {CM_SORT.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                  {CM_SORT.map((o) => <option key={o.id} value={o.id}>{tr(o.labelKey)}</option>)}
                 </select>
               </label>
-              <button type="button" className="tv-tcbtn del cm-refresh" aria-label="Refresh" title="Refresh"
+              <button type="button" className="tv-tcbtn del cm-refresh" aria-label={tr("community.refresh")} title={tr("community.refresh")}
                 onClick={reload} disabled={loading}><I.refresh s={15} /></button>
             </div>}
 
             {viewing === "list" && scope !== "mine" && librarySize === 0 && (
               <div className="cm-hint">
                 <I.folder s={15} />
-                <span className="tp-flex1">Import your music to see which shared tandas you can play.</span>
-                <button type="button" className="cm-link" onClick={() => navigateTo("Library")}>Go to Library</button>
+                <span className="tp-flex1">{tr("community.importHint")}</span>
+                <button type="button" className="cm-link" onClick={() => navigateTo("Library")}>{tr("community.goToLibrary")}</button>
               </div>
             )}
             {viewing === "list" && scope !== "mine" && librarySize > 0 && !hintSeen && (
               <div className="cm-hint">
                 <span className="ok"><I.check s={15} /></span>
-                <span className="tp-flex1">Compás checks every shared tanda against your library. The tick marks the songs you already have.</span>
-                <button type="button" className="cm-link" onClick={dismissHint}>Got it</button>
+                <span className="tp-flex1">{tr("community.matchHint")}</span>
+                <button type="button" className="cm-link" onClick={dismissHint}>{tr("community.gotIt")}</button>
               </div>
             )}
 
@@ -1023,13 +1092,13 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
             {viewing === "profile" && (
               <>
                 <button type="button" className="tp-btn sm cm-back" onClick={closeProfile}>
-                  <I.chev s={14} /> Back
+                  <I.chev s={14} /> {tr("community.back")}
                 </button>
-                {profile === null && <div className="cm-skels" role="status" aria-label="Loading the profile"><PostSkeleton /></div>}
+                {profile === null && <div className="cm-skels" role="status" aria-label={tr("community.loadingProfile")}><PostSkeleton /></div>}
                 {profile === false && (
                   <div className="cm-empty">
-                    <div className="cm-empty-title">This DJ is no longer here</div>
-                    <div className="cm-empty-sub">The account may have been deleted.</div>
+                    <div className="cm-empty-title">{tr("community.djGoneTitle")}</div>
+                    <div className="cm-empty-sub">{tr("community.djGoneSub")}</div>
                   </div>
                 )}
                 {profile && (
@@ -1043,13 +1112,13 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
             )}
             {viewing === "post" && (
               <button type="button" className="tp-btn sm cm-back" onClick={() => setFocusPost(null)}>
-                <I.chev s={14} /> Back to notifications
+                <I.chev s={14} /> {tr("community.backToNotifications")}
               </button>
             )}
 
             {error && (
               <div className="cm-error" role="alert">
-                {error} <button type="button" className="cm-link" onClick={reload}>Try again</button>
+                {error} <button type="button" className="cm-link" onClick={reload}>{tr("community.tryAgain")}</button>
               </div>
             )}
 
@@ -1062,15 +1131,15 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
             {viewing !== "notifications" && !(viewing === "profile" && (profileTab !== "posts" || !profile)) && !error && !loading && posts.length === 0 && (
               <div className="cm-empty">
                 <div className="cm-empty-ic"><I.note s={20} /></div>
-                <div className="cm-empty-title">{empty[0]}</div>
-                <div className="cm-empty-sub">{empty[1]}</div>
+                <div className="cm-empty-title">{empty.title}</div>
+                <div className="cm-empty-sub">{empty.sub}</div>
                 {viewing === "list" && scope !== "mine" && (show !== "all" || orq) && (
-                  <button type="button" className="tp-btn sm cm-empty-btn" onClick={() => { setShow("all"); setOrq(""); }}>Show everything</button>
+                  <button type="button" className="tp-btn sm cm-empty-btn" onClick={() => { setShow("all"); setOrq(""); }}>{tr("community.showEverything")}</button>
                 )}
               </div>
             )}
             {loading && posts.length === 0 && (
-              <div role="status" aria-label="Loading the feed" className="cm-skels">
+              <div role="status" aria-label={tr("community.loadingFeed")} className="cm-skels">
                 <PostSkeleton /><PostSkeleton /><PostSkeleton />
               </div>
             )}
@@ -1080,9 +1149,9 @@ function CommunityFeed({ user, onOpenSettings, homeSignal, active }) {
             {/* The end of the feed is an invitation, not a dead end. */}
             {viewing === "list" && scope === "all" && !hasMore && !loading && !error && posts.length > 0 && (
               <div className="cm-end">
-                <div className="cm-end-title">That’s it for now.</div>
-                <div>Want this feed busier? Be the one to share a tanda with the rest of the tango nerds.</div>
-                <button type="button" className="tp-btn sm" onClick={pickFromTop}><I.note s={14} /> Share a tanda</button>
+                <div className="cm-end-title">{tr("community.endTitle")}</div>
+                <div>{tr("community.endText")}</div>
+                <button type="button" className="tp-btn sm" onClick={pickFromTop}><I.note s={14} /> {tr("community.shareATanda")}</button>
               </div>
             )}
           </main>

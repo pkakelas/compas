@@ -42,7 +42,7 @@ function CommunitySignIn() {
     setError(""); setNotice(""); setBusy("resend");
     const res = await CommunityStore.resendSignUpCode(email);
     setBusy(null);
-    if (res.ok) setNotice("We sent a new code."); else setError(res.error);
+    if (res.ok) setNotice(tr("community.newCodeSent")); else setError(res.error);
   };
 
   const waitingOnGoogle = busy === "google";
@@ -51,26 +51,26 @@ function CommunitySignIn() {
     <div className="cm-scroll">
       <div className="cm-signin">
         <div className="cm-pitch">
-          <div className="tp-eyebrow">Community</div>
-          <h1>See what other DJs are <em>playing</em>.</h1>
-          <p>Share the tandas you are proud of, and borrow ideas from the ones other people built.</p>
+          <div className="tp-eyebrow">{tr("common.nav.Community")}</div>
+          <h1>{trx("community.pitchTitle", { em: (s) => <em>{s}</em> })}</h1>
+          <p>{tr("community.pitchText")}</p>
           <div className="cm-points">
             <div className="cm-point">
               <div className="cm-point-ic"><I.note s={17} /></div>
-              <div><b>Browse shared tandas</b><span>Every tanda posted by the community, with the DJ’s own notes and tags.</span></div>
+              <div><b>{tr("community.pointBrowseTitle")}</b><span>{tr("community.pointBrowseText")}</span></div>
             </div>
             <div className="cm-point">
               <div className="cm-point-ic ok"><I.check s={17} /></div>
-              <div><b>Know which ones you can play tonight</b><span>Each tanda is checked against your library, so you see the ones you fully own and the ones with songs missing.</span></div>
+              <div><b>{tr("community.pointPlayTitle")}</b><span>{tr("community.pointPlayText")}</span></div>
             </div>
             <div className="cm-point">
               <div className="cm-point-ic acc"><I.heart s={17} /></div>
-              <div><b>Like, comment, save</b><span>Talk about the choices, and keep the ones you want to try in your own collection.</span></div>
+              <div><b>{tr("community.pointTalkTitle")}</b><span>{tr("community.pointTalkText")}</span></div>
             </div>
           </div>
           <div className="cm-private">
             <I.lock s={15} />
-            <span>Sharing sends song details only. Your audio files never leave this computer.</span>
+            <span>{tr("community.privateNote")}</span>
           </div>
         </div>
 
@@ -78,11 +78,11 @@ function CommunitySignIn() {
           {mode === "confirm" ? (
             <>
               <div>
-                <h2>Check your email</h2>
-                <div className="cm-card-sub">We sent a 6-digit code to <b>{email}</b>. Enter it to finish creating your account.</div>
+                <h2>{tr("community.checkEmailTitle")}</h2>
+                <div className="cm-card-sub">{trx("community.checkEmailText", { email, b: (s) => <b>{s}</b> })}</div>
               </div>
               <div className="cm-field">
-                <label htmlFor="cm-code">Confirmation code</label>
+                <label htmlFor="cm-code">{tr("community.codeLabel")}</label>
                 <input id="cm-code" className="cm-input cm-code" inputMode="numeric" autoComplete="one-time-code"
                   maxLength={8} value={code} autoFocus
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
@@ -90,59 +90,59 @@ function CommunitySignIn() {
               {error && <div className="cm-error" role="alert">{error}</div>}
               {notice && <div className="cm-notice" role="status">{notice}</div>}
               <button type="submit" className="tp-btn primary lg block" disabled={!!busy || code.length < 6}>
-                {busy === "form" ? "Checking…" : "Confirm email"}
+                {busy === "form" ? tr("community.checking") : tr("community.confirmEmail")}
               </button>
               <div className="cm-switch">
-                <button type="button" className="cm-link" onClick={resend} disabled={!!busy}>Send a new code</button>
+                <button type="button" className="cm-link" onClick={resend} disabled={!!busy}>{tr("community.sendNewCode")}</button>
                 {" · "}
-                <button type="button" className="cm-link" onClick={() => go("signin")} disabled={!!busy}>Back to sign in</button>
+                <button type="button" className="cm-link" onClick={() => go("signin")} disabled={!!busy}>{tr("community.backToSignIn")}</button>
               </div>
             </>
           ) : (
             <>
               <div>
-                <h2>{mode === "signup" ? "Create your account" : "Sign in to Community"}</h2>
-                <div className="cm-card-sub">The rest of Compás keeps working without an account.</div>
+                <h2>{mode === "signup" ? tr("community.signUpTitle") : tr("community.signInTitle")}</h2>
+                <div className="cm-card-sub">{tr("community.noAccountNeeded")}</div>
               </div>
 
               <button type="button" className="cm-google" onClick={google} disabled={!!busy}>
                 <span className="g" aria-hidden="true">G</span>
-                {waitingOnGoogle ? "Waiting for Google in your browser…" : "Continue with Google"}
+                {waitingOnGoogle ? tr("community.waitingGoogle") : tr("community.continueGoogle")}
               </button>
               {waitingOnGoogle && (
                 <div className="cm-switch">
-                  Finish signing in in your browser, then come back here.{" "}
-                  <button type="button" className="cm-link" onClick={() => CommunityStore.cancelSignIn()}>Cancel</button>
+                  {tr("community.finishInBrowser")}{" "}
+                  <button type="button" className="cm-link" onClick={() => CommunityStore.cancelSignIn()}>{tr("common.cancel")}</button>
                 </div>
               )}
 
-              <div className="cm-or">or with email</div>
+              <div className="cm-or">{tr("community.orEmail")}</div>
 
               <div className="cm-field">
-                <label htmlFor="cm-email">Email</label>
+                <label htmlFor="cm-email">{tr("community.email")}</label>
                 <input id="cm-email" className="cm-input" type="email" autoComplete="email"
-                  placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  placeholder={tr("community.emailPh")} value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div className="cm-field">
-                <label htmlFor="cm-pass">Password</label>
+                <label htmlFor="cm-pass">{tr("community.password")}</label>
                 <input id="cm-pass" className="cm-input" type="password"
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                  placeholder={mode === "signup" ? "At least 8 characters" : "Your password"}
+                  placeholder={mode === "signup" ? tr("community.passwordNewPh") : tr("community.passwordPh")}
                   value={password} onChange={(e) => setPassword(e.target.value)} />
               </div>
 
               {error && <div className="cm-error" role="alert">{error}</div>}
 
               <button type="submit" className="tp-btn primary lg block" disabled={!!busy || !email.trim() || !password}>
-                {busy === "form" ? (mode === "signup" ? "Creating account…" : "Signing in…")
-                  : (mode === "signup" ? "Create account" : "Sign in")}
+                {busy === "form" ? (mode === "signup" ? tr("community.creatingAccount") : tr("community.signingIn"))
+                  : (mode === "signup" ? tr("community.createAccount") : tr("community.signIn"))}
               </button>
 
               <div className="cm-switch">
-                {mode === "signup" ? "Already have an account? " : "New here? "}
+                {mode === "signup" ? tr("community.haveAccount") : tr("community.newHere")}{" "}
                 <button type="button" className="cm-link" disabled={!!busy}
                   onClick={() => go(mode === "signup" ? "signin" : "signup")}>
-                  {mode === "signup" ? "Sign in" : "Create an account"}
+                  {mode === "signup" ? tr("community.signIn") : tr("community.createAnAccount")}
                 </button>
               </div>
             </>
@@ -172,16 +172,13 @@ function DeleteAccountModal({ onCancel, onConfirm, busy, error }) {
     <div className="tp-modal-scrim" onMouseDown={busy ? undefined : onCancel}>
       <div className="tp-modal" role="alertdialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
         <div className="tp-modal-icon danger"><I.trash s={20} /></div>
-        <div className="tp-modal-title">Delete your Community account?</div>
-        <div className="tp-modal-msg">
-          Your profile and everything you shared, liked or commented will be removed for good.
-          Your library, tandas and playlists on this computer are not touched.
-        </div>
+        <div className="tp-modal-title">{tr("community.deleteAccountTitle")}</div>
+        <div className="tp-modal-msg">{tr("community.deleteAccountMsg")}</div>
         {error && <div className="cm-error" role="alert" style={{ marginTop: 12 }}>{error}</div>}
         <div className="tp-modal-actions">
-          <button className="tp-modal-cancel" onClick={onCancel} disabled={busy} autoFocus>Keep account</button>
+          <button className="tp-modal-cancel" onClick={onCancel} disabled={busy} autoFocus>{tr("community.keepAccount")}</button>
           <button className="tp-modal-confirm danger" onClick={onConfirm} disabled={busy}>
-            <I.trash s={14} /> {busy ? "Deleting…" : "Delete account"}
+            <I.trash s={14} /> {busy ? tr("community.deleting") : tr("community.deleteAccount")}
           </button>
         </div>
       </div>
@@ -226,9 +223,9 @@ function CommunityAccountCard({ onOpenCommunity, jump }) {
   const icon = <I.heart s={16} />;
   if (!user) {
     return (
-      <SettingsCard icon={icon} title="Community" desc="Share tandas and talk with other DJs.">
-        <SetRow label="Community account" desc="You’re not signed in. The rest of Compás works without an account.">
-          <button className="tp-btn" onClick={onOpenCommunity}>Sign in</button>
+      <SettingsCard icon={icon} title={tr("common.nav.Community")} desc={tr("community.cardDesc")}>
+        <SetRow label={tr("community.accountLabel")} desc={tr("community.notSignedIn")}>
+          <button className="tp-btn" onClick={onOpenCommunity}>{tr("community.signIn")}</button>
         </SetRow>
       </SettingsCard>
     );
@@ -279,27 +276,27 @@ function CommunityAccountCard({ onOpenCommunity, jump }) {
   };
 
   return (
-    <SettingsCard icon={icon} title="Community"
-      desc={user.email ? `Signed in as ${user.email}` : "Signed in"}>
+    <SettingsCard icon={icon} title={tr("common.nav.Community")}
+      desc={user.email ? tr("community.signedInAs", { email: user.email }) : tr("community.signedIn")}>
       <form className="cm-acct" ref={formRef} onSubmit={save} noValidate>
         <div className="cm-acct-avatar">
           <CommunityAvatar id={user.id} avatar={user.avatar} size="lg" />
           <div className="tp-flex1 cm-acct-avatar-main">
-            <div className="cm-acct-avatar-title">Profile picture</div>
+            <div className="cm-acct-avatar-title">{tr("community.profilePicture")}</div>
             <div className="cm-acct-avatar-btns">
               <button type="button" className="tp-btn sm" onClick={pickPhoto} disabled={!!busy}>
-                {busy === "avatar" ? "Saving…" : "Upload a photo…"}
+                {busy === "avatar" ? tr("community.saving") : tr("community.uploadPhoto")}
               </button>
               {user.googleAvatar && user.avatar !== user.googleAvatar && (
-                <button type="button" className="tp-btn sm" onClick={() => setAvatar(user.googleAvatar)} disabled={!!busy}>Use my Google photo</button>
+                <button type="button" className="tp-btn sm" onClick={() => setAvatar(user.googleAvatar)} disabled={!!busy}>{tr("community.useGooglePhoto")}</button>
               )}
               {isPhoto && (
-                <button type="button" className="tp-btn sm ghost" onClick={() => setAvatar(null)} disabled={!!busy}>Remove photo</button>
+                <button type="button" className="tp-btn sm ghost" onClick={() => setAvatar(null)} disabled={!!busy}>{tr("community.removePhoto")}</button>
               )}
             </div>
-            <div className="cm-acct-presets" role="radiogroup" aria-label="Or pick a picture">
+            <div className="cm-acct-presets" role="radiogroup" aria-label={tr("community.pickPicture")}>
               {Array.from({ length: CM_AVATAR_COUNT }, (_, k) => (
-                <button type="button" role="radio" key={k} aria-checked={currentPreset === k} aria-label={`Picture ${k + 1}`}
+                <button type="button" role="radio" key={k} aria-checked={currentPreset === k} aria-label={tr("community.pictureN", { n: k + 1 })}
                   className={"cm-preset" + (currentPreset === k ? " on" : "")} disabled={!!busy}
                   onClick={() => setAvatar("preset:" + k)}><CommunityPresetArt k={k} /></button>
               ))}
@@ -308,37 +305,37 @@ function CommunityAccountCard({ onOpenCommunity, jump }) {
         </div>
         <div className="cm-acct-fields">
           <div className="cm-field">
-            <label htmlFor="cm-acct-name">Name</label>
+            <label htmlFor="cm-acct-name">{tr("community.name")}</label>
             <input id="cm-acct-name" className="cm-input" maxLength={60} value={form.displayName} onChange={set("displayName")} />
           </div>
           <div className="cm-field">
-            <label htmlFor="cm-acct-handle">Handle</label>
+            <label htmlFor="cm-acct-handle">{tr("community.handle")}</label>
             <input id="cm-acct-handle" className="cm-input" maxLength={24} value={form.handle}
               autoCapitalize="none" spellCheck={false}
               onChange={(e) => { setForm((f) => ({ ...f, handle: e.target.value.toLowerCase() })); setSaved(false); }} />
           </div>
           <div className="cm-field">
-            <label htmlFor="cm-acct-city">City <span className="cm-opt">(optional)</span></label>
+            <label htmlFor="cm-acct-city">{tr("community.city")} <span className="cm-opt">{tr("community.optional")}</span></label>
             <input id="cm-acct-city" className="cm-input" maxLength={60} value={form.city} onChange={set("city")} />
           </div>
           <div className="cm-field cm-acct-wide">
-            <label htmlFor="cm-acct-bio">About you <span className="cm-opt">(optional)</span></label>
+            <label htmlFor="cm-acct-bio">{tr("community.aboutYou")} <span className="cm-opt">{tr("community.optional")}</span></label>
             <textarea id="cm-acct-bio" className="cm-input cm-textarea" rows={2} maxLength={280} value={form.bio} onChange={set("bio")}
-              placeholder="Where you play, what you like to open with…" />
+              placeholder={tr("community.bioPh")} />
           </div>
         </div>
-        <div className="tp-set-row-l"><div className="ds">This is what other DJs see next to the tandas and comments you post.</div></div>
+        <div className="tp-set-row-l"><div className="ds">{tr("community.profileVisible")}</div></div>
         {error && <div className="cm-error" role="alert">{error}</div>}
         <div className="cm-acct-actions">
           <button type="submit" className="tp-btn primary" disabled={!!busy || !dirty}>
-            {busy === "save" ? "Saving…" : saved && !dirty ? "Saved" : "Save profile"}
+            {busy === "save" ? tr("community.saving") : saved && !dirty ? tr("community.profileSaved") : tr("community.saveProfile")}
           </button>
           <span className="tp-spacer" />
           <button type="button" className="tp-btn" onClick={signOut} disabled={!!busy}>
-            {busy === "signout" ? "Signing out…" : "Sign out"}
+            {busy === "signout" ? tr("community.signingOut") : tr("community.signOut")}
           </button>
           <button type="button" className="tp-btn ghost cm-danger" onClick={() => { setDeleteError(""); setConfirmDelete(true); }} disabled={!!busy}>
-            Delete account…
+            {tr("community.deleteAccountDots")}
           </button>
         </div>
       </form>

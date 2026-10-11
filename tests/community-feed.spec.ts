@@ -1,5 +1,6 @@
 import {test, expect, type ElectronApplication, type Page} from '@playwright/test';
-import {mkdtempSync} from 'node:fs';
+import {mkdtempSync, readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {launchApp, stubFolderDialog, gotoView} from './helpers/app.js';
@@ -555,6 +556,51 @@ test('a DJ has a page, and can be followed', async () => {
   await expect(marta).toBeVisible();
 });
 
+test('a post can be edited by its author', async () => {
+  // Write something, then change it from the post's menu.
+  await gotoView(page, 'Community');
+  await page.getByLabel('Write a post').fill('Which transfer of Bahia Blanca?');
+  await page.getByRole('button', {name: 'Post', exact: true}).click();
+  await expect(page.locator('.cm-post', {hasText: 'Which transfer of Bahia Blanca?'})).toHaveCount(1);
+  // By id from here on: while it is being edited, its words are in the edit box.
+  const mine = post((await page.locator('.cm-post', {hasText: 'Which transfer of Bahia Blanca?'}).getAttribute('data-post-id'))!);
+  await expect(mine.locator('.cm-post-edited')).toHaveCount(0);
+
+  await mine.getByRole('button', {name: 'Post options'}).click();
+  await mine.getByRole('menuitem', {name: 'Edit post'}).click();
+  const box = mine.getByLabel('Edit your post');
+  await expect(box).toHaveValue('Which transfer of Bahia Blanca?');
+  // Unchanged, or emptied (a post without a tanda is only its words): no saving.
+  const save = mine.getByRole('button', {name: 'Save changes'});
+  await expect(save).toBeDisabled();
+  await box.fill('   ');
+  await expect(save).toBeDisabled();
+  // Escape leaves the words as they were.
+  await box.press('Escape');
+  await expect(mine.locator('.cm-post-note')).toHaveText('Which transfer of Bahia Blanca?');
+
+  await mine.getByRole('button', {name: 'Post options'}).click();
+  await mine.getByRole('menuitem', {name: 'Edit post'}).click();
+  await mine.getByLabel('Edit your post').fill('Which transfer of Bahia Blanca do you use?');
+  await mine.getByRole('button', {name: 'Save changes'}).click();
+  const edited = mine;
+  await expect(edited.locator('.cm-post-note')).toHaveText('Which transfer of Bahia Blanca do you use?');
+  await expect(edited.locator('.cm-post-edited')).toContainText('edited');
+  const stored = stub.posts.find(p => p.note === 'Which transfer of Bahia Blanca do you use?');
+  expect(stored?.edited_at).toBeTruthy();
+
+  // Someone else's post offers no editing.
+  await post(STUB_MARTA_POST).getByRole('button', {name: 'Post options'}).click();
+  await expect(post(STUB_MARTA_POST).getByRole('menuitem', {name: 'Edit post'})).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await post(STUB_MARTA_POST).getByRole('button', {name: 'Post options'}).click();
+
+  // Gone again, for the tests that follow.
+  stub.posts.splice(stub.posts.indexOf(stored!), 1);
+  await page.getByRole('button', {name: 'Refresh'}).click();
+  await expect(edited).toHaveCount(0);
+});
+
 test('a post can be reported, and its author blocked', async () => {
   const marta = post(STUB_MARTA_POST);
   await marta.getByRole('button', {name: 'Post options'}).click();
@@ -651,4 +697,33 @@ test('another account on this computer sees its own "Shared" markers', async () 
   await gotoView(page, 'Tandas');
   await expect(page.getByRole('button', {name: 'Shared', exact: true})).toBeVisible();
   expect(myPost()).toBeDefined();
+});
+
+test('the Community follows the language, its error messages included', async () => {
+  // Expected words come from the locale files, so rewording a translation
+  // doesn't break this test.
+  const locales = fileURLToPath(new URL('../packages/renderer/locales/', import.meta.url));
+  const el = (ns: string): Record<string, string> => JSON.parse(readFileSync(join(locales, 'el', `${ns}.json`), 'utf8'));
+  const [common, community, errors] = [el('common'), el('community'), el('communityErrors')];
+  const language = page.locator('select.tp-set-select').filter({has: page.locator('option[value="el"]')});
+  const tab = (name: string) => page.locator('.tp-navset').getByRole('tab', {name: new RegExp(`^${name}`)});
+
+  await gotoView(page, 'Settings');
+  await language.selectOption('el');
+  await tab(common['nav.Community']).click();
+  const nav = page.getByRole('navigation', {name: common['nav.Community']});
+  await expect(nav.getByRole('button', {name: community.navFeed})).toBeVisible();
+  await expect(page.getByLabel(community.writePost)).toBeVisible();
+  // No message left as its raw key anywhere on screen.
+  const text = await page.locator('.tp-app').innerText();
+  expect(text.match(/\b(community|communityErrors)\.[a-z]\w*/)?.[0]).toBeUndefined();
+
+  // A message from the main process arrives as a key and is worded here.
+  const res = await page.evaluate(() => (window as any).CommunityStore.ask('   '));
+  expect(res).toEqual({ok: false, error: errors.writeSomething});
+
+  // Back to English for whatever runs next.
+  await tab(common['nav.Settings']).click();
+  await language.selectOption('en');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 });
