@@ -220,7 +220,7 @@ export type Proposal = {
 /** Why a proposal needs review. A code (plus its values) rather than prose: the
  *  renderer words it in the DJ's language (smartOrganize.note.<code>). */
 export type ProposalNote =
-  | {code: 'styleMismatch'; own: string; catalog: string}
+  | {code: 'genreMismatch'; own: string; catalog: string}
   | {code: 'singerNotOrchestra' | 'instrumentalNotOrchestra' | 'notOrchestra'};
 
 const SINGER_JOIN = ', ';
@@ -289,7 +289,7 @@ export function resolveSong(song: EnrichInput): Proposal | null {
       const ownGenre = styleToGenre(d.dancedStyle);
       if (ownGenre && g && ownGenre !== g) {
         tier = 'review';
-        note = {code: 'styleMismatch', own: ownGenre, catalog: g};
+        note = {code: 'genreMismatch', own: ownGenre, catalog: g};
       }
     }
   } else if (artistIsMisplacedSinger) {

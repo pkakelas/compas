@@ -68,7 +68,7 @@ test.afterAll(async () => {
 test('songs in a folder without a style take it from their genre tag', async () => {
   await gotoView(page, 'Tandas');
   await page.getByRole('button', {name: /Choose a folder/i}).click();
-  await expect(page.getByText(/Import — set folder types/i)).toBeVisible();
+  await expect(page.getByText(/Import — set folder genres/i)).toBeVisible();
 
   // Mixed chosen by the DJ holds, whatever the tags say.
   const row = page.locator('.it-row', {hasText: 'Pugliese'});

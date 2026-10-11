@@ -274,7 +274,7 @@ const Store = {
   async cancelImport() {
     if (window.compas.importCancel) { try { await window.compas.importCancel(); } catch (_e) { /* ignore */ } }
   },
-  // Re-type existing songs: set styles for many songs at once (Compás-only).
+  // Re-type existing songs: set genres for many songs at once (Compás-only).
   async setSongGenres(updates) {
     if (!window.compas.setSongGenres || !updates || !updates.length) return;
     const library = await window.compas.setSongGenres(updates);
@@ -322,6 +322,11 @@ const Store = {
       window.compas.listPlaylists(),
     ]);
     _set({ tandas: tandas || [], playlists: playlists || [] });
+  },
+  // Re-read the tandas (e.g. another Community account signed in, and with it
+  // a different set of "Shared" markers).
+  async reloadTandas() {
+    _set({ tandas: (await window.compas.listTandas()) || [] });
   },
   // Optimistic local replacement used by the undo flow (no DB round-trip).
   setTandasLocal(tandas) {

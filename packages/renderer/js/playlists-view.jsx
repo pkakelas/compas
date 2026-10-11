@@ -40,11 +40,12 @@ const plBold = (s) => <b>{s}</b>;
 
 /* ============================ ADD LIBRARY (left) ============================ */
 function PlAddCortinaRow({ c, onAdd, makeDrag, draggingId }) {
+  const songTitle = useSongTitle();
   return (
     <div className={"tp-cortrow" + (draggingId === c.id ? " is-dragging" : "")} draggable {...makeDrag(c)}>
       <span className="tp-cortrow-ic"><I.curtain s={15} /></span>
       <div className="tp-flex1">
-        <div className="tp-cortrow-title">{c.title}</div>
+        <div className="tp-cortrow-title">{songTitle(c)}</div>
         <div className="tp-cortrow-meta">{c.orq || tr("playlists.cortina")}<span className="tp-dotsep">·</span><span className="tp-mono">{c.dur}</span></div>
       </div>
       <button className="tp-addbtn sm" onClick={onAdd} title={tr("playlists.addToPlaylist")}><I.plus s={15} /></button>
@@ -198,6 +199,7 @@ function PlEditorTanda({ it, ix, slot, onRemove, preview }) {
 
 function PlEditorCortina({ it, slot, onRemove, preview }) {
   const c = it.data;
+  const songTitle = useSongTitle();
   const playing = preview && preview.previewId === c.id && preview.playing;
   return (
     <div className={"tp-cortina tp-qrow tp-qdrag" + (slot.dragging ? " is-dragging" : "") + (playing ? " is-now" : "")}
@@ -208,7 +210,7 @@ function PlEditorCortina({ it, slot, onRemove, preview }) {
       <span className="tp-cort-glyph">{playing ? <EQ /> : (preview && preview.viaMonitor ? <span className="tp-cuebadge"><I.headphones s={14} /></span> : <I.curtain s={17} />)}</span>
       <div className="tp-flex1">
         <div className="tp-cortina-label">{playing ? tr("playlists.cortinaPlaying") : tr("playlists.cortina")}</div>
-        <div className="tp-cortina-sub">{tr("playlists.cortinaSub", { title: c.title, artist: c.orq || tr("playlists.cortina") })}</div>
+        <div className="tp-cortina-sub">{tr("playlists.cortinaSub", { title: songTitle(c), artist: c.orq || tr("playlists.cortina") })}</div>
       </div>
       <div className="tp-fade"><I.clock s={13} /> {c.dur}</div>
       <button className="tp-qx dark" onClick={(e) => { e.stopPropagation(); onRemove(); }} title={tr("playlists.removeFromPlaylist")}><I.x s={14} /></button>
@@ -326,6 +328,7 @@ function PlEditorDock({ open, status, api, preview, width, onBack, onPlayAll, on
 function PlImportModal({ preview, onConfirm, onCancel }) {
   const [name, setName] = useState(preview.name || "");
   const [busy, setBusy] = useState(false);
+  const songTitle = useSongTitle();
   const tandas = preview.items.filter((it) => it.type === "tanda");
   const cortinas = preview.items.length - tandas.length;
   const nothing = preview.items.length === 0;
@@ -372,7 +375,7 @@ function PlImportModal({ preview, onConfirm, onCancel }) {
                 <span className="pl-imp-main">
                   <span className="pl-imp-title">{it.tanda.name || tr("playlists.importTandaFallback", { n: tIx })}</span>
                   <span className="pl-imp-songs">
-                    {it.tanda.songs.map((s) => s.title).join(" · ")}
+                    {it.tanda.songs.map(songTitle).join(" · ")}
                   </span>
                   {(it.tanda.existingTandaId || it.tanda.missing.length > 0) && (
                     <span className="pl-imp-sub">
@@ -387,7 +390,7 @@ function PlImportModal({ preview, onConfirm, onCancel }) {
             ) : (
               <div className="pl-imp-row is-cortina" key={i}>
                 <span className="pl-imp-n"><I.curtain s={12} /></span>
-                <span className="pl-imp-main"><span className="pl-imp-title">{it.song.title}</span><span className="pl-imp-sub">{tr("playlists.importRowCortina")}</span></span>
+                <span className="pl-imp-main"><span className="pl-imp-title">{songTitle(it.song)}</span><span className="pl-imp-sub">{tr("playlists.importRowCortina")}</span></span>
               </div>
             ))}
           </div>
@@ -435,7 +438,7 @@ function PlaylistCard({ pl, onOpen, onDelete, onPlay, onExport }) {
               <span className="n pl-typ" title={role === "tanda" ? tr("playlists.rowTanda") : role === "cortina" ? tr("playlists.cortina") : tr("playlists.rowSingleSong")}>
                 {role === "tanda" ? <I.rows s={13} /> : role === "cortina" ? <I.curtain s={13} /> : <I.note s={13} />}
               </span>
-              <span className="t">{it.type !== "tanda" ? (role === "song" ? songTitle(it.data) : it.data.title) : itemTitle(it)}</span>
+              <span className="t">{it.type !== "tanda" ? songTitle(it.data) : itemTitle(it)}</span>
               <span className="d">{role === "tanda" ? tr("playlists.songCount", { count: it.data.songs.length }) : role === "cortina" ? tr("playlists.cortina") : tr("playlists.rowSong")}</span>
             </div>
           );

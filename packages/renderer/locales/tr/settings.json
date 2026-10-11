@@ -57,7 +57,7 @@
   "collapseLabel": "Klasörleri varsayılan olarak daralt",
   "collapseDesc": "Arşivi veya tanda oluşturucuyu açtığınızda tüm klasörler kapalı gelir; yalnızca ihtiyacınız olanları genişletirsiniz. Bu ayar kapalıyken en üst düzey klasörler kendiliğinden açılır.",
   "cortinasInFiltersLabel": "Filtrelerde cortinalar",
-  "cortinasInFiltersDesc": "Cortinaların orkestra, şarkıcı, stil ve yıl bilgilerini arşivin filtre menülerinde gösterir. Kapalıyken menülerde yalnızca dans müziğiniz listelenir; cortinalar göz atarken veya arama yaparken yine görünür.",
+  "cortinasInFiltersDesc": "Cortinaların orkestra, şarkıcı, tür ve yıl bilgilerini arşivin filtre menülerinde gösterir. Kapalıyken menülerde yalnızca dans müziğiniz listelenir; cortinalar göz atarken veya arama yaparken yine görünür.",
   "stripsIntro": "Başlık etiketlerine karışan şu tür fazlalıkları yalnızca görüntüde ayıklar:",
   "stripArtist": "Baştaki sanatçı <i>“Di Sarli – ”</i>",
   "stripTrackNo": "Parça numaraları <i>“07. ”</i>",

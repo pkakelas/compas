@@ -39,6 +39,11 @@ Rules that keep translations correct:
   families looked up dynamically, e.g. `genre.tango`).
 - Tango vocabulary — tanda, cortina, milonga, vals, orquesta — and anything
   stored in the database (tag labels, song metadata) is not translated.
+- **Messages from the main process.** Community errors are worded in the
+  renderer, not in the main process: `services/community.ts` and friends send a
+  key (`'communityErrors.signInFirst'`, with `errorVars` for placeholders) and
+  `community-data.jsx` translates it. Add new ones to
+  `communityErrors.json`; `i18n:check` finds the keys in those main files too.
 
 ## Adding a language
 

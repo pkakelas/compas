@@ -24,6 +24,7 @@
   "deleteTitle": "Diese Tanda löschen?",
   "untitled": "Unbenannte Tanda",
   "deleteMessage": "„{name}“ wird aus deiner Sammlung entfernt.",
+  "deleteMessageShared": "„{name}“ wird aus deiner Sammlung entfernt, und ihr Beitrag in der Community wird samt Likes und Kommentaren gelöscht.",
   "deleteTanda": "Tanda löschen",
   "deleted": "Tanda gelöscht",
   "sectionLabel": "Tandas",

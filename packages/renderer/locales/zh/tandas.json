@@ -24,6 +24,7 @@
   "deleteTitle": "删除这个 tanda？",
   "untitled": "未命名 tanda",
   "deleteMessage": "“{name}”将从你的收藏中移除。",
+  "deleteMessageShared": "“{name}”将从你的收藏中移除，它在社区的帖子也会连同点赞和评论一起撤下。",
   "deleteTanda": "删除 tanda",
   "deleted": "Tanda 已删除",
   "sectionLabel": "Tandas",

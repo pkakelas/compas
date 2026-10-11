@@ -21,7 +21,7 @@ function SmartOrganizeTip({ onTry, onDismiss }) {
         <div className="sotip-title">{tr("library.tipTitle")}</div>
         <div className="sotip-sub">{tr("library.tipSub")}</div>
         <div className="sotip-chips">
-          <span>{tr("library.tipChipOrchestras")}</span><span>{tr("library.tipChipSingers")}</span><span>{tr("library.tipChipYears")}</span><span>{tr("library.tipChipStyles")}</span>
+          <span>{tr("library.tipChipOrchestras")}</span><span>{tr("library.tipChipSingers")}</span><span>{tr("library.tipChipYears")}</span><span>{tr("library.tipChipGenres")}</span>
         </div>
         <div className="sotip-actions">
           <button className="tp-btn primary lg block" onClick={onTry}><I.spark s={15} /> {tr("library.tipTry")}</button>

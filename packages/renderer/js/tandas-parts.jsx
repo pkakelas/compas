@@ -209,10 +209,13 @@ function SongEditRow({ s, onClose }) {
   const asked = useBoolPref("writeTagsAsked");
   const [choosing, setChoosing] = useState(false);
   // Set when the edit was saved in Compás but the file could not be updated;
-  // the editor stays open to show why, then closes on OK.
+  // the editor stays open to show why, then closes on OK. Changing a field
+  // again clears it and brings Save back, so a follow-up correction is saved
+  // rather than lost when the editor closes.
   const [fileError, setFileError] = useState(null);
-  const set = (k) => (e) => setDraft((d) => ({ ...d, [k]: e.target.value }));
-  const setVal = (k) => (v) => setDraft((d) => ({ ...d, [k]: v }));
+  const change = (k, v) => { setFileError(null); setDraft((d) => ({ ...d, [k]: v })); };
+  const set = (k) => (e) => change(k, e.target.value);
+  const setVal = (k) => (v) => change(k, v);
 
   // Open-ended facets (orchestra, singer) suggest values already in the library
   // so existing names stay consistent — but the DJ can always type a brand-new
@@ -292,7 +295,7 @@ function SongEditRow({ s, onClose }) {
             {(() => {
               const base = window.STYLE_TYPES || ["tango", "vals", "milonga", "cortina"];
               // Keep the song's current value selectable even if it's a custom/
-              // non-preset style, so editing never silently changes it.
+              // non-preset genre, so editing never silently changes it.
               const opts = base.indexOf(draft.genre) === -1 && draft.genre ? base.concat([draft.genre]) : base;
               const label = window.genreLabel || ((g) => g);
               return opts.map((g) => <option key={g} value={g}>{label(g)}</option>);
@@ -302,7 +305,7 @@ function SongEditRow({ s, onClose }) {
           <input value={draft.album} onChange={set("album")} placeholder={tr("parts.album")} /></label>
         <label className="tv-song-edit-cortina">
           <input type="checkbox" checked={draft.isCortina}
-            onChange={(e) => setDraft((d) => ({ ...d, isCortina: e.target.checked }))} />
+            onChange={(e) => change("isCortina", e.target.checked)} />
           <span className="tv-cort-text">
             <span className="tv-cort-title"><I.curtain s={14} /> {tr("parts.useAsCortina")}</span>
             <span className="tv-cort-hint">{tr("parts.cortinaHint")}</span>
@@ -723,7 +726,7 @@ const SORTS = [
   { key: "title", labelKey: "parts.sortTitle" },
   { key: "orq", labelKey: "parts.sortOrchestra" },
   { key: "singer", labelKey: "parts.sortSinger" },
-  { key: "genre", labelKey: "parts.sortStyle" },
+  { key: "genre", labelKey: "parts.sortGenre" },
   { key: "year_desc", labelKey: "parts.sortYearDesc" },
   { key: "year_asc", labelKey: "parts.sortYearAsc" },
   { key: "dur_desc", labelKey: "parts.sortLongest" },
@@ -840,7 +843,7 @@ function normalizePickOptions(options) {
 const PICK_FACETS = {
   orq: { labelKey: "parts.orchestra", allKey: "parts.allOrchestras", clearKey: "parts.clearOrchestra", searchKey: "parts.searchOrchestra", emptyKey: "parts.noOrchestrasYet" },
   singer: { labelKey: "parts.singer", allKey: "parts.allSingers", clearKey: "parts.clearSinger", searchKey: "parts.searchSinger", emptyKey: "parts.noSingersYet" },
-  genre: { labelKey: "parts.style", allKey: "parts.allStyles", clearKey: "parts.clearStyle", searchKey: "parts.searchStyle", emptyKey: "parts.noStylesYet" },
+  genre: { labelKey: "parts.genre", allKey: "parts.allGenres", clearKey: "parts.clearGenre", searchKey: "parts.searchGenre", emptyKey: "parts.noGenresYet" },
   year: { labelKey: "parts.year", allKey: "parts.allYears", clearKey: "parts.clearYear", searchKey: "parts.searchYear", emptyKey: "parts.noYearsYet" },
   type: { labelKey: "parts.type", allKey: "parts.allTypes", clearKey: "parts.clearType", searchKey: "parts.searchType", emptyKey: "parts.noTypesYet" },
   mood: { labelKey: "parts.mood", allKey: "parts.allMoods", clearKey: "parts.clearMood", searchKey: "parts.searchMood", emptyKey: "parts.noMoodsYet" },
@@ -1268,7 +1271,7 @@ const LIST_COLS = [
   { key: "title", labelKey: "parts.title", sort: "title" },
   { key: "orq", labelKey: "parts.orchestra", sort: "orq" },
   { key: "singer", labelKey: "parts.singer", sort: "singer" },
-  { key: "genre", labelKey: "parts.style", sort: "genre" },
+  { key: "genre", labelKey: "parts.genre", sort: "genre" },
   { key: "yr", labelKey: "parts.year", sort: "year_asc" },
   { key: "du", labelKey: "parts.time", sort: "dur_desc" },
 ];
@@ -2028,7 +2031,22 @@ function TandaSearchBar({ filters, onChange, options, countLabel, sortControl })
 }
 
 /* ============================ MANAGE GRID ============================ */
-function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, onDismiss }) {
+/* Share control for one of the DJ's own tandas: "Share" until it is shared,
+ * then a quiet "Shared" that takes it down again (the view confirms first).
+ * Rendered only when the view passes the handlers, which it does only in
+ * builds that have Community. */
+function TandaShareButton({ t, onShare, onUnshare }) {
+  if (!onShare) return null;
+  return t.sharedPostId ? (
+    <button type="button" className="tv-share on" onClick={() => onUnshare(t)}
+      title={tr("community.sharedHint")}><I.check s={12} /> {tr("community.shared")}</button>
+  ) : (
+    <button type="button" className="tv-share" onClick={() => onShare(t)} disabled={!t.songs.length}
+      title={tr("community.shareHint")}><I.upload s={12} /> {tr("community.share")}</button>
+  );
+}
+
+function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, onDismiss, onShare, onUnshare }) {
   const m = tandaMeta(t);
   const songTitle = useSongTitle();
   const viaMonitor = preview && preview.viaMonitor;
@@ -2060,6 +2078,7 @@ function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, on
             </div>
           )}
         </div>
+        {!suggested && <TandaShareButton t={t} onShare={onShare} onUnshare={onUnshare} />}
       </div>
       <div className="tv-tcard-songs">
         {t.songs.map((s, i) => {
@@ -2106,7 +2125,7 @@ function TandaCard({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, on
 /* Full-width list row — an alternative to the grid card for when long song
  * titles (often with the orquesta/year prepended) get truncated in the narrow
  * columns. Here each song gets the full row width, so it reads in full. */
-function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, onDismiss }) {
+function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave, onDismiss, onShare, onUnshare }) {
   const m = tandaMeta(t);
   const songTitle = useSongTitle();
   const viaMonitor = preview && preview.viaMonitor;
@@ -2148,6 +2167,7 @@ function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave
             </>
           ) : (
             <>
+              <TandaShareButton t={t} onShare={onShare} onUnshare={onUnshare} />
               <button className="tv-tcbtn" onClick={() => onEdit(t)}><I.pencil s={14} /> {tr("parts.edit")}</button>
               <button className="tv-tcbtn del" onClick={() => onDelete(t)} title={tr("parts.deleteTanda")}><I.trash s={15} /></button>
             </>
@@ -2172,7 +2192,7 @@ function TandaListItem({ t, onEdit, onDelete, onPlay, preview, suggested, onSave
   );
 }
 
-function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew, onPlay, onSaveSuggestion, onDismissSuggestion, onBrowseSuggestions, preview, view = "grid" }) {
+function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew, onPlay, onShare, onUnshare, onSaveSuggestion, onDismissSuggestion, onBrowseSuggestions, preview, view = "grid" }) {
   const suggs = suggestions || [];
   const list = view === "list";
   const wrapCls = list ? "tv-list" : "tv-grid";
@@ -2265,7 +2285,7 @@ function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew
         <div className="tv-manage">
           {filtered.length ? (
             <div className="tv-list">
-              {filtered.map((t) => <TandaListItem key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} onPlay={onPlay} preview={preview} />)}
+              {filtered.map((t) => <TandaListItem key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} onPlay={onPlay} onShare={onShare} onUnshare={onUnshare} preview={preview} />)}
               {!searching && <button className="tv-newrow" onClick={onNew}><I.plus s={17} /> {tr("parts.newTanda")}</button>}
             </div>
           ) : noMatch}
@@ -2279,7 +2299,7 @@ function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew
       <div className="tv-manage">
         {filtered.length ? (
           <div className="tv-grid">
-            {filtered.map((t) => <TandaCard key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} onPlay={onPlay} preview={preview} />)}
+            {filtered.map((t) => <TandaCard key={t.id} t={t} onEdit={onEdit} onDelete={onDelete} onPlay={onPlay} onShare={onShare} onUnshare={onUnshare} preview={preview} />)}
             {!searching && (
               <button className="tv-newcard" onClick={onNew}>
                 <span className="ic"><I.plus s={22} /></span>

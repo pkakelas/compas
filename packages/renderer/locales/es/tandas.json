@@ -24,6 +24,7 @@
   "deleteTitle": "¿Eliminar esta tanda?",
   "untitled": "Tanda sin título",
   "deleteMessage": "«{name}» se eliminará de tu colección.",
+  "deleteMessageShared": "«{name}» se eliminará de tu colección, y su publicación en la Comunidad se retirará junto con sus «me gusta» y comentarios.",
   "deleteTanda": "Eliminar tanda",
   "deleted": "Tanda eliminada",
   "sectionLabel": "Tandas",

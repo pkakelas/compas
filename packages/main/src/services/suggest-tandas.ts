@@ -56,7 +56,7 @@ function libKey(title: string, orq: string): string {
  * (a singer/orchestra name almost never collides with a curated *song* title
  * under the same orchestra surname).
  */
-function libTitleCandidates(rawTitle: string): string[] {
+export function libTitleCandidates(rawTitle: string): string[] {
   let t = (rawTitle || '').trim().replace(/^\d{1,2}[\s.\-]+/, ''); // leading track number
   t = t
     .replace(/\([^)]*\)/g, ' ') // (singer) / (instrumental)
@@ -79,7 +79,7 @@ function libTitleCandidates(rawTitle: string): string[] {
 
 /** The orchestra surname for a library song: its (Smart-Organized) artist tag,
  *  falling back to the leading title segment when the tag is empty. */
-function libOrqSurname(song: LibSong): string {
+export function libOrqSurname(song: LibSong): string {
   const tagged = surnameOf(artistCore(song.orq));
   if (tagged) return tagged;
   const segs = (song.title || '')

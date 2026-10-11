@@ -24,6 +24,7 @@
   "deleteTitle": "Supprimer cette tanda ?",
   "untitled": "Tanda sans titre",
   "deleteMessage": "« {name} » sera retirée de votre collection.",
+  "deleteMessageShared": "« {name} » sera retirée de votre collection, et sa publication dans la Communauté sera supprimée avec ses mentions J’aime et ses commentaires.",
   "deleteTanda": "Supprimer la tanda",
   "deleted": "Tanda supprimée",
   "sectionLabel": "Tandas",

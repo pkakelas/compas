@@ -24,6 +24,7 @@
   "deleteTitle": "この tanda を削除しますか？",
   "untitled": "名称未設定の tanda",
   "deleteMessage": "「{name}」がコレクションから削除されます。",
+  "deleteMessageShared": "「{name}」がコレクションから削除され、コミュニティの投稿もいいねとコメントごと取り下げられます。",
   "deleteTanda": "Tanda を削除",
   "deleted": "Tanda を削除しました",
   "sectionLabel": "Tandas",

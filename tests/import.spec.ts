@@ -30,7 +30,7 @@ test('importing a folder scans it and populates the library', async () => {
   await page.getByRole('button', {name: /Choose a folder/i}).click();
 
   // The scan completes and the per-folder review modal opens.
-  await expect(page.getByText(/Import — set folder types/i)).toBeVisible();
+  await expect(page.getByText(/Import — set folder genres/i)).toBeVisible();
 
   // Commit, accepting the default (everything imports as "Mixed").
   await page.getByRole('button', {name: 'Import', exact: true}).click();

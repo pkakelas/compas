@@ -24,6 +24,7 @@
   "deleteTitle": "यह tanda हटाएँ?",
   "untitled": "बिना नाम का tanda",
   "deleteMessage": "“{name}” आपके संग्रह से हटा दिया जाएगा।",
+  "deleteMessageShared": "“{name}” आपके संग्रह से हटा दिया जाएगा, और समुदाय में इसकी पोस्ट भी लाइक और टिप्पणियों समेत हटा दी जाएगी।",
   "deleteTanda": "Tanda हटाएँ",
   "deleted": "Tanda हटा दिया गया",
   "sectionLabel": "Tandas",

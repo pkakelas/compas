@@ -60,6 +60,27 @@ function sameRoots(a: string[], b: string[]): boolean {
 type PendingAdd = {root: string; song: ScannedSong};
 type PendingUnlink = {path: string; durationSec: number | null};
 
+/**
+ * Refresh known songs whose files changed: their tags are updated in place (no
+ * re-analysis), with one import per root so a large retag stays one batch. A
+ * file whose tags couldn't be read keeps its row — and its old modification
+ * time, so the next startup tries again — instead of being overwritten with
+ * filename defaults. Returns how many songs were refreshed.
+ */
+function refreshInPlace(changed: PendingAdd[]): number {
+  const byRoot = new Map<string, ScannedSong[]>();
+  let refreshed = 0;
+  for (const {root, song} of changed) {
+    if (song.tagReadFailed) continue;
+    const songs = byRoot.get(root);
+    if (songs) songs.push(song);
+    else byRoot.set(root, [song]);
+    refreshed += 1;
+  }
+  for (const [root, songs] of byRoot) importSongs(root, songs);
+  return refreshed;
+}
+
 export class LibraryWatcher {
   readonly #deps: LibraryWatcherDeps;
   #watcher: FSWatcher | null = null;
@@ -180,7 +201,7 @@ export class LibraryWatcher {
     }
 
     // Re-scanned existing files: refresh their tags in place (no re-analysis).
-    for (const add of existingAdds) importSongs(add.root, [add.song]);
+    refreshInPlace(existingAdds);
 
     const genuinelyAdded = this.#applyMovesAddsRemovals(newAdds, [...unlinks]);
 
@@ -240,9 +261,9 @@ export class LibraryWatcher {
     setSongMtimes(baseline);
     // Edited while closed: refresh their tags in place (no re-analysis), the
     // same way the live watcher handles an in-place change.
-    for (const c of changed) importSongs(c.root, [c.song]);
+    const refreshed = refreshInPlace(changed);
     if (newAdds.length === 0 && available.length === 0) {
-      return changed.length > 0 ? this.#refresh() : getLibrary();
+      return refreshed > 0 ? this.#refresh() : getLibrary();
     }
 
     const genuinelyAdded = this.#applyMovesAddsRemovals(newAdds, available);

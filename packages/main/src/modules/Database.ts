@@ -5,6 +5,7 @@ import {basename, dirname, join, sep} from 'node:path';
 import {existsSync} from 'node:fs';
 import Database from 'better-sqlite3';
 import {normalizeYear, yearFromFilename} from '../services/scan.js';
+import {ARTIST_TAG_SEP} from '../services/enrich.js';
 
 export type SongRow = {
   id: number;
@@ -91,6 +92,8 @@ export type Tanda = {
   tags: TandaTag[];
   // False for a tanda that exists only inside an imported playlist.
   inCollection: boolean;
+  // The Community post this tanda was shared as, or null when it isn't shared.
+  sharedPostId: string | null;
   // Epoch milliseconds when the tanda was first saved (the DB's created_at),
   // so the views can order by creation as well as by name.
   createdAt: number;
@@ -191,6 +194,15 @@ function migrate(d: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_tanda_tags_label ON tanda_tags(label);
 
+    -- Community: the post each tanda was shared as, per account — two DJs who
+    -- sign in on the same computer each see only their own "Shared".
+    CREATE TABLE IF NOT EXISTS tanda_shares (
+      tanda_id INTEGER NOT NULL REFERENCES tandas(id) ON DELETE CASCADE,
+      user_id  TEXT NOT NULL,
+      post_id  TEXT NOT NULL,
+      PRIMARY KEY (tanda_id, user_id)
+    );
+
     CREATE TABLE IF NOT EXISTS library_roots (
       path     TEXT PRIMARY KEY,
       added_at INTEGER NOT NULL
@@ -227,7 +239,13 @@ function migrate(d: Database.Database): void {
   // Tandas created by a playlist import live only inside that playlist until
   // the DJ keeps one: they stay out of "My tandas" and are removed once no
   // playlist uses them.
-  addColumns(d, 'tandas', [['in_collection', 'INTEGER NOT NULL DEFAULT 1']]);
+  addColumns(d, 'tandas', [
+    ['in_collection', 'INTEGER NOT NULL DEFAULT 1'],
+    // Community: id of the post a tanda was shared as, from before shares were
+    // kept per account (tanda_shares). Read once, then moved there by
+    // claimLegacyShares for the account that wrote the post.
+    ['shared_post_id', 'TEXT'],
+  ]);
   const addedSongColumns = addColumns(d, 'songs', [
     ['loudness_lufs', 'REAL'],
     ['loudness_peak', 'REAL'],
@@ -356,6 +374,10 @@ export type ScannedSong = {
   // Set by the scanner when the song lives under a folder named like a cortina
   // folder. Orthogonal to genre.
   isCortina?: boolean;
+  // Set by the scanner when the file's tags couldn't be read, so the row holds
+  // only filename-derived defaults. A song already in the library is then left
+  // as it is rather than overwritten with them (see watcher.ts).
+  tagReadFailed?: boolean;
   folder: string;
   folderPath: string;
 };
@@ -377,7 +399,9 @@ export function importSongs(root: string, songs: ScannedSong[]): void {
     VALUES (@path, @title, @artist, @singer, @album, @year, @durationSec, @mtimeMs, @genre, 1, @isCortina, @folder, @folderPath, @root, @added_at)
     ON CONFLICT(path) DO UPDATE SET
       title = CASE WHEN songs.meta_locked = 1 THEN songs.title ELSE excluded.title END,
-      artist = CASE WHEN songs.orq_locked = 1 OR songs.meta_locked = 1 THEN songs.artist ELSE excluded.artist END,
+      artist = CASE WHEN songs.orq_locked = 1 OR songs.meta_locked = 1 THEN songs.artist
+                    WHEN songs.singer <> '' AND excluded.artist = songs.artist || @artistSep || songs.singer THEN songs.artist
+                    ELSE excluded.artist END,
       singer = CASE WHEN songs.meta_locked = 1 THEN songs.singer WHEN excluded.singer <> '' THEN excluded.singer ELSE songs.singer END,
       album = CASE WHEN songs.meta_locked = 1 THEN songs.album ELSE excluded.album END,
       year = CASE WHEN songs.year_locked = 1 OR songs.meta_locked = 1 THEN songs.year ELSE excluded.year END,
@@ -398,6 +422,10 @@ export function importSongs(root: string, songs: ScannedSong[]): void {
   // preserved when locked (set by Smart Organize / a manual cortina toggle), and
   // every editable field is preserved when `meta_locked` is set (a song edit
   // kept inside Compás), so a Compás-only edit survives the file being re-scanned.
+  // An artist tag that is exactly the "Orchestra - Singer" Compás wrote for this
+  // row (see joinArtistTag) keeps the two fields apart even when the scanner's
+  // conservative split didn't recognise the orchestra — otherwise saving an
+  // edit to the file would fold the singer into the orchestra on the next scan.
 
   // Folders the DJ flagged as cortinas under this root — newly-imported songs in
   // them inherit the flag regardless of the folder-name heuristic.
@@ -413,7 +441,14 @@ export function importSongs(root: string, songs: ScannedSong[]): void {
     upsertRoot(d, root);
     for (const s of songs) {
       const isCortina = s.isCortina || flaggedFolders.has(s.folderPath) ? 1 : 0;
-      upsertSong.run({...s, mtimeMs: s.mtimeMs ?? null, isCortina, root, added_at: now});
+      upsertSong.run({
+        ...s,
+        mtimeMs: s.mtimeMs ?? null,
+        isCortina,
+        root,
+        added_at: now,
+        artistSep: ARTIST_TAG_SEP,
+      });
     }
   });
   tx();
@@ -623,6 +658,15 @@ export function getLibrary(): Library {
   return {tree, songs, totalSongs: songs.length, totalFolders, roots};
 }
 
+// The Community account signed in on this computer (null when none): the
+// "Shared" markers listTandas reports are this account's.
+let shareAccount: string | null = null;
+
+/** Set whose "Shared" markers listTandas reports. */
+export function setShareAccount(userId: string | null): void {
+  shareAccount = userId;
+}
+
 export function listTandas(): Tanda[] {
   const d = getDb();
   const tandaRows = d.prepare('SELECT * FROM tandas ORDER BY created_at').all() as {
@@ -630,6 +674,7 @@ export function listTandas(): Tanda[] {
     name: string | null;
     created_at: number;
     in_collection: number;
+    shared_post_id: string | null;
   }[];
   const songStmt = d.prepare(`
     SELECT s.* FROM tanda_songs ts
@@ -640,12 +685,21 @@ export function listTandas(): Tanda[] {
   const tagStmt = d.prepare(
     'SELECT cat, label FROM tanda_tags WHERE tanda_id = ? ORDER BY position',
   );
+  const shares = new Map<number, string>();
+  if (shareAccount) {
+    const rows = d.prepare('SELECT tanda_id, post_id FROM tanda_shares WHERE user_id = ?').all(shareAccount) as {
+      tanda_id: number;
+      post_id: string;
+    }[];
+    for (const r of rows) shares.set(r.tanda_id, r.post_id);
+  }
   return tandaRows.map(t => ({
     id: String(t.id),
     name: t.name,
     songs: (songStmt.all(t.id) as SongRow[]).map(rowToSong),
     tags: tagStmt.all(t.id) as TandaTag[],
     inCollection: t.in_collection !== 0,
+    sharedPostId: shares.get(t.id) ?? null,
     createdAt: t.created_at,
   }));
 }
@@ -653,6 +707,51 @@ export function listTandas(): Tanda[] {
 /** The DJ's own tandas ("My tandas"), without playlist-only ones. */
 export function listCollectionTandas(): Tanda[] {
   return listTandas().filter(t => t.inCollection);
+}
+
+/** Record (or, with null, clear) the post a tanda was shared as by `userId` —
+ *  the account that made (or took down) the post, named by the caller rather
+ *  than read from whoever is signed in at this moment. */
+export function setTandaSharedPost(id: string, postId: string | null, userId: string): void {
+  const d = getDb();
+  if (postId) {
+    d.prepare('INSERT OR REPLACE INTO tanda_shares (tanda_id, user_id, post_id) VALUES (?, ?, ?)').run(
+      Number(id),
+      userId,
+      postId,
+    );
+  } else {
+    d.prepare('DELETE FROM tanda_shares WHERE tanda_id = ? AND user_id = ?').run(Number(id), userId);
+  }
+}
+
+/** Forget a Community post that no longer exists, whichever tanda pointed at it. */
+export function clearSharedPost(postId: string): void {
+  getDb().prepare('DELETE FROM tanda_shares WHERE post_id = ?').run(postId);
+}
+
+/** Shares recorded before they were kept per account: tanda id → post id. */
+export function listLegacyShares(): {tandaId: string; postId: string}[] {
+  const rows = getDb()
+    .prepare('SELECT id, shared_post_id FROM tandas WHERE shared_post_id IS NOT NULL')
+    .all() as {id: number; shared_post_id: string}[];
+  return rows.map(r => ({tandaId: String(r.id), postId: r.shared_post_id}));
+}
+
+/** File legacy shares under the account that wrote them (`owned` holds the
+ *  post ids that are the signed-in account's), and drop the old column's
+ *  value for those — the rest wait for their own account to sign in. */
+export function claimLegacyShares(userId: string, owned: Set<string>): void {
+  const d = getDb();
+  const insert = d.prepare('INSERT OR IGNORE INTO tanda_shares (tanda_id, user_id, post_id) VALUES (?, ?, ?)');
+  const clear = d.prepare('UPDATE tandas SET shared_post_id = NULL WHERE id = ?');
+  d.transaction(() => {
+    for (const {tandaId, postId} of listLegacyShares()) {
+      if (!owned.has(postId)) continue;
+      insert.run(Number(tandaId), userId, postId);
+      clear.run(Number(tandaId));
+    }
+  })();
 }
 
 /** Keep a playlist-only tanda in "My tandas". */
@@ -1111,12 +1210,15 @@ export function renameSong(oldPath: string, root: string, song: ScannedSong): bo
     // A move re-derives the file-backed fields, but preserves the DJ's app-only
     // `genre` (omitted from SET), a `singer` the file doesn't credit, any locked
     // `artist`/`year` set by Smart Organize and everything under `meta_locked`
-    // — mirroring importSongs so an edit isn't lost on a move.
+    // (and an artist tag Compás wrote for this row) — mirroring importSongs so
+    // an edit isn't lost on a move.
     d.prepare(
       `UPDATE songs SET
          path = @path,
          title = CASE WHEN meta_locked = 1 THEN title ELSE @title END,
-         artist = CASE WHEN orq_locked = 1 OR meta_locked = 1 THEN artist ELSE @artist END,
+         artist = CASE WHEN orq_locked = 1 OR meta_locked = 1 THEN artist
+                       WHEN singer <> '' AND @artist = artist || @artistSep || singer THEN artist
+                       ELSE @artist END,
          singer = CASE WHEN meta_locked = 1 THEN singer WHEN @singer <> '' THEN @singer ELSE singer END,
          album = CASE WHEN meta_locked = 1 THEN album ELSE @album END,
          year = CASE WHEN year_locked = 1 OR meta_locked = 1 THEN year ELSE @year END,
@@ -1137,6 +1239,7 @@ export function renameSong(oldPath: string, root: string, song: ScannedSong): bo
       folderPath: song.folderPath,
       root,
       id: row.id,
+      artistSep: ARTIST_TAG_SEP,
     });
     // The previous root may now be empty (a move across libraries).
     d.prepare(
