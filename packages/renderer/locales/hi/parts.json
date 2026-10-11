@@ -144,5 +144,9 @@
   "buildTanda": "Tanda बनाएँ",
   "browseSuggestions_one": "{count} सुझाव देखें",
   "browseSuggestions_other": "{count} सुझाव देखें",
-  "newTanda": "नया tanda"
+  "newTanda": "नया tanda",
+  "sortTandas": "Tandas क्रम से लगाएँ",
+  "tandaSortName": "नाम A–Z",
+  "tandaSortNewest": "सबसे नए पहले",
+  "tandaSortOldest": "सबसे पुराने पहले"
 }

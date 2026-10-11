@@ -86,6 +86,9 @@ export type Tanda = {
   inCollection: boolean;
   // The Community post this tanda was shared as, or null when it isn't shared.
   sharedPostId: string | null;
+  // Epoch milliseconds when the tanda was first saved (the DB's created_at),
+  // so the views can order by creation as well as by name.
+  createdAt: number;
 };
 
 /** A playlist item is either a saved tanda or a single cortina song. */
@@ -659,6 +662,7 @@ export function listTandas(): Tanda[] {
     tags: tagStmt.all(t.id) as TandaTag[],
     inCollection: t.in_collection !== 0,
     sharedPostId: shares.get(t.id) ?? null,
+    createdAt: t.created_at,
   }));
 }
 

@@ -342,8 +342,21 @@ function useBoolPref(key) {
   }, [key]);
   return on;
 }
-// "Show song name only" library display preference.
-const useSongNameOnly = () => useBoolPref("songNameOnly");
+// "Show song name only" library display preference, resolved to a title
+// getter: returns the song's display title given the current preference. By
+// default cortinas keep their raw title — they are mostly non-tango tracks whose
+// titles don't follow the "Orchestra – Song" shape the cleaner expects, so the
+// heuristics tend to garble them — unless the "apply to cortinas" sub-option is
+// on. Cortina-ness is the song's own isCortina flag, not its queue role.
+function useSongTitle() {
+  const on = useBoolPref("songNameOnly");
+  const cortinasToo = useBoolPref("songNameOnlyCortinas");
+  return useCallback((s) => {
+    if (!s) return "";
+    if (!on || (s.isCortina && !cortinasToo)) return s.title;
+    return cleanSongTitle(s);
+  }, [on, cortinasToo]);
+}
 // "Collapse folders by default" — folder trees re-seed their open state the
 // moment the DJ flips it.
 const useCollapseFoldersByDefault = () => useBoolPref("collapseFoldersByDefault");
@@ -351,4 +364,4 @@ const useCollapseFoldersByDefault = () => useBoolPref("collapseFoldersByDefault"
 // years are offered in the library's filter dropdowns.
 const useCortinasInFilters = () => useBoolPref("cortinasInFilters");
 
-Object.assign(window, { I, Waveform, EQ, Marquee, PreviewGlyph, previewTitle, clickKeys, GenreTag, useToast, Toast, ConfirmModal, useConfirm, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, isCoreStyle, genreLabel, genreClass, cleanSongTitle, useSongNameOnly, useCollapseFoldersByDefault, useCortinasInFilters });
+Object.assign(window, { I, Waveform, EQ, Marquee, PreviewGlyph, previewTitle, clickKeys, GenreTag, useToast, Toast, ConfirmModal, useConfirm, CORE_STYLES, IMPORT_DEFAULT_STYLE, STYLE_TYPES, isCoreStyle, genreLabel, genreClass, cleanSongTitle, useSongTitle, useCollapseFoldersByDefault, useCortinasInFilters });

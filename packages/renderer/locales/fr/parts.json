@@ -144,5 +144,9 @@
   "buildTanda": "Composer une tanda",
   "browseSuggestions_one": "Voir {count} suggestion",
   "browseSuggestions_other": "Voir {count} suggestions",
-  "newTanda": "Nouvelle tanda"
+  "newTanda": "Nouvelle tanda",
+  "sortTandas": "Trier les tandas",
+  "tandaSortName": "Nom A–Z",
+  "tandaSortNewest": "Plus récentes d’abord",
+  "tandaSortOldest": "Plus anciennes d’abord"
 }

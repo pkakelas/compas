@@ -49,7 +49,7 @@ function BuilderResizer({ width, min, max, onResize, onCommit }) {
 /* ============================ BUILDER · BENCH (side dock) ============================ */
 function BuilderBench({ builder, api, width, preview }) {
   const songs = builder.songs;
-  const songNameOnly = useSongNameOnly();
+  const songTitle = useSongTitle();
   // Drag & drop is the shared queue behaviour (useQueueDrop): a dragged song
   // or slot lands in the gap nearest the pointer, which eases open. The gap's
   // index counts the dragged slot too, so a move further down lands one earlier.
@@ -101,7 +101,7 @@ function BuilderBench({ builder, api, width, preview }) {
               <span className="num"><PreviewGlyph preview={preview} playing={isPlaying} n={i + 1} s={12} /></span>
               <span className="gr"><I.drag s={14} /></span>
               <div className="tt">
-                <div className="t">{songNameOnly ? cleanSongTitle(s) : s.title}</div>
+                <div className="t">{songTitle(s)}</div>
                 <div className="s">{s.orq}{s.singer ? " · " + s.singer : ""} · {s.year}</div>
               </div>
               <span className="du">{s.dur}</span>

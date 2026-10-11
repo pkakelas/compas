@@ -257,12 +257,14 @@ function LibCortinaRow({ c, added, onAdd, preview, makeDrag, draggingId }) {
 function LibraryPanel({ tab, setTab, tandas, cortinas, playlists, onAddTanda, onAddSong, onAddPlaylist, makeDrag, draggingId, preview, flash }) {
   const [genre, setGenre] = useState("all");
   const [q, setQ] = useState("");
+  // Same ordering preference the Tandas view uses (name A–Z / newest / oldest).
+  const [tandaSort, setTandaSort] = useTandaSort();
 
   const filteredTandas = useMemo(() => tandas.filter((t) => {
     const m = tandaMeta(t);
     const hay = ((t.name || "") + " " + m.orq + " " + m.singer + " " + t.songs.map((s) => s.title).join(" ")).toLowerCase();
     return (genre === "all" || tandaTypes(t).includes(genre)) && (q.trim() === "" || hay.includes(q.toLowerCase()));
-  }), [tandas, genre, q, I18N.locale]);
+  }).sort(tandaComparator(tandaSort)), [tandas, genre, q, tandaSort, I18N.locale]);
 
   const filteredPlaylists = useMemo(() => playlists.filter((p) => {
     const hay = ((p.name || "") + " " + p.items.map((it) =>
@@ -303,13 +305,16 @@ function LibraryPanel({ tab, setTab, tandas, cortinas, playlists, onAddTanda, on
               <input value={q} onChange={e => setQ(e.target.value)} placeholder={placeholder} />
             </label>
             {tab === "tandas" && (
-              <div className="tp-filters">
-                {["all", "tango", "vals", "milonga"].map(g => (
-                  <button key={g} className={"tp-filter" + (genre === g ? " is-on" : "")} onClick={() => setGenre(g)}>
-                    {g === "all" ? tr("common.all") : genreLabel(g)}
-                  </button>
-                ))}
-              </div>
+              <React.Fragment>
+                <div className="tp-filters">
+                  {["all", "tango", "vals", "milonga"].map(g => (
+                    <button key={g} className={"tp-filter" + (genre === g ? " is-on" : "")} onClick={() => setGenre(g)}>
+                      {g === "all" ? tr("common.all") : genreLabel(g)}
+                    </button>
+                  ))}
+                </div>
+                <TandaSortSelect sort={tandaSort} setSort={setTandaSort} />
+              </React.Fragment>
             )}
           </div>
 
@@ -407,7 +412,7 @@ function QueueTanda({ item, ix, now, playing, nowIx, onPlaySong, onSkipSong, onR
   // Skipped songs are passed over during live playback, so the header counts
   // only the songs that will actually play — toggling a song's skip updates it.
   const playCount = t.songs.filter((s) => !s.skip).length;
-  const songNameOnly = useSongNameOnly();
+  const songTitle = useSongTitle();
   // Tandas show their songs by default; collapsing to the one-line header is a
   // manual toggle (the caret / header) the DJ controls — nothing folds or
   // expands on its own.
@@ -445,7 +450,7 @@ function QueueTanda({ item, ix, now, playing, nowIx, onPlaySong, onSkipSong, onR
         {!now && <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title={tr("player.remove")}><I.x s={14} /></button>}
       </div>
       {!collapsed && t.songs.map((s, i) => (
-        <QSong key={s.id} n={i + 1} title={songNameOnly ? cleanSongTitle(s) : s.title} dur={s.dur || "—"}
+        <QSong key={s.id} n={i + 1} title={songTitle(s)} dur={s.dur || "—"}
           state={now ? (i < nowIx ? "done" : i === nowIx ? "now" : "up") : "up"}
           playing={playing} skip={!!s.skip}
           onPlay={onPlaySong ? () => onPlaySong(i) : undefined} onSkip={() => onSkipSong(i)} />
@@ -478,7 +483,7 @@ function QueueCortina({ item, now, playing, onPlay, onRemove, drag }) {
 // track card — no curtain, no "floor clears" language.
 function QueueSong({ item, now, playing, onPlay, onRemove, drag }) {
   const s = item.data;
-  const songNameOnly = useSongNameOnly();
+  const songTitle = useSongTitle();
   const { className: dragCls = "", ...handlers } = drag;
   return (
     <div className={"tp-songcard tp-qrow" + (now ? " is-now" : "") + (onPlay ? "" : " is-locked") + " " + dragCls} {...handlers}
@@ -486,7 +491,7 @@ function QueueSong({ item, now, playing, onPlay, onRemove, drag }) {
       <span className="tp-grip" title={tr("player.dragToReorder")}><I.grip s={15} /></span>
       <span className="tp-songcard-glyph">{now && playing ? <EQ /> : <I.note s={15} />}</span>
       <div className="tp-flex1">
-        <div className="tp-songcard-title">{songNameOnly ? cleanSongTitle(s) : s.title}</div>
+        <div className="tp-songcard-title">{songTitle(s)}</div>
         <div className="tp-songcard-sub">{s.orq || tr("player.unknownOrchestra")}{s.singer ? " · " + s.singer : ""}</div>
       </div>
       <div className="tp-fade"><I.clock s={13} /> {s.dur || "—"}</div>
@@ -844,7 +849,7 @@ function SeekBar({ pos, dur, onSeek, className = "tp-nb-bar" }) {
 
 function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, locked, onToggleLock, onPlayPause, onPrev, onNext, onSeek, onFadeToTanda, onVolume, onToggleMute, cortinaSnippetEnabled, cortinaSnippetSec, eqEnabled, eqBands, onToggleEq, onEqBand, onResetEq }) {
   const eqProps = { enabled: eqEnabled, bands: eqBands, onToggle: onToggleEq, onBand: onEqBand, onReset: onResetEq };
-  const songNameOnly = useSongNameOnly();
+  const songTitle = useSongTitle();
   // The bar shows on every tab, so the lock is visible — and can be released —
   // right where it bites. Locked, the transport is inert; volume, EQ and the
   // cortina's "Fade to next tanda" aren't.
@@ -947,7 +952,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, locked, o
       <div className="tp-nb-meta">
         <div className="tp-nb-mark">{playing ? <EQ /> : <I.pause s={16} />}</div>
         <div style={{ minWidth: 0 }}>
-          <Marquee className="tp-nb-title" text={song ? (songNameOnly ? cleanSongTitle(song) : song.title) : "—"} />
+          <Marquee className="tp-nb-title" text={song ? (songTitle(song)) : "—"} />
           <div className="tp-nb-sub"><b>{orq}</b>{song && song.singer ? " · " + song.singer : ""}</div>
         </div>
         {isTanda && (
@@ -2062,7 +2067,7 @@ function EqualizerControl({ enabled, bands, onToggle, onBand, onReset }) {
 // above the floor's NowBar. Only mounts while a track is cued, so it stays out
 // of the way until the DJ auditions something.
 function CueBar({ cue, monitorLabel }) {
-  const songNameOnly = useSongNameOnly();
+  const songTitle = useSongTitle();
   const song = cue.song;
   if (!song) return null;
   const remain = Math.max(0, (cue.dur || 0) - (cue.pos || 0));
@@ -2074,7 +2079,7 @@ function CueBar({ cue, monitorLabel }) {
         <div className="tp-cb-mark"><I.headphones s={20} /></div>
         <div style={{ minWidth: 0 }}>
           <div className="tp-cb-eyebrow">{tr("player.preListen")}{monitorLabel ? " · " + monitorLabel : ""}</div>
-          <div className="tp-cb-title">{songNameOnly ? cleanSongTitle(song) : song.title}</div>
+          <div className="tp-cb-title">{songTitle(song)}</div>
           <div className="tp-cb-sub">{song.orq}{song.singer ? " · " + song.singer : ""}</div>
         </div>
       </div>

@@ -60,9 +60,9 @@ function SetSelect({ value, options, onChange }) {
   );
 }
 
-function SetRow({ label, desc, pill, children }) {
+function SetRow({ label, desc, pill, sub, children }) {
   return (
-    <div className="tp-set-row">
+    <div className={"tp-set-row" + (sub ? " is-sub" : "")}>
       <div className="tp-set-row-l">
         <div className="lb">{label}{pill && <span className="tp-set-pill">{pill}</span>}</div>
         {desc && <div className="ds">{desc}</div>}
@@ -184,7 +184,7 @@ function CortinaPlaybackCard() {
       </SetRow>
 
       {playback.cortinaSnippetEnabled && (
-        <SetRow label={tr("settings.snippetLenLabel")} desc={tr("settings.snippetLenDesc")}>
+        <SetRow sub label={tr("settings.snippetLenLabel")} desc={tr("settings.snippetLenDesc")}>
           <input className="tp-set-range" type="range" min={3} max={300} step={1}
             value={playback.cortinaSnippetSec}
             onChange={(e) => playback.setCortinaSnippetSec(Number(e.target.value))} />
@@ -275,6 +275,12 @@ function LibraryDisplayCard({ t, setTweak }) {
         desc={tr("settings.songNameOnlyDesc")}>
         <SetSwitch checked={!!t.songNameOnly} onChange={(v) => setTweak("songNameOnly", v)} />
       </SetRow>
+      {t.songNameOnly && (
+        <SetRow sub label={tr("settings.songNameOnlyCortinasLabel")}
+          desc={tr("settings.songNameOnlyCortinasDesc")}>
+          <SetSwitch checked={!!t.songNameOnlyCortinas} onChange={(v) => setTweak("songNameOnlyCortinas", v)} />
+        </SetRow>
+      )}
       <SetRow label={tr("settings.collapseLabel")}
         desc={tr("settings.collapseDesc")}>
         <SetSwitch checked={!!t.collapseFoldersByDefault} onChange={(v) => setTweak("collapseFoldersByDefault", v)} />

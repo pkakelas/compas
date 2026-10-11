@@ -144,5 +144,9 @@
   "buildTanda": "Build a tanda",
   "browseSuggestions_one": "Browse {count} suggestion",
   "browseSuggestions_other": "Browse {count} suggestions",
-  "newTanda": "New tanda"
+  "newTanda": "New tanda",
+  "sortTandas": "Sort tandas",
+  "tandaSortName": "Name A–Z",
+  "tandaSortNewest": "Newest first",
+  "tandaSortOldest": "Oldest first"
 }
