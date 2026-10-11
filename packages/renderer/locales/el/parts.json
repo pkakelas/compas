@@ -144,5 +144,9 @@
   "buildTanda": "Δημιουργία tanda",
   "browseSuggestions_one": "Δείτε {count} πρόταση",
   "browseSuggestions_other": "Δείτε {count} προτάσεις",
-  "newTanda": "Νέα tanda"
+  "newTanda": "Νέα tanda",
+  "sortTandas": "Ταξινόμηση tandas",
+  "tandaSortName": "Όνομα Α–Ω",
+  "tandaSortNewest": "Νεότερες πρώτα",
+  "tandaSortOldest": "Παλαιότερες πρώτα"
 }

@@ -144,5 +144,9 @@
   "buildTanda": "Tanda を作成",
   "browseSuggestions_one": "{count}件のおすすめを見る",
   "browseSuggestions_other": "{count}件のおすすめを見る",
-  "newTanda": "新規 tanda"
+  "newTanda": "新規 tanda",
+  "sortTandas": "tanda を並べ替え",
+  "tandaSortName": "名前 A–Z",
+  "tandaSortNewest": "新しい順",
+  "tandaSortOldest": "古い順"
 }

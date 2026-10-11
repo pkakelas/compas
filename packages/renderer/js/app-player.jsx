@@ -257,12 +257,14 @@ function LibCortinaRow({ c, added, onAdd, preview, makeDrag, draggingId }) {
 function LibraryPanel({ tab, setTab, tandas, cortinas, playlists, onAddTanda, onAddSong, onAddPlaylist, makeDrag, draggingId, preview, flash }) {
   const [genre, setGenre] = useState("all");
   const [q, setQ] = useState("");
+  // Same ordering preference the Tandas view uses (name A–Z / newest / oldest).
+  const [tandaSort, setTandaSort] = useTandaSort();
 
   const filteredTandas = useMemo(() => tandas.filter((t) => {
     const m = tandaMeta(t);
     const hay = ((t.name || "") + " " + m.orq + " " + m.singer + " " + t.songs.map((s) => s.title).join(" ")).toLowerCase();
     return (genre === "all" || tandaTypes(t).includes(genre)) && (q.trim() === "" || hay.includes(q.toLowerCase()));
-  }), [tandas, genre, q, I18N.locale]);
+  }).sort(tandaComparator(tandaSort)), [tandas, genre, q, tandaSort, I18N.locale]);
 
   const filteredPlaylists = useMemo(() => playlists.filter((p) => {
     const hay = ((p.name || "") + " " + p.items.map((it) =>
@@ -303,13 +305,16 @@ function LibraryPanel({ tab, setTab, tandas, cortinas, playlists, onAddTanda, on
               <input value={q} onChange={e => setQ(e.target.value)} placeholder={placeholder} />
             </label>
             {tab === "tandas" && (
-              <div className="tp-filters">
-                {["all", "tango", "vals", "milonga"].map(g => (
-                  <button key={g} className={"tp-filter" + (genre === g ? " is-on" : "")} onClick={() => setGenre(g)}>
-                    {g === "all" ? tr("common.all") : genreLabel(g)}
-                  </button>
-                ))}
-              </div>
+              <React.Fragment>
+                <div className="tp-filters">
+                  {["all", "tango", "vals", "milonga"].map(g => (
+                    <button key={g} className={"tp-filter" + (genre === g ? " is-on" : "")} onClick={() => setGenre(g)}>
+                      {g === "all" ? tr("common.all") : genreLabel(g)}
+                    </button>
+                  ))}
+                </div>
+                <TandaSortSelect sort={tandaSort} setSort={setTandaSort} />
+              </React.Fragment>
             )}
           </div>
 
