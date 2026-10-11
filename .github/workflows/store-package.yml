@@ -15,11 +15,6 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      submit:
-        description: 'Submit for certification (off: leave a draft in Partner Center to review)'
-        type: boolean
-        default: true
 
 jobs:
   appx:
@@ -112,9 +107,11 @@ jobs:
         uses: microsoft/microsoft-store-apppublisher@v1.4
 
       # Starts a new submission from the last published one with this bundle in
-      # it (replacing any draft left open in Partner Center), then either
-      # submits it for certification or leaves it as a draft. A submit waits
-      # only for Partner Center to accept the submission, not for certification.
+      # it and submits it for certification, waiting only for Partner Center to
+      # accept it, not for certification itself. There is no draft mode: the
+      # Store only takes in an uploaded package when the submission is
+      # committed. A draft started by hand in Partner Center blocks this step
+      # (the API may only replace submissions it created), so delete it first.
       - name: Submit to the Store
         if: steps.store.outputs.ready == 'true'
         shell: pwsh
@@ -125,14 +122,8 @@ jobs:
           SELLER_ID: ${{ secrets.SELLER_ID }}
           PRODUCT_ID: ${{ vars.STORE_PRODUCT_ID }}
           BUNDLE: ${{ steps.bundle.outputs.path }}
-          # Tag pushes have no inputs: they always submit.
-          SUBMIT: ${{ github.event_name != 'workflow_dispatch' || inputs.submit }}
         run: |
           msstore reconfigure --tenantId $env:TENANT_ID --sellerId $env:SELLER_ID --clientId $env:CLIENT_ID --clientSecret $env:CLIENT_SECRET
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ($env:SUBMIT -eq 'true') {
-            msstore publish $env:BUNDLE --appId $env:PRODUCT_ID
-          } else {
-            msstore publish $env:BUNDLE --appId $env:PRODUCT_ID --noCommit
-          }
+          msstore publish $env:BUNDLE --appId $env:PRODUCT_ID
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

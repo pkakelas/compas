@@ -69,13 +69,19 @@ marketing site should link there — Vercel is great for the site, but large
 | Windows (Intel/AMD) | `Compas-{version}-win-x64.exe` |
 | Windows (ARM) | `Compas-{version}-win-arm64.exe` |
 
-**Microsoft Store packages** are built separately, by running the
-[Store package workflow](.github/workflows/store-package.yml) by hand. It
-attaches `Compas-{version}-win-x64.appx` and `Compas-{version}-win-arm64.appx`
-to the workflow run; upload both to the submission in Partner Center. It needs
-the repo variables `APPX_IDENTITY_NAME`, `APPX_PUBLISHER` and
+**Microsoft Store packages** are built by the separate
+[Store package workflow](.github/workflows/store-package.yml), which runs for
+every `v*` tag (or by hand). It bundles the x64 and arm64 packages into
+`Compas-{version}.msixbundle` and submits it to the Store for certification, so
+nothing is uploaded by hand; the packages are also attached to the run. It
+needs the repo variables `APPX_IDENTITY_NAME`, `APPX_PUBLISHER` and
 `APPX_PUBLISHER_DISPLAY_NAME` (values from Partner Center → Product identity),
-plus `APPX_DISPLAY_NAME` if the reserved app name is not "Compás". A Store
+plus `APPX_DISPLAY_NAME` if the reserved app name is not "Compás". Submitting
+also needs the `STORE_PRODUCT_ID` variable and the `AZURE_AD_TENANT_ID`,
+`AZURE_AD_APPLICATION_CLIENT_ID`, `AZURE_AD_APPLICATION_SECRET` and `SELLER_ID`
+secrets, for an Entra app added in Partner Center → User management with the
+Manager role; without them the workflow only builds. A submission started by
+hand in Partner Center blocks it, so delete such a draft first. A Store
 install is updated by the Store, so the in-app updater is off there.
 
 **Download links on Vercel** — point buttons at GitHub:
