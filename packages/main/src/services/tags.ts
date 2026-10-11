@@ -30,7 +30,8 @@ export type SongTags = {
   singer: string;
   album: string | null;
   year: number | null;
-  genre: string;
+  // Omitted (undefined) → the file's existing genre tag is kept as is.
+  genre?: string;
 };
 
 /** ffmpeg `-metadata key=value` pairs derived from the editable fields. Empty
@@ -41,8 +42,8 @@ function metadataArgs(tags: SongTags): string[] {
     ['artist', joinArtistTag(tags.artist ?? '', tags.singer ?? '')],
     ['album', tags.album ?? ''],
     ['date', tags.year != null ? String(tags.year) : ''],
-    ['genre', tags.genre ?? ''],
   ];
+  if (tags.genre !== undefined) pairs.push(['genre', tags.genre ?? '']);
   const args: string[] = [];
   for (const [key, value] of pairs) {
     args.push('-metadata', `${key}=${value}`);

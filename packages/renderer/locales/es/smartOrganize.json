@@ -57,5 +57,12 @@
   "note.styleMismatch": "El título o la carpeta sugieren {own}; el catálogo dice {catalog}",
   "note.singerNotOrchestra": "Parece un cantor, no una orquesta",
   "note.instrumentalNotOrchestra": "«Instrumental» no es una orquesta",
-  "note.notOrchestra": "No es una orquesta"
+  "note.notOrchestra": "No es una orquesta",
+  "footNoteFiles": "Guardado en Compás y escrito en tus archivos de música.",
+  "applyingFiles": "Actualizando archivos… {done} de {total}",
+  "appliedNextFiles": "Guardado en Compás y en tus archivos de música. Siguiente: <b>{tier}</b>.",
+  "appliedSavedFiles": "Guardado en Compás y en tus archivos de música.",
+  "doneBodyFiles": "Los cambios se han guardado en Compás y en tus archivos de música.",
+  "filesFailed_one": "{count} archivo no se pudo actualizar (falta o es de solo lectura). El cambio se conserva en Compás.",
+  "filesFailed_other": "{count} archivos no se pudieron actualizar (faltan o son de solo lectura). Los cambios se conservan en Compás."
 }

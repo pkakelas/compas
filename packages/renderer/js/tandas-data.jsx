@@ -227,18 +227,24 @@ const Store = {
     }
     return await window.compas.previewSmartOrganize();
   },
-  // Apply the DJ-approved subset of Smart Organize changes (Compás-only). The
-  // main process returns the fresh library; re-apply it and refresh tandas/
-  // playlists since they embed copies of the songs.
+  // Apply the DJ-approved subset of Smart Organize changes (also used by the
+  // bulk right-click edits). Honors the "also save to the music files" setting:
+  // the main process updates the database and, when on, each song's file. It
+  // returns the fresh library; re-apply it and refresh tandas/playlists since
+  // they embed copies of the songs. Resolves to {writeFile, filesUpdated,
+  // fileErrors} so the caller can say where the changes went.
   async applySmartOrganize(changes) {
-    if (!window.compas.applySmartOrganize || !changes || !changes.length) return;
-    const library = await window.compas.applySmartOrganize(changes);
-    if (library) _applyLibrary(library);
+    if (!window.compas.applySmartOrganize || !changes || !changes.length) return null;
+    let writeFile = false;
+    try { writeFile = localStorage.getItem("compas.writeTagsToFiles") === "1"; } catch (e) { /* ignore */ }
+    const res = await window.compas.applySmartOrganize(changes, { writeFile });
+    if (res && res.library) _applyLibrary(res.library);
     const [tandas, playlists] = await Promise.all([
       window.compas.listTandas(),
       window.compas.listPlaylists(),
     ]);
     _set({ tandas: tandas || [], playlists: playlists || [] });
+    return { writeFile, filesUpdated: (res && res.filesUpdated) || 0, fileErrors: (res && res.fileErrors) || 0 };
   },
   // Detailed import — step 1: pick a folder and scan it for preview (nothing is
   // saved). Returns the folder tree, or null if cancelled.

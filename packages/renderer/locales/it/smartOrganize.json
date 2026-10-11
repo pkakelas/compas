@@ -57,5 +57,12 @@
   "note.styleMismatch": "Titolo/cartella indicano {own}, il catalogo dice {catalog}",
   "note.singerNotOrchestra": "Sembra un cantante, non un’orchestra",
   "note.instrumentalNotOrchestra": "«Instrumental» non è un’orchestra",
-  "note.notOrchestra": "Non è un’orchestra"
+  "note.notOrchestra": "Non è un’orchestra",
+  "footNoteFiles": "Salvato in Compás e scritto nei tuoi file musicali.",
+  "applyingFiles": "Aggiornamento dei file… {done} di {total}",
+  "appliedNextFiles": "Salvato in Compás e nei tuoi file musicali. A seguire: <b>{tier}</b>.",
+  "appliedSavedFiles": "Salvato in Compás e nei tuoi file musicali.",
+  "doneBodyFiles": "Le modifiche sono salvate in Compás e nei tuoi file musicali.",
+  "filesFailed_one": "{count} file non è stato aggiornato (mancante o di sola lettura). La modifica resta salvata in Compás.",
+  "filesFailed_other": "{count} file non sono stati aggiornati (mancanti o di sola lettura). Le modifiche restano salvate in Compás."
 }

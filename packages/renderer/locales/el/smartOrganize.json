@@ -57,5 +57,12 @@
   "note.styleMismatch": "Ο τίτλος/φάκελος δείχνει {own}, ο κατάλογος λέει {catalog}",
   "note.singerNotOrchestra": "Μοιάζει με τραγουδιστή, όχι με ορχήστρα",
   "note.instrumentalNotOrchestra": "Το «Instrumental» δεν είναι ορχήστρα",
-  "note.notOrchestra": "Δεν είναι ορχήστρα"
+  "note.notOrchestra": "Δεν είναι ορχήστρα",
+  "footNoteFiles": "Αποθηκεύεται στο Compás και γράφεται στα αρχεία μουσικής σας.",
+  "applyingFiles": "Ενημέρωση αρχείων… {done} από {total}",
+  "appliedNextFiles": "Αποθηκεύτηκε στο Compás και στα αρχεία μουσικής σας. Επόμενο: <b>{tier}</b>.",
+  "appliedSavedFiles": "Αποθηκεύτηκε στο Compás και στα αρχεία μουσικής σας.",
+  "doneBodyFiles": "Οι αλλαγές αποθηκεύτηκαν στο Compás και στα αρχεία μουσικής σας.",
+  "filesFailed_one": "{count} αρχείο δεν ενημερώθηκε (λείπει ή είναι μόνο για ανάγνωση). Η αλλαγή διατηρείται στο Compás.",
+  "filesFailed_other": "{count} αρχεία δεν ενημερώθηκαν (λείπουν ή είναι μόνο για ανάγνωση). Οι αλλαγές διατηρούνται στο Compás."
 }

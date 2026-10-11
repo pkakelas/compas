@@ -92,5 +92,5 @@
   "filesDesc": "Se le modifiche fatte in Compás vengono scritte anche nei file dei brani sul tuo computer.",
   "writeTagsLabel": "Salva le modifiche anche nei file musicali",
   "writeTagsDesc": "Se attivo, i dati che modifichi (titolo, orchestra, cantante, anno, album, stile) vengono scritti anche dentro il file stesso, così iTunes e le altre app mostrano gli stessi nomi. Se disattivo, le tue modifiche restano dentro Compás e nulla sul tuo computer viene toccato.",
-  "writeTagsNote": "La tua musica non viene mai alterata, solo le sue etichette. Orchestra e cantante vengono salvati insieme come “Orchestra - Cantante”, come già sono etichettate la maggior parte delle collezioni di tango. Vale per i brani che modifichi uno a uno; il Riordino intelligente tiene sempre le sue modifiche dentro Compás."
+  "writeTagsNote": "La tua musica non viene mai alterata, solo le sue etichette. Orchestra e cantante vengono salvati insieme come “Orchestra - Cantante”, come già sono etichettate la maggior parte delle collezioni di tango. Vale anche per il Riordino intelligente e per la modifica di più brani insieme."
 }

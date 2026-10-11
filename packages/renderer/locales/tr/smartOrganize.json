@@ -57,5 +57,12 @@
   "note.styleMismatch": "Başlığa/klasöre göre {own}, kataloğa göre {catalog}",
   "note.singerNotOrchestra": "Orkestra değil, şarkıcı gibi görünüyor",
   "note.instrumentalNotOrchestra": "“Instrumental” bir orkestra değil",
-  "note.notOrchestra": "Orkestra değil"
+  "note.notOrchestra": "Orkestra değil",
+  "footNoteFiles": "Compás’a kaydedilir ve müzik dosyalarınıza yazılır.",
+  "applyingFiles": "Dosyalar güncelleniyor… {done} / {total}",
+  "appliedNextFiles": "Compás’a ve müzik dosyalarınıza kaydedildi. Sırada: <b>{tier}</b>.",
+  "appliedSavedFiles": "Compás’a ve müzik dosyalarınıza kaydedildi.",
+  "doneBodyFiles": "Değişiklikler Compás’a ve müzik dosyalarınıza kaydedildi.",
+  "filesFailed_one": "{count} dosya güncellenemedi (eksik veya salt okunur). Değişiklik Compás’ta saklanıyor.",
+  "filesFailed_other": "{count} dosya güncellenemedi (eksik veya salt okunur). Değişiklikler Compás’ta saklanıyor."
 }

@@ -233,6 +233,15 @@ function SmartOrganizeModal({ onClose, onApplied }) {
   const [q, setQ] = useState("");
   const [caps, setCaps] = useState({ confirmed: SO_CAP_STEP, suggested: SO_CAP_STEP, review: SO_CAP_STEP });
   const [appliedCount, setAppliedCount] = useState(0);
+  // Whether changes also go into the music files (Settings), progress of that
+  // file writing during an apply, and how many files couldn't be updated.
+  const writeToFiles = useBoolPref("writeTagsToFiles");
+  const [fileProgress, setFileProgress] = useState(null); // {done, total} | null
+  const [fileErrorsTotal, setFileErrorsTotal] = useState(0);
+  useEffect(() => {
+    if (!window.compas || !window.compas.onSmartOrganizeFileProgress) return;
+    return window.compas.onSmartOrganizeFileProgress((p) => setFileProgress(p));
+  }, []);
   const [tab, setTab] = useState("confirmed"); // active tier tab
   // After a tab is applied, holds { count, nextTab } until the DJ dismisses the
   // confirmation modal; null the rest of the time.
@@ -330,8 +339,11 @@ function SmartOrganizeModal({ onClose, onApplied }) {
       });
     if (!changes.length) return;
     setPhase("applying");
+    setFileProgress(null);
     try {
-      await Store.applySmartOrganize(changes);
+      const res = (await Store.applySmartOrganize(changes)) || { writeFile: false, fileErrors: 0 };
+      setFileProgress(null);
+      setFileErrorsTotal((n) => n + res.fileErrors);
       const ids = new Set(changes.map((c) => c.id));
       const remaining = proposals.filter((p) => !ids.has(p.id));
       setProposals(remaining);
@@ -343,9 +355,10 @@ function SmartOrganizeModal({ onClose, onApplied }) {
       const nextTab = order
         .slice(order.indexOf(tab) + 1)
         .find((id) => remaining.some((p) => p.tier === id)) || null;
-      setApplied({ count: changes.length, nextTab });
+      setApplied({ count: changes.length, nextTab, writeFile: res.writeFile, fileErrors: res.fileErrors });
       setPhase("review");
     } catch (e) {
+      setFileProgress(null);
       setPhase("error");
     }
   };
@@ -394,7 +407,8 @@ function SmartOrganizeModal({ onClose, onApplied }) {
         <div className="so-center">
           <div className="so-ic ok"><I.check s={22} /></div>
           <h3>{tr("smartOrganize.doneTitle", { count: appliedCount })}</h3>
-          <p>{tr("smartOrganize.doneBody")}</p>
+          <p>{writeToFiles ? tr("smartOrganize.doneBodyFiles") : tr("smartOrganize.doneBody")}</p>
+          {fileErrorsTotal > 0 && <p className="so-file-warn">{tr("smartOrganize.filesFailed", { count: fileErrorsTotal })}</p>}
           <button className="tp-btn primary" onClick={onClose}>{tr("smartOrganize.done")}</button>
         </div>
       );
@@ -467,12 +481,14 @@ function SmartOrganizeModal({ onClose, onApplied }) {
 
         {showFooter && (
           <footer className="so-foot">
-            <div className="so-foot-note"><I.check s={13} /> {tr("smartOrganize.footNote")}</div>
+            <div className="so-foot-note"><I.check s={13} /> {writeToFiles ? tr("smartOrganize.footNoteFiles") : tr("smartOrganize.footNote")}</div>
             <div className="so-foot-actions">
               <button className="tp-btn" onClick={onClose} disabled={phase === "applying"}>{tr("common.cancel")}</button>
               <button className="tp-btn primary" onClick={apply} disabled={phase === "applying" || tabSelectedCount === 0}>
                 {phase === "applying"
-                  ? tr("smartOrganize.applying")
+                  ? (fileProgress && fileProgress.total
+                    ? tr("smartOrganize.applyingFiles", { done: fileProgress.done, total: fileProgress.total })
+                    : tr("smartOrganize.applying"))
                   : tr("smartOrganize.applyChanges", { count: tabSelectedCount })}
               </button>
             </div>
@@ -486,9 +502,12 @@ function SmartOrganizeModal({ onClose, onApplied }) {
               <h3>{tr("smartOrganize.appliedTitle", { count: applied.count })}</h3>
               <p>
                 {applied.nextTab
-                  ? trx("smartOrganize.appliedNext", { tier: soTierTitle(applied.nextTab), b: (s) => <b>{s}</b> })
-                  : tr("smartOrganize.appliedSaved")}
+                  ? (applied.writeFile
+                    ? trx("smartOrganize.appliedNextFiles", { tier: soTierTitle(applied.nextTab), b: (s) => <b>{s}</b> })
+                    : trx("smartOrganize.appliedNext", { tier: soTierTitle(applied.nextTab), b: (s) => <b>{s}</b> }))
+                  : (applied.writeFile ? tr("smartOrganize.appliedSavedFiles") : tr("smartOrganize.appliedSaved"))}
               </p>
+              {applied.fileErrors > 0 && <p className="so-file-warn">{tr("smartOrganize.filesFailed", { count: applied.fileErrors })}</p>}
               <button className="tp-btn primary" onClick={dismissApplied}>
                 {applied.nextTab
                   ? tr("smartOrganize.continueTo", { tier: soTierTitle(applied.nextTab) })

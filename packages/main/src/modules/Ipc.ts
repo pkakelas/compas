@@ -479,14 +479,67 @@ export class IpcModule implements AppModule {
       return proposeLibrary(songs);
     });
 
-    // Apply the DJ-approved subset (Compás-only: database update, files
-    // untouched), then push the fresh library to every window.
+    // Apply the DJ-approved subset to the database and push the fresh library
+    // to every window. With `writeFile` (the DJ's "also save to the music
+    // files" setting) each changed song's tags are then written into its file
+    // too — a few at a time, with progress events for the modal, and a failed
+    // file never undoes the database change. The genre tag is only rewritten
+    // when the change itself set a style, so a file's own genre tag survives an
+    // orchestra/singer/year fix.
     ipcMain.handle(
       'smartOrganize:apply',
-      (_event, changes: SmartOrganizeChange[]): Library => {
-        const library = applySmartOrganize(Array.isArray(changes) ? changes : []);
+      async (
+        _event,
+        changes: SmartOrganizeChange[],
+        opts?: {writeFile?: boolean},
+      ): Promise<{library: Library; filesUpdated: number; fileErrors: number}> => {
+        const list = Array.isArray(changes) ? changes : [];
+        const library = applySmartOrganize(list);
         broadcastLibrary(library);
-        return library;
+        let filesUpdated = 0;
+        let fileErrors = 0;
+        if (opts?.writeFile && list.length > 0) {
+          const byId = new Map(library.songs.map(s => [s.id, s]));
+          const total = list.length;
+          let done = 0;
+          const progress = () => {
+            for (const w of BrowserWindow.getAllWindows()) {
+              if (!w.isDestroyed()) w.webContents.send('smartOrganize:fileProgress', {done, total});
+            }
+          };
+          progress();
+          const queue = [...list];
+          const worker = async () => {
+            for (let c = queue.shift(); c; c = queue.shift()) {
+              const song = byId.get(String(c.id));
+              const path = song ? getSongPath(song.id) : null;
+              if (song && path) {
+                try {
+                  await access(path, fsConstants.W_OK);
+                  await writeSongTags(path, {
+                    title: song.title,
+                    artist: song.orq,
+                    singer: song.singer,
+                    album: song.album,
+                    year: song.year,
+                    genre: c.genre !== undefined ? song.genre : undefined,
+                  });
+                  filesUpdated++;
+                } catch (err) {
+                  fileErrors++;
+                  console.warn(
+                    `[smartOrganize:apply] file not updated (${classifyFileWriteError(err)}): ${path}`,
+                    err,
+                  );
+                }
+              }
+              done++;
+              progress();
+            }
+          };
+          await Promise.all(Array.from({length: 3}, worker));
+        }
+        return {library, filesUpdated, fileErrors};
       },
     );
 
