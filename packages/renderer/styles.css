@@ -1372,6 +1372,7 @@ button.tp-nav {
 .tp-modal-confirm.danger:hover,
 .tp-modal-confirm.accent:hover { background: var(--accent-deep); opacity: 1; }
 /* two big choices instead of confirm/cancel (the first-save "where do edits go?") */
+.tp-modal-scrim.top { z-index: 300; }
 .tp-modal-choice { max-width: 420px; }
 .tp-modal-options { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 .tp-modal-option {
@@ -1384,6 +1385,8 @@ button.tp-nav {
 .tp-modal-option-label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
 .tp-modal-option-desc { font-size: 12px; line-height: 1.4; color: var(--ink-2); }
 .tp-modal-foot { margin-top: 12px; font-size: 11.5px; color: var(--ink-3s); }
+/* Smart Organize: some files couldn't be written (changes still saved in Compás) */
+.so-file-warn { margin-top: 8px; font-size: 12.5px; line-height: 1.45; color: var(--accent-deep); }
 
 /* song row (sits beneath its folder in the tree) */
 .tv-song {

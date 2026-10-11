@@ -96,11 +96,22 @@ function previewSmartOrganize() {
   return ipcRenderer.invoke('smartOrganize:preview');
 }
 
-/** Apply the approved Smart Organize changes (Compás-only). Returns the fresh library. */
+/** Apply the approved Smart Organize changes to the database and, with
+ *  `writeFile`, into each song's file too. Returns {library, filesUpdated,
+ *  fileErrors}; a failed file write never undoes the database change. */
 function applySmartOrganize(
   changes: {id: string; orq?: string; singer?: string; year?: number | null; genre?: string}[],
+  opts?: {writeFile?: boolean},
 ) {
-  return ipcRenderer.invoke('smartOrganize:apply', changes);
+  return ipcRenderer.invoke('smartOrganize:apply', changes, opts);
+}
+
+/** Subscribe to Smart Organize's file-writing progress ({done, total}) while an
+ *  apply with `writeFile` runs. Returns an unsubscribe function. */
+function onSmartOrganizeFileProgress(cb: (p: {done: number; total: number}) => void) {
+  const listener = (_event: unknown, p: {done: number; total: number}) => cb(p);
+  ipcRenderer.on('smartOrganize:fileProgress', listener);
+  return () => ipcRenderer.removeListener('smartOrganize:fileProgress', listener);
 }
 
 /** Pick a folder and scan it for preview (nothing is saved). Returns the folder tree, or null if cancelled. */
@@ -133,8 +144,8 @@ function importCancel() {
 }
 
 /** Set the style (genre) of many existing songs at once. Returns the fresh library. */
-function setSongGenres(updates: {id: string; genre: string}[]) {
-  return ipcRenderer.invoke('songs:setGenres', updates);
+function setSongGenres(updates: {id: string; genre: string}[], opts?: {writeFile?: boolean}) {
+  return ipcRenderer.invoke('songs:setGenres', updates, opts);
 }
 
 function listTandas() {
@@ -461,6 +472,7 @@ export {
   setFolderCortina,
   previewSmartOrganize,
   applySmartOrganize,
+  onSmartOrganizeFileProgress,
   importScanPreview,
   importScanPreviewPath,
   pathForFile,

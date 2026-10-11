@@ -57,5 +57,11 @@
   "note.genreMismatch": "从标题或文件夹看是 {own}，资料库中是 {catalog}",
   "note.singerNotOrchestra": "看起来是歌手，而不是乐团",
   "note.instrumentalNotOrchestra": "“Instrumental”不是乐团",
-  "note.notOrchestra": "不是乐团"
+  "note.notOrchestra": "不是乐团",
+  "footNoteFiles": "保存到 Compás 并写入你的音乐文件。",
+  "applyingFiles": "正在更新文件… {done} / {total}",
+  "appliedNextFiles": "已保存到 Compás 和你的音乐文件。接下来：<b>{tier}</b>。",
+  "appliedSavedFiles": "已保存到 Compás 和你的音乐文件。",
+  "doneBodyFiles": "修改已保存到 Compás 和你的音乐文件。",
+  "filesFailed_other": "{count} 个文件无法更新（缺失或只读）。修改已保留在 Compás 中。"
 }

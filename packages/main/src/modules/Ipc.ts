@@ -97,6 +97,66 @@ function classifyFileWriteError(err: unknown): FileWriteError {
   return 'other';
 }
 
+/** Genres that are Compás bookkeeping rather than a musical genre worth
+ *  stamping into a file's genre tag: writing them would clobber a real one. */
+const APP_ONLY_GENRES = new Set(['mixed', 'unknown']);
+function fileGenre(genre: string | null | undefined): string | undefined {
+  return genre && !APP_ONLY_GENRES.has(genre) ? genre : undefined;
+}
+
+/**
+ * Write the current tags of the given songs (as the fresh `library` has them)
+ * into their files, a few at a time, broadcasting {done, total} on
+ * `smartOrganize:fileProgress` for the UI. `withGenre` says whether that
+ * song's genre tag is rewritten too — only when the edit set one, so a file's
+ * own genre tag survives an orchestra/singer/year fix. A failed file is
+ * counted and logged; the database change stands.
+ */
+async function writeTagsForSongs(
+  library: Library,
+  entries: {id: string; withGenre: boolean}[],
+): Promise<{filesUpdated: number; fileErrors: number}> {
+  const byId = new Map(library.songs.map(s => [s.id, s]));
+  const total = entries.length;
+  let done = 0;
+  let filesUpdated = 0;
+  let fileErrors = 0;
+  const progress = () => {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('smartOrganize:fileProgress', {done, total});
+    }
+  };
+  progress();
+  const queue = [...entries];
+  const worker = async () => {
+    for (let e = queue.shift(); e; e = queue.shift()) {
+      const song = byId.get(String(e.id));
+      const path = song ? getSongPath(song.id) : null;
+      if (song && path) {
+        try {
+          await access(path, fsConstants.W_OK);
+          await writeSongTags(path, {
+            title: song.title,
+            artist: song.orq,
+            singer: song.singer,
+            album: song.album,
+            year: song.year,
+            genre: e.withGenre ? fileGenre(song.genre) : undefined,
+          });
+          filesUpdated++;
+        } catch (err) {
+          fileErrors++;
+          console.warn(`[tags] file not updated (${classifyFileWriteError(err)}): ${path}`, err);
+        }
+      }
+      done++;
+      progress();
+    }
+  };
+  await Promise.all(Array.from({length: 3}, worker));
+  return {filesUpdated, fileErrors};
+}
+
 const PLAYLIST_EXTS = new Set(['.m3u', '.m3u8']);
 export function isPlaylistFile(file: string): boolean {
   return PLAYLIST_EXTS.has(extname(file).toLowerCase());
@@ -330,11 +390,25 @@ export class IpcModule implements AppModule {
 
     // Re-type existing songs (the tree tool run on the current library): set
     // each song's style directly. Compás-only; files untouched.
-    ipcMain.handle('songs:setGenres', (_event, updates: {id: string; genre: string}[]): Library => {
-      const library = setSongGenres(Array.isArray(updates) ? updates : []);
-      broadcastLibrary(library);
-      return library;
-    });
+    // With `writeFile` (the DJ's "also save to the music files" setting) the
+    // genre tag of each song is written into its file too; a failed file never
+    // undoes the database change.
+    ipcMain.handle(
+      'songs:setGenres',
+      async (
+        _event,
+        updates: {id: string; genre: string}[],
+        opts?: {writeFile?: boolean},
+      ): Promise<{library: Library; filesUpdated: number; fileErrors: number}> => {
+        const list = Array.isArray(updates) ? updates : [];
+        const library = setSongGenres(list);
+        broadcastLibrary(library);
+        const written = opts?.writeFile && list.length > 0
+          ? await writeTagsForSongs(library, list.map(u => ({id: u.id, withGenre: true})))
+          : {filesUpdated: 0, fileErrors: 0};
+        return {library, ...written};
+      },
+    );
 
     // Flag/unflag songs as cortinas (the usage flag, independent of genre).
     ipcMain.handle(
@@ -446,7 +520,7 @@ export class IpcModule implements AppModule {
               singer: input.singer,
               album: input.album,
               year: input.year,
-              genre: input.genre,
+              genre: fileGenre(input.genre),
             });
           } catch (err) {
             fileError = classifyFileWriteError(err);
@@ -479,14 +553,27 @@ export class IpcModule implements AppModule {
       return proposeLibrary(songs);
     });
 
-    // Apply the DJ-approved subset (Compás-only: database update, files
-    // untouched), then push the fresh library to every window.
+    // Apply the DJ-approved subset to the database and push the fresh library
+    // to every window. With `writeFile` (the DJ's "also save to the music
+    // files" setting) each changed song's tags are then written into its file
+    // too — a few at a time, with progress events for the modal, and a failed
+    // file never undoes the database change. The genre tag is only rewritten
+    // when the change itself set a style, so a file's own genre tag survives an
+    // orchestra/singer/year fix.
     ipcMain.handle(
       'smartOrganize:apply',
-      (_event, changes: SmartOrganizeChange[]): Library => {
-        const library = applySmartOrganize(Array.isArray(changes) ? changes : []);
+      async (
+        _event,
+        changes: SmartOrganizeChange[],
+        opts?: {writeFile?: boolean},
+      ): Promise<{library: Library; filesUpdated: number; fileErrors: number}> => {
+        const list = Array.isArray(changes) ? changes : [];
+        const library = applySmartOrganize(list);
         broadcastLibrary(library);
-        return library;
+        const written = opts?.writeFile && list.length > 0
+          ? await writeTagsForSongs(library, list.map(c => ({id: c.id, withGenre: c.genre !== undefined})))
+          : {filesUpdated: 0, fileErrors: 0};
+        return {library, ...written};
       },
     );
 

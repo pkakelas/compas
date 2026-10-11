@@ -57,5 +57,12 @@
   "note.genreMismatch": "Titel/Ordner deutet auf {own} hin, der Katalog sagt {catalog}",
   "note.singerNotOrchestra": "Sieht nach einem Sänger aus, nicht nach einem Orchester",
   "note.instrumentalNotOrchestra": "„Instrumental“ ist kein Orchester",
-  "note.notOrchestra": "Kein Orchester"
+  "note.notOrchestra": "Kein Orchester",
+  "footNoteFiles": "In Compás gespeichert und in deine Musikdateien geschrieben.",
+  "applyingFiles": "Dateien werden aktualisiert… {done} von {total}",
+  "appliedNextFiles": "In Compás und in deinen Musikdateien gespeichert. Als Nächstes: <b>{tier}</b>.",
+  "appliedSavedFiles": "In Compás und in deinen Musikdateien gespeichert.",
+  "doneBodyFiles": "Die Änderungen sind in Compás und in deinen Musikdateien gespeichert.",
+  "filesFailed_one": "{count} Datei konnte nicht aktualisiert werden (fehlt oder schreibgeschützt). Die Änderung bleibt in Compás erhalten.",
+  "filesFailed_other": "{count} Dateien konnten nicht aktualisiert werden (fehlen oder schreibgeschützt). Die Änderungen bleiben in Compás erhalten."
 }

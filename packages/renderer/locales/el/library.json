@@ -21,5 +21,7 @@
   "scanning": "Σάρωση…",
   "addFolder": "Προσθήκη φακέλου",
   "updatedSongsSaved_one": "Ενημερώθηκε {count} τραγούδι — αποθηκεύτηκε στο Compás",
-  "updatedSongsSaved_other": "Ενημερώθηκαν {count} τραγούδια — αποθηκεύτηκαν στο Compás"
+  "updatedSongsSaved_other": "Ενημερώθηκαν {count} τραγούδια — αποθηκεύτηκαν στο Compás",
+  "filesNotUpdated_one": "Αποθηκεύτηκε στο Compás. {count} αρχείο δεν ενημερώθηκε (λείπει ή είναι μόνο για ανάγνωση).",
+  "filesNotUpdated_other": "Αποθηκεύτηκε στο Compás. {count} αρχεία δεν ενημερώθηκαν (λείπουν ή είναι μόνο για ανάγνωση)."
 }

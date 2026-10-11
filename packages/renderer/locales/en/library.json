@@ -21,5 +21,7 @@
   "scanning": "Scanning…",
   "addFolder": "Add folder",
   "updatedSongsSaved_one": "Updated {count} song — saved in Compás",
-  "updatedSongsSaved_other": "Updated {count} songs — saved in Compás"
+  "updatedSongsSaved_other": "Updated {count} songs — saved in Compás",
+  "filesNotUpdated_one": "Saved in Compás. {count} file couldn’t be updated (missing or read-only).",
+  "filesNotUpdated_other": "Saved in Compás. {count} files couldn’t be updated (missing or read-only)."
 }

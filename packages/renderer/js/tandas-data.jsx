@@ -104,6 +104,13 @@ function _applyLibrary(lib) {
   });
 }
 
+// Whether a bulk edit also writes the music files: the caller's explicit
+// answer (fresh from the first-save question) wins, else the stored setting.
+function _writeFilePref(opts) {
+  if (opts && typeof opts.writeFile === "boolean") return opts.writeFile;
+  try { return localStorage.getItem("compas.writeTagsToFiles") === "1"; } catch (e) { return false; }
+}
+
 const Store = {
   get: () => _state,
   subscribe(fn) {
@@ -227,18 +234,23 @@ const Store = {
     }
     return await window.compas.previewSmartOrganize();
   },
-  // Apply the DJ-approved subset of Smart Organize changes (Compás-only). The
-  // main process returns the fresh library; re-apply it and refresh tandas/
-  // playlists since they embed copies of the songs.
-  async applySmartOrganize(changes) {
-    if (!window.compas.applySmartOrganize || !changes || !changes.length) return;
-    const library = await window.compas.applySmartOrganize(changes);
-    if (library) _applyLibrary(library);
+  // Apply the DJ-approved subset of Smart Organize changes (also used by the
+  // bulk right-click edits). Honors the "also save to the music files" setting:
+  // the main process updates the database and, when on, each song's file. It
+  // returns the fresh library; re-apply it and refresh tandas/playlists since
+  // they embed copies of the songs. Resolves to {writeFile, filesUpdated,
+  // fileErrors} so the caller can say where the changes went.
+  async applySmartOrganize(changes, opts) {
+    if (!window.compas.applySmartOrganize || !changes || !changes.length) return null;
+    const writeFile = _writeFilePref(opts);
+    const res = await window.compas.applySmartOrganize(changes, { writeFile });
+    if (res && res.library) _applyLibrary(res.library);
     const [tandas, playlists] = await Promise.all([
       window.compas.listTandas(),
       window.compas.listPlaylists(),
     ]);
     _set({ tandas: tandas || [], playlists: playlists || [] });
+    return { writeFile, filesUpdated: (res && res.filesUpdated) || 0, fileErrors: (res && res.fileErrors) || 0 };
   },
   // Detailed import — step 1: pick a folder and scan it for preview (nothing is
   // saved). Returns the folder tree, or null if cancelled.
@@ -268,18 +280,22 @@ const Store = {
   async cancelImport() {
     if (window.compas.importCancel) { try { await window.compas.importCancel(); } catch (_e) { /* ignore */ } }
   },
-  // Re-type existing songs: set genres for many songs at once (Compás-only).
-  async setSongGenres(updates) {
-    if (!window.compas.setSongGenres || !updates || !updates.length) return;
-    const library = await window.compas.setSongGenres(updates);
-    if (library) {
-      _applyLibrary(library);
+  // Re-type existing songs: set genres for many songs at once. Honors the
+  // "also save to the music files" setting like applySmartOrganize; resolves to
+  // {writeFile, filesUpdated, fileErrors}.
+  async setSongGenres(updates, opts) {
+    if (!window.compas.setSongGenres || !updates || !updates.length) return null;
+    const writeFile = _writeFilePref(opts);
+    const res = await window.compas.setSongGenres(updates, { writeFile });
+    if (res && res.library) {
+      _applyLibrary(res.library);
       const [tandas, playlists] = await Promise.all([
         window.compas.listTandas(),
         window.compas.listPlaylists(),
       ]);
       _set({ tandas: tandas || [], playlists: playlists || [] });
     }
+    return { writeFile, filesUpdated: (res && res.filesUpdated) || 0, fileErrors: (res && res.fileErrors) || 0 };
   },
   async clearLibrary() {
     const lib = await window.compas.clearLibrary();

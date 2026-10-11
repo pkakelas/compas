@@ -57,5 +57,11 @@
   "note.genreMismatch": "タイトル／フォルダでは {own}、カタログでは {catalog}",
   "note.singerNotOrchestra": "楽団ではなく歌手のようです",
   "note.instrumentalNotOrchestra": "「Instrumental」は楽団ではありません",
-  "note.notOrchestra": "楽団ではありません"
+  "note.notOrchestra": "楽団ではありません",
+  "footNoteFiles": "Compás に保存し、音楽ファイルにも書き込みます。",
+  "applyingFiles": "ファイルを更新中… {done} / {total}",
+  "appliedNextFiles": "Compás と音楽ファイルに保存しました。次は <b>{tier}</b> です。",
+  "appliedSavedFiles": "Compás と音楽ファイルに保存しました。",
+  "doneBodyFiles": "変更は Compás と音楽ファイルに保存されました。",
+  "filesFailed_other": "{count} 件のファイルを更新できませんでした（見つからないか読み取り専用です）。変更は Compás に保存されています。"
 }

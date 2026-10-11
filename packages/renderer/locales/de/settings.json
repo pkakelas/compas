@@ -92,5 +92,5 @@
   "filesDesc": "Ob Änderungen in Compás auch in die Musikdateien auf deinem Computer geschrieben werden.",
   "writeTagsLabel": "Änderungen auch in den Musikdateien speichern",
   "writeTagsDesc": "Wenn aktiv, werden die bearbeiteten Angaben (Titel, Orchester, Sänger, Jahr, Album, Genre) auch in die Datei selbst geschrieben, sodass iTunes und andere Apps dieselben Namen zeigen. Wenn aus, bleiben deine Änderungen in Compás und nichts auf deinem Computer wird angefasst.",
-  "writeTagsNote": "Deine Musik wird nie verändert, nur ihre Beschriftung. Orchester und Sänger werden gemeinsam als „Orchester - Sänger“ gespeichert, so wie die meisten Tango-Sammlungen bereits beschriftet sind. Das gilt für einzeln bearbeitete Songs; Smart ordnen behält seine Änderungen immer in Compás."
+  "writeTagsNote": "Deine Musik wird nie verändert, nur ihre Beschriftung. Orchester und Sänger werden gemeinsam als „Orchester - Sänger“ gespeichert, so wie die meisten Tango-Sammlungen bereits beschriftet sind. Das gilt auch für Smart ordnen und für das Bearbeiten mehrerer Songs auf einmal."
 }

@@ -71,5 +71,14 @@
   "note.genreMismatch": "По названию/папке — {own}, по каталогу — {catalog}",
   "note.singerNotOrchestra": "Похоже на певца, а не на оркестр",
   "note.instrumentalNotOrchestra": "«Instrumental» — это не оркестр",
-  "note.notOrchestra": "Не оркестр"
+  "note.notOrchestra": "Не оркестр",
+  "footNoteFiles": "Сохраняется в Compás и записывается в ваши музыкальные файлы.",
+  "applyingFiles": "Обновление файлов… {done} из {total}",
+  "appliedNextFiles": "Сохранено в Compás и в ваших музыкальных файлах. Далее: <b>{tier}</b>.",
+  "appliedSavedFiles": "Сохранено в Compás и в ваших музыкальных файлах.",
+  "doneBodyFiles": "Изменения сохранены в Compás и в ваших музыкальных файлах.",
+  "filesFailed_one": "{count} файл не удалось обновить (отсутствует или доступен только для чтения). Изменение сохранено в Compás.",
+  "filesFailed_few": "{count} файла не удалось обновить (отсутствуют или доступны только для чтения). Изменения сохранены в Compás.",
+  "filesFailed_many": "{count} файлов не удалось обновить (отсутствуют или доступны только для чтения). Изменения сохранены в Compás.",
+  "filesFailed_other": "{count} файла не удалось обновить (отсутствуют или доступны только для чтения). Изменения сохранены в Compás."
 }

@@ -57,5 +57,12 @@
   "note.genreMismatch": "Le titre ou le dossier suggère {own}, le catalogue indique {catalog}",
   "note.singerNotOrchestra": "On dirait un chanteur, pas un orchestre",
   "note.instrumentalNotOrchestra": "« Instrumental » n’est pas un orchestre",
-  "note.notOrchestra": "Pas un orchestre"
+  "note.notOrchestra": "Pas un orchestre",
+  "footNoteFiles": "Enregistré dans Compás et écrit dans vos fichiers musicaux.",
+  "applyingFiles": "Mise à jour des fichiers… {done} sur {total}",
+  "appliedNextFiles": "Enregistré dans Compás et dans vos fichiers musicaux. À suivre : <b>{tier}</b>.",
+  "appliedSavedFiles": "Enregistré dans Compás et dans vos fichiers musicaux.",
+  "doneBodyFiles": "Les modifications sont enregistrées dans Compás et dans vos fichiers musicaux.",
+  "filesFailed_one": "{count} fichier n’a pas pu être mis à jour (introuvable ou en lecture seule). La modification est conservée dans Compás.",
+  "filesFailed_other": "{count} fichiers n’ont pas pu être mis à jour (introuvables ou en lecture seule). Les modifications sont conservées dans Compás."
 }

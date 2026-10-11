@@ -57,5 +57,12 @@
   "note.genreMismatch": "Title/folder suggests {own}, catalog says {catalog}",
   "note.singerNotOrchestra": "Looks like a singer, not an orchestra",
   "note.instrumentalNotOrchestra": "“Instrumental” isn’t an orchestra",
-  "note.notOrchestra": "Not an orchestra"
+  "note.notOrchestra": "Not an orchestra",
+  "footNoteFiles": "Saved in Compás and written into your music files.",
+  "applyingFiles": "Updating files… {done} of {total}",
+  "appliedNextFiles": "Saved in Compás and in your music files. Next up: <b>{tier}</b>.",
+  "appliedSavedFiles": "Saved in Compás and in your music files.",
+  "doneBodyFiles": "Changes are saved in Compás and in your music files.",
+  "filesFailed_one": "{count} file couldn’t be updated (missing or read-only). The change is kept in Compás.",
+  "filesFailed_other": "{count} files couldn’t be updated (missing or read-only). The changes are kept in Compás."
 }

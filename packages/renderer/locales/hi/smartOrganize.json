@@ -57,5 +57,12 @@
   "note.genreMismatch": "शीर्षक/फ़ोल्डर के हिसाब से {own}, कैटलॉग के हिसाब से {catalog}",
   "note.singerNotOrchestra": "यह गायक लगता है, ऑर्केस्ट्रा नहीं",
   "note.instrumentalNotOrchestra": "“Instrumental” कोई ऑर्केस्ट्रा नहीं है",
-  "note.notOrchestra": "ऑर्केस्ट्रा नहीं है"
+  "note.notOrchestra": "ऑर्केस्ट्रा नहीं है",
+  "footNoteFiles": "Compás में सहेजा गया और आपकी संगीत फ़ाइलों में लिखा गया।",
+  "applyingFiles": "फ़ाइलें अपडेट हो रही हैं… {total} में से {done}",
+  "appliedNextFiles": "Compás और आपकी संगीत फ़ाइलों में सहेजा गया। अगला: <b>{tier}</b>।",
+  "appliedSavedFiles": "Compás और आपकी संगीत फ़ाइलों में सहेजा गया।",
+  "doneBodyFiles": "बदलाव Compás और आपकी संगीत फ़ाइलों में सहेज लिए गए हैं।",
+  "filesFailed_one": "{count} फ़ाइल अपडेट नहीं हो सकी (गायब या केवल-पढ़ने योग्य)। बदलाव Compás में सुरक्षित है।",
+  "filesFailed_other": "{count} फ़ाइलें अपडेट नहीं हो सकीं (गायब या केवल-पढ़ने योग्य)। बदलाव Compás में सुरक्षित हैं।"
 }

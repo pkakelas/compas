@@ -92,5 +92,5 @@
   "filesDesc": "Whether the edits you make in Compás also go into the song files on your computer.",
   "writeTagsLabel": "Also save changes to the music files",
   "writeTagsDesc": "When on, the song details you edit (title, orchestra, singer, year, album, genre) are also written into the file itself, so iTunes and other apps show the same names. When off, your changes stay inside Compás and nothing on your computer is touched.",
-  "writeTagsNote": "Your music is never altered, only its labels. Orchestra and singer are saved together as “Orchestra - Singer”, the way most tango collections are already tagged. This applies to songs you edit one by one; Smart Organize always keeps its changes inside Compás."
+  "writeTagsNote": "Your music is never altered, only its labels. Orchestra and singer are saved together as “Orchestra - Singer”, the way most tango collections are already tagged. This also applies to Smart Organize and to editing several songs at once."
 }

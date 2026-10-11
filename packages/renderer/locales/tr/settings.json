@@ -92,5 +92,5 @@
   "filesDesc": "Compás’ta yaptığınız değişikliklerin bilgisayarınızdaki şarkı dosyalarına da yazılıp yazılmayacağı.",
   "writeTagsLabel": "Değişiklikleri müzik dosyalarına da kaydet",
   "writeTagsDesc": "Açıkken, düzenlediğiniz şarkı bilgileri (başlık, orkestra, şarkıcı, yıl, albüm, tür) dosyanın kendisine de yazılır; böylece iTunes ve diğer uygulamalar aynı adları gösterir. Kapalıyken değişiklikleriniz Compás içinde kalır ve bilgisayarınızda hiçbir şeye dokunulmaz.",
-  "writeTagsNote": "Müziğiniz asla değiştirilmez, yalnızca etiketleri. Orkestra ve şarkıcı, çoğu tango koleksiyonunda zaten olduğu gibi “Orkestra - Şarkıcı” biçiminde birlikte kaydedilir. Bu, tek tek düzenlediğiniz şarkılar için geçerlidir; Akıllı Düzenleme değişikliklerini her zaman Compás içinde tutar."
+  "writeTagsNote": "Müziğiniz asla değiştirilmez, yalnızca etiketleri. Orkestra ve şarkıcı, çoğu tango koleksiyonunda zaten olduğu gibi “Orkestra - Şarkıcı” biçiminde birlikte kaydedilir. Bu, Akıllı Düzenleme ve birden çok şarkıyı birlikte düzenleme için de geçerlidir."
 }

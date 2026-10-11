@@ -25,5 +25,9 @@
   "updatedSongsSaved_one": "Обновлен {count} трек — сохранено в Compás",
   "updatedSongsSaved_few": "Обновлено {count} трека — сохранено в Compás",
   "updatedSongsSaved_many": "Обновлено {count} треков — сохранено в Compás",
-  "updatedSongsSaved_other": "Обновлено {count} трека — сохранено в Compás"
+  "updatedSongsSaved_other": "Обновлено {count} трека — сохранено в Compás",
+  "filesNotUpdated_one": "Сохранено в Compás. {count} файл не удалось обновить (отсутствует или только для чтения).",
+  "filesNotUpdated_few": "Сохранено в Compás. {count} файла не удалось обновить (отсутствуют или только для чтения).",
+  "filesNotUpdated_many": "Сохранено в Compás. {count} файлов не удалось обновить (отсутствуют или только для чтения).",
+  "filesNotUpdated_other": "Сохранено в Compás. {count} файла не удалось обновить (отсутствуют или только для чтения)."
 }

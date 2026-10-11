@@ -21,5 +21,6 @@
   "scanning": "正在扫描…",
   "addFolder": "添加文件夹",
   "updatedSongsSaved_one": "已更新 {count} 首歌曲，更改保存在 Compás 中",
-  "updatedSongsSaved_other": "已更新 {count} 首歌曲，更改保存在 Compás 中"
+  "updatedSongsSaved_other": "已更新 {count} 首歌曲，更改保存在 Compás 中",
+  "filesNotUpdated_other": "已保存到 Compás。{count} 个文件无法更新（缺失或只读）。"
 }

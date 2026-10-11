@@ -21,5 +21,7 @@
   "scanning": "स्कैन हो रहा है…",
   "addFolder": "फ़ोल्डर जोड़ें",
   "updatedSongsSaved_one": "{count} गाना अपडेट हुआ — Compás में सहेजा गया",
-  "updatedSongsSaved_other": "{count} गाने अपडेट हुए — Compás में सहेजे गए"
+  "updatedSongsSaved_other": "{count} गाने अपडेट हुए — Compás में सहेजे गए",
+  "filesNotUpdated_one": "Compás में सहेजा गया। {count} फ़ाइल अपडेट नहीं हो सकी (गायब या केवल-पढ़ने योग्य)।",
+  "filesNotUpdated_other": "Compás में सहेजा गया। {count} फ़ाइलें अपडेट नहीं हो सकीं (गायब या केवल-पढ़ने योग्य)।"
 }
