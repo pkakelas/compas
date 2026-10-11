@@ -58,7 +58,7 @@ test('picking a playlist imports only the folders it references, then the playli
   // review, and the playlist confirmation appears straight away.
   const modal = page.locator('.tp-modal.pl-imp');
   await expect(modal).toBeVisible();
-  await expect(page.getByText(/Import — set folder types/i)).toHaveCount(0);
+  await expect(page.getByText(/Import — set folder genres/i)).toHaveCount(0);
   await expect(modal.getByText(/2 tandas and 1 cortina/)).toBeVisible();
   await expect(modal.getByRole('textbox')).toHaveValue('Friday practica');
   await expect(modal.getByText(TANGO_TITLES.join(' · '))).toBeVisible();
@@ -116,7 +116,7 @@ test('a playlist whose folders are already imported skips straight to the playli
 
   const modal = page.locator('.tp-modal.pl-imp');
   await expect(modal).toBeVisible();
-  await expect(page.getByText(/Import — set folder types/i)).toHaveCount(0);
+  await expect(page.getByText(/Import — set folder genres/i)).toHaveCount(0);
   await modal.locator('.tp-modal-confirm').click();
   await expect(modal).toBeHidden();
 

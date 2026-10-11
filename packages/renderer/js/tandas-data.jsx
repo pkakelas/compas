@@ -268,7 +268,7 @@ const Store = {
   async cancelImport() {
     if (window.compas.importCancel) { try { await window.compas.importCancel(); } catch (_e) { /* ignore */ } }
   },
-  // Re-type existing songs: set styles for many songs at once (Compás-only).
+  // Re-type existing songs: set genres for many songs at once (Compás-only).
   async setSongGenres(updates) {
     if (!window.compas.setSongGenres || !updates || !updates.length) return;
     const library = await window.compas.setSongGenres(updates);

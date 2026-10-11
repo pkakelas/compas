@@ -57,7 +57,7 @@
   "collapseLabel": "默认折叠文件夹",
   "collapseDesc": "打开曲库或 tanda 编排页面时，所有文件夹默认折叠，只需展开要用的那几个。否则顶层文件夹会自动展开。",
   "cortinasInFiltersLabel": "筛选中包含 cortina",
-  "cortinasInFiltersDesc": "在曲库的筛选下拉菜单中列出 cortina 的乐团、歌手、风格和年份。关闭后，下拉菜单只列出舞曲的相关选项，但浏览或搜索时仍会显示 cortina。",
+  "cortinasInFiltersDesc": "在曲库的筛选下拉菜单中列出 cortina 的乐团、歌手、流派和年份。关闭后，下拉菜单只列出舞曲的相关选项，但浏览或搜索时仍会显示 cortina。",
   "stripsIntro": "仅在显示时去除标题标签中常见的各种杂项：",
   "stripArtist": "开头的艺人名 <i>“Di Sarli – ”</i>",
   "stripTrackNo": "曲目编号 <i>“07. ”</i>",
@@ -91,6 +91,6 @@
   "filesTitle": "你的音乐文件",
   "filesDesc": "在 Compás 中所做的修改是否也写入你电脑上的歌曲文件。",
   "writeTagsLabel": "同时把修改保存到音乐文件",
-  "writeTagsDesc": "开启后，你编辑的歌曲信息（标题、乐团、歌手、年份、专辑、风格）也会写入文件本身，这样 iTunes 和其他应用会显示同样的名称。关闭时，修改只保留在 Compás 内，不会触碰你电脑上的任何文件。",
+  "writeTagsDesc": "开启后，你编辑的歌曲信息（标题、乐团、歌手、年份、专辑、流派）也会写入文件本身，这样 iTunes 和其他应用会显示同样的名称。关闭时，修改只保留在 Compás 内，不会触碰你电脑上的任何文件。",
   "writeTagsNote": "你的音乐本身永远不会被改动，只会改变它的标签。乐团和歌手会以\"乐团 - 歌手\"的形式一起保存，这也是大多数探戈曲库已有的标注方式。这只适用于逐首编辑的歌曲；智能整理的修改始终只保留在 Compás 内。"
 }

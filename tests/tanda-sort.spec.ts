@@ -19,7 +19,7 @@ test.beforeAll(async () => {
   await stubFolderDialog(app, musicRoot);
   await gotoView(page, 'Tandas');
   await page.getByRole('button', {name: /Choose a folder/i}).click();
-  await page.getByText(/Import — set folder types/i).waitFor();
+  await page.getByText(/Import — set folder genres/i).waitFor();
   await page.getByRole('button', {name: 'Import', exact: true}).click();
   // Wait for the import itself: the summary line sits on tabs that aren't showing.
   await expect
