@@ -31,5 +31,6 @@
   "updateDownloaded": "La versión {version} ya está descargada. Reinicia Compás para terminar de instalarla.",
   "updateLater": "Más tarde",
   "updateRestarting": "Reiniciando…",
-  "updateRestart": "Reiniciar y actualizar"
+  "updateRestart": "Reiniciar y actualizar",
+  "ok": "OK"
 }

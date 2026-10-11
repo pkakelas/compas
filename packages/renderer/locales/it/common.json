@@ -31,5 +31,6 @@
   "updateDownloaded": "La versione {version} è stata scaricata. Riavvia Compás per completare l’installazione.",
   "updateLater": "Più tardi",
   "updateRestarting": "Riavvio in corso…",
-  "updateRestart": "Riavvia e aggiorna"
+  "updateRestart": "Riavvia e aggiorna",
+  "ok": "OK"
 }

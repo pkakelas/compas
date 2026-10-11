@@ -22,6 +22,10 @@ export type SongRow = {
   // flag; `cortina_locked` marks it as DJ-set so a re-scan won't clobber it.
   is_cortina: number;
   cortina_locked: number;
+  // Set when the DJ edited this song in Compás without writing the file (or the
+  // write failed): a re-scan must then keep the app's title/artist/singer/album/
+  // year instead of re-reading them from the file's own tags.
+  meta_locked: number;
   folder: string;
   folder_path: string;
   root: string;
@@ -36,6 +40,9 @@ export type SongRow = {
   analysis_status: string;
   analysis_version: number;
   analyzed_at: number | null;
+  // The file's modification time (ms) as of the last tag read; null until the
+  // first startup after the column was added records a baseline.
+  mtime_ms: number | null;
 };
 
 /** UI-facing song shape (mirrors the legacy renderer contract). */
@@ -237,6 +244,13 @@ function migrate(d: Database.Database): void {
     // organization durable (singer/genre are already preserved on re-scan).
     ['orq_locked', 'INTEGER NOT NULL DEFAULT 0'],
     ['year_locked', 'INTEGER NOT NULL DEFAULT 0'],
+    // Set by a song edit that was kept inside Compás (the file's tags were not
+    // written, by choice or because the write failed): every editable field is
+    // then preserved on re-scan, so the edit is durable without touching disk.
+    ['meta_locked', 'INTEGER NOT NULL DEFAULT 0'],
+    // The file's modification time when its tags were last read, so the startup
+    // reconcile re-reads only files edited while the app was closed.
+    ['mtime_ms', 'INTEGER'],
     // Cortina is now a usage flag separate from genre (see SongRow). New DBs get
     // it as a column; older DBs gain it here, then the migration below moves any
     // legacy genre='cortina' rows onto the flag.
@@ -333,6 +347,8 @@ export type ScannedSong = {
   album: string | null;
   year: number | null;
   durationSec: number | null;
+  // Modification time of the file when its tags were read (see scanFile).
+  mtimeMs?: number | null;
   genre: string;
   // The style named by the file's own genre tag (null when it names none). The
   // import uses it for songs whose folder carries no style of its own.
@@ -357,27 +373,31 @@ export function importSongs(root: string, songs: ScannedSong[]): void {
   const now = Date.now();
 
   const upsertSong = d.prepare(`
-    INSERT INTO songs (path, title, artist, singer, album, year, duration_sec, genre, genre_tag_checked, is_cortina, folder, folder_path, root, added_at)
-    VALUES (@path, @title, @artist, @singer, @album, @year, @durationSec, @genre, 1, @isCortina, @folder, @folderPath, @root, @added_at)
+    INSERT INTO songs (path, title, artist, singer, album, year, duration_sec, mtime_ms, genre, genre_tag_checked, is_cortina, folder, folder_path, root, added_at)
+    VALUES (@path, @title, @artist, @singer, @album, @year, @durationSec, @mtimeMs, @genre, 1, @isCortina, @folder, @folderPath, @root, @added_at)
     ON CONFLICT(path) DO UPDATE SET
-      title = excluded.title,
-      artist = CASE WHEN songs.orq_locked = 1 THEN songs.artist ELSE excluded.artist END,
-      album = excluded.album,
-      year = CASE WHEN songs.year_locked = 1 THEN songs.year ELSE excluded.year END,
+      title = CASE WHEN songs.meta_locked = 1 THEN songs.title ELSE excluded.title END,
+      artist = CASE WHEN songs.orq_locked = 1 OR songs.meta_locked = 1 THEN songs.artist ELSE excluded.artist END,
+      singer = CASE WHEN songs.meta_locked = 1 THEN songs.singer WHEN excluded.singer <> '' THEN excluded.singer ELSE songs.singer END,
+      album = CASE WHEN songs.meta_locked = 1 THEN songs.album ELSE excluded.album END,
+      year = CASE WHEN songs.year_locked = 1 OR songs.meta_locked = 1 THEN songs.year ELSE excluded.year END,
       is_cortina = CASE WHEN songs.cortina_locked = 1 THEN songs.is_cortina ELSE excluded.is_cortina END,
       duration_sec = excluded.duration_sec,
+      mtime_ms = excluded.mtime_ms,
       folder = excluded.folder,
       folder_path = excluded.folder_path,
       root = excluded.root
   `);
-  // Note: `singer` and `genre` are intentionally NOT refreshed on conflict.
-  // `singer` is app-only (the scanner never reads it from tags), and both are
-  // editable by the DJ — so a re-scan of an existing song (e.g. the watcher
-  // reacting to an in-place tag edit) must preserve those user-set values
-  // instead of resetting singer to '' and genre to its folder-derived default.
-  // Likewise `artist`/`year`/`is_cortina` are preserved when locked (set by
-  // Smart Organize / a manual cortina toggle), so a Compás-only edit survives
-  // the file being re-scanned.
+  // Note: `genre` is intentionally NOT refreshed on conflict, and `singer`
+  // follows the file only when the file actually credits one: both are editable
+  // by the DJ (Smart Organize sets them without a lock) — so a re-scan of an
+  // existing song (e.g. the watcher reacting to an in-place tag edit) must not
+  // reset singer to '' or genre to its folder-derived default. A singer credit
+  // in the file ("Orchestra - Singer") does win, so a singer fixed in another
+  // app shows up here like a title fix would. `artist`/`year`/`is_cortina` are
+  // preserved when locked (set by Smart Organize / a manual cortina toggle), and
+  // every editable field is preserved when `meta_locked` is set (a song edit
+  // kept inside Compás), so a Compás-only edit survives the file being re-scanned.
 
   // Folders the DJ flagged as cortinas under this root — newly-imported songs in
   // them inherit the flag regardless of the folder-name heuristic.
@@ -393,7 +413,7 @@ export function importSongs(root: string, songs: ScannedSong[]): void {
     upsertRoot(d, root);
     for (const s of songs) {
       const isCortina = s.isCortina || flaggedFolders.has(s.folderPath) ? 1 : 0;
-      upsertSong.run({...s, isCortina, root, added_at: now});
+      upsertSong.run({...s, mtimeMs: s.mtimeMs ?? null, isCortina, root, added_at: now});
     }
   });
   tx();
@@ -816,16 +836,23 @@ export type UpdateSongInput = {
   genre: string;
   // Optional: when present, also sets the cortina usage flag (and locks it).
   isCortina?: boolean;
+  // Also write the edit into the file's tags (the DJ's Settings choice). The
+  // database is updated either way.
+  writeFile?: boolean;
 };
 
 /**
  * Update a song's editable metadata in the database (the on-disk file tags are
  * written separately, see services/tags.ts). The id, file path and all
  * loudness/analysis fields are preserved, so editing metadata never triggers a
- * re-analysis or drops the song from its tandas/playlists. Returns the updated
- * song, or null if the id is unknown.
+ * re-analysis or drops the song from its tandas/playlists. `lock` records that
+ * the file was NOT updated to match (the DJ keeps edits inside Compás, or the
+ * write failed), so a later re-scan keeps these values rather than the file's
+ * tags; when the file was written the two agree and the lock is cleared so
+ * edits made in other apps can flow in again. Returns the updated song, or
+ * null if the id is unknown.
  */
-export function updateSong(input: UpdateSongInput): Song | null {
+export function updateSong(input: UpdateSongInput, opts: {lock: boolean}): Song | null {
   const d = getDb();
   const id = Number(input.id);
   if (!Number.isFinite(id)) return null;
@@ -841,11 +868,13 @@ export function updateSong(input: UpdateSongInput): Song | null {
        album = @album,
        year = @year,
        genre = @genre,
+       meta_locked = @metaLocked,
        is_cortina = CASE WHEN @setCortina = 1 THEN @isCortina ELSE is_cortina END,
        cortina_locked = CASE WHEN @setCortina = 1 THEN 1 ELSE cortina_locked END
      WHERE id = @id`,
   ).run({
     id,
+    metaLocked: opts.lock ? 1 : 0,
     title: input.title ?? '',
     orq: input.orq ?? '',
     singer: input.singer ?? '',
@@ -993,14 +1022,30 @@ export function removeSongByPath(path: string): boolean {
  *  let it pair a move performed while the app was closed). */
 export function listSongPathsByRoot(
   root: string,
-): {path: string; durationSec: number | null}[] {
+): {path: string; durationSec: number | null; mtimeMs: number | null}[] {
   const d = getDb();
   return (
-    d.prepare('SELECT path, duration_sec FROM songs WHERE root = ?').all(root) as {
+    d.prepare('SELECT path, duration_sec, mtime_ms FROM songs WHERE root = ?').all(root) as {
       path: string;
       duration_sec: number | null;
+      mtime_ms: number | null;
     }[]
-  ).map(r => ({path: r.path, durationSec: r.duration_sec}));
+  ).map(r => ({path: r.path, durationSec: r.duration_sec, mtimeMs: r.mtime_ms}));
+}
+
+/**
+ * Record the current modification time of songs that have none yet (the first
+ * startup after the column was introduced). Tags are deliberately not re-read
+ * here: this only sets the baseline that later startups compare against.
+ */
+export function setSongMtimes(entries: {path: string; mtimeMs: number}[]): void {
+  if (entries.length === 0) return;
+  const d = getDb();
+  const stmt = d.prepare('UPDATE songs SET mtime_ms = ? WHERE path = ? AND mtime_ms IS NULL');
+  const tx = d.transaction(() => {
+    for (const e of entries) stmt.run(e.mtimeMs, e.path);
+  });
+  tx();
 }
 
 /** Whether a song exists for `path`, and its duration (used to pair renames). */
@@ -1064,25 +1109,30 @@ export function renameSong(oldPath: string, root: string, song: ScannedSong): bo
     if (clash && clash.id !== row.id) deleteSongs(d, [clash.id]);
     upsertRoot(d, root);
     // A move re-derives the file-backed fields, but preserves the DJ's app-only
-    // `singer`/`genre` (omitted from SET) and any locked `artist`/`year` set by
-    // Smart Organize — mirroring importSongs so an edit isn't lost on a move.
+    // `genre` (omitted from SET), a `singer` the file doesn't credit, any locked
+    // `artist`/`year` set by Smart Organize and everything under `meta_locked`
+    // — mirroring importSongs so an edit isn't lost on a move.
     d.prepare(
       `UPDATE songs SET
          path = @path,
-         title = @title,
-         artist = CASE WHEN orq_locked = 1 THEN artist ELSE @artist END,
-         album = @album,
-         year = CASE WHEN year_locked = 1 THEN year ELSE @year END,
+         title = CASE WHEN meta_locked = 1 THEN title ELSE @title END,
+         artist = CASE WHEN orq_locked = 1 OR meta_locked = 1 THEN artist ELSE @artist END,
+         singer = CASE WHEN meta_locked = 1 THEN singer WHEN @singer <> '' THEN @singer ELSE singer END,
+         album = CASE WHEN meta_locked = 1 THEN album ELSE @album END,
+         year = CASE WHEN year_locked = 1 OR meta_locked = 1 THEN year ELSE @year END,
          duration_sec = @durationSec,
+         mtime_ms = @mtimeMs,
          folder = @folder, folder_path = @folderPath, root = @root
        WHERE id = @id`,
     ).run({
       path: song.path,
       title: song.title,
       artist: song.artist,
+      singer: song.singer,
       album: song.album,
       year: song.year,
       durationSec: song.durationSec,
+      mtimeMs: song.mtimeMs ?? null,
       folder: song.folder,
       folderPath: song.folderPath,
       root,

@@ -31,5 +31,6 @@
   "updateDownloaded": "Version {version} has been downloaded. Restart Compás to finish installing it.",
   "updateLater": "Later",
   "updateRestarting": "Restarting…",
-  "updateRestart": "Restart & update"
+  "updateRestart": "Restart & update",
+  "ok": "OK"
 }

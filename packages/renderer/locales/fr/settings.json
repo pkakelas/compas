@@ -87,5 +87,10 @@
   "startDesc": "Vous découvrez Compás, ou vous voulez juste un petit rappel ?",
   "tourLabel": "Visite des fonctionnalités",
   "tourDesc": "Revoyez la visite de bienvenue qui présente tout ce que Compás sait faire.",
-  "tourReplay": "Revoir la visite"
+  "tourReplay": "Revoir la visite",
+  "filesTitle": "Vos fichiers musicaux",
+  "filesDesc": "Si les modifications faites dans Compás sont aussi écrites dans les fichiers des morceaux sur votre ordinateur.",
+  "writeTagsLabel": "Enregistrer aussi les modifications dans les fichiers musicaux",
+  "writeTagsDesc": "Activé : les informations que vous modifiez (titre, orchestre, chanteur, année, album, style) sont aussi écrites dans le fichier lui-même, pour qu’iTunes et les autres applications affichent les mêmes noms. Désactivé : vos modifications restent dans Compás et rien n’est touché sur votre ordinateur.",
+  "writeTagsNote": "Votre musique n’est jamais altérée, seulement ses étiquettes. Orchestre et chanteur sont enregistrés ensemble sous la forme « Orchestre - Chanteur », comme la plupart des collections de tango le sont déjà. Cela s’applique aux morceaux modifiés un par un ; l’Organisation intelligente garde toujours ses modifications dans Compás."
 }

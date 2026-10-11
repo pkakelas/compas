@@ -12,6 +12,7 @@
 // (which would needlessly show the "Preparing your music" banner).
 import chokidar, {type FSWatcher} from 'chokidar';
 import {existsSync} from 'node:fs';
+import {stat} from 'node:fs/promises';
 import {basename, sep} from 'node:path';
 import {scanFile, isAudioFile, listAudioFiles} from './scan.js';
 import {
@@ -22,6 +23,7 @@ import {
   listSongPathsByRoot,
   removeSongByPath,
   renameSong,
+  setSongMtimes,
   type Library,
   type ScannedSong,
 } from '../modules/Database.js';
@@ -189,38 +191,66 @@ export class LibraryWatcher {
   /**
    * One-shot reconcile of every imported root against what's actually on disk.
    * The live watcher only sees events that fire while it's running, so changes
-   * made while the app was *closed* — songs dropped in, deleted, or moved —
-   * would otherwise be invisible until a manual re-import. Run this at startup
-   * to catch them. Like the live path, an old-path-gone + new-path-appeared pair
-   * for the same audio is recognised as a move and applied in place, preserving
-   * the song's id (and thus its analysis + tanda membership). Returns the fresh
-   * library; safe to call before/after start().
+   * made while the app was *closed* — songs dropped in, deleted, moved, or
+   * retagged in another app — would otherwise be invisible until a manual
+   * re-import. Run this at startup to catch them. Like the live path, an
+   * old-path-gone + new-path-appeared pair for the same audio is recognised as
+   * a move and applied in place, preserving the song's id (and thus its
+   * analysis + tanda membership). A known file whose modification time differs
+   * from the one stored at its last tag read is re-read through the normal
+   * import path, so the DJ's locks (Compás-only edits, Smart Organize) still
+   * apply. Only the file's date is checked per file; tags are parsed just for
+   * the changed ones. Returns the fresh library; safe to call before/after
+   * start().
    */
   async reconcileRoots(): Promise<Library> {
     const newAdds: PendingAdd[] = [];
+    const changed: PendingAdd[] = [];
     const available: PendingUnlink[] = [];
+    // Songs scanned before modification times were recorded: take today's as
+    // the baseline (without re-reading tags) so the next startup can compare.
+    const baseline: {path: string; mtimeMs: number}[] = [];
     for (const root of listLibraryRoots()) {
       // A root that's gone entirely (moved/unmounted) would make every song
       // under it look deleted. Leave those intact for relink (see relocateRoot)
       // instead of pairing/dropping them here.
       if (!existsSync(root)) continue;
-      const known = new Map(listSongPathsByRoot(root).map(s => [s.path, s.durationSec]));
+      const known = new Map(listSongPathsByRoot(root).map(s => [s.path, s]));
       const onDisk = new Set<string>();
       for (const file of await listAudioFiles(root)) {
         onDisk.add(file);
-        // Only unknown paths need a (tag-parsing) scan; everything else is
-        // already current — a tag edit made while closed isn't re-read, matching
-        // how importSongs treats `genre`/`singer` as DJ-owned once set.
-        if (!known.has(file)) newAdds.push({root, song: await scanFile(root, file)});
+        const k = known.get(file);
+        if (!k) {
+          newAdds.push({root, song: await scanFile(root, file)});
+          continue;
+        }
+        let mtimeMs: number;
+        try {
+          mtimeMs = Math.round((await stat(file)).mtimeMs);
+        } catch {
+          continue; // vanished mid-walk; the live watcher will report it
+        }
+        if (k.mtimeMs == null) baseline.push({path: file, mtimeMs});
+        else if (k.mtimeMs !== mtimeMs) changed.push({root, song: await scanFile(root, file)});
       }
-      for (const [path, durationSec] of known) {
+      for (const [path, {durationSec}] of known) {
         if (!onDisk.has(path)) available.push({path, durationSec});
       }
     }
-    if (newAdds.length === 0 && available.length === 0) return getLibrary();
+    setSongMtimes(baseline);
+    // Edited while closed: refresh their tags in place (no re-analysis), the
+    // same way the live watcher handles an in-place change.
+    for (const c of changed) importSongs(c.root, [c.song]);
+    if (newAdds.length === 0 && available.length === 0) {
+      return changed.length > 0 ? this.#refresh() : getLibrary();
+    }
 
     const genuinelyAdded = this.#applyMovesAddsRemovals(newAdds, available);
     if (genuinelyAdded > 0) this.#deps.onSongsAdded();
+    return this.#refresh();
+  }
+
+  #refresh(): Library {
     const library = getLibrary();
     this.#deps.onLibraryChanged(library);
     return library;
