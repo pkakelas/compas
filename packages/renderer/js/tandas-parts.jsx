@@ -1824,11 +1824,63 @@ function tandaSearchActive(filters) {
 const byTandaLabel = (a, b) =>
   tandaLabel(a).localeCompare(tandaLabel(b), undefined, { sensitivity: "base", numeric: true });
 
-// Filter + rank tandas. The listing is always sorted alphabetically by name;
-// a text query overrides that to rank best match first.
-function searchTandas(tandas, filters = EMPTY_TANDA_SEARCH) {
+/* ---------- tanda sort ---------- */
+// How the saved-tandas listings are ordered — the Tandas view and Live's
+// "Add to queue" panel share this one preference, so flipping it in either
+// place carries over. Persisted in localStorage; the custom event keeps every
+// mounted listing in step the moment the DJ changes it.
+const TANDA_SORTS = [
+  { key: "name", labelKey: "parts.tandaSortName" },
+  { key: "newest", labelKey: "parts.tandaSortNewest" },
+  { key: "oldest", labelKey: "parts.tandaSortOldest" },
+];
+const TANDA_SORT_DEFAULT = "name";
+const TANDA_SORT_STORAGE_KEY = "compas.tandaSort";
+const TANDA_SORT_EVENT = "tandasortchange";
+const isTandaSort = (v) => TANDA_SORTS.some((s) => s.key === v);
+function readTandaSort() {
+  try { const v = localStorage.getItem(TANDA_SORT_STORAGE_KEY); return isTandaSort(v) ? v : TANDA_SORT_DEFAULT; }
+  catch (e) { return TANDA_SORT_DEFAULT; }
+}
+function useTandaSort() {
+  const [sort, setSortState] = useState(readTandaSort);
+  useEffect(() => {
+    const onChange = (e) => setSortState(e.detail);
+    window.addEventListener(TANDA_SORT_EVENT, onChange);
+    return () => window.removeEventListener(TANDA_SORT_EVENT, onChange);
+  }, []);
+  const setSort = (v) => {
+    const next = isTandaSort(v) ? v : TANDA_SORT_DEFAULT;
+    try { localStorage.setItem(TANDA_SORT_STORAGE_KEY, next); } catch (e) { /* storage unavailable */ }
+    window.dispatchEvent(new CustomEvent(TANDA_SORT_EVENT, { detail: next }));
+  };
+  return [sort, setSort];
+}
+// The comparator for a chosen sort. Creation order falls back to the label for
+// tandas saved in the same instant (and for suggestions, which carry no date).
+function tandaComparator(sort) {
+  switch (sort) {
+    case "newest": return (a, b) => (b.createdAt || 0) - (a.createdAt || 0) || byTandaLabel(a, b);
+    case "oldest": return (a, b) => (a.createdAt || 0) - (b.createdAt || 0) || byTandaLabel(a, b);
+    default: return byTandaLabel;
+  }
+}
+function TandaSortSelect({ sort, setSort }) {
+  return (
+    <label className="tv-sort">
+      <select value={sort} onChange={(e) => setSort(e.target.value)} title={tr("parts.sortTandas")} aria-label={tr("parts.sort")}>
+        {TANDA_SORTS.map((s) => <option key={s.key} value={s.key}>{tr(s.labelKey)}</option>)}
+      </select>
+    </label>
+  );
+}
+
+// Filter + rank tandas. The listing follows the chosen sort (name A–Z, or
+// newest / oldest first); a text query overrides that to rank best match first.
+function searchTandas(tandas, filters = EMPTY_TANDA_SEARCH, sort = TANDA_SORT_DEFAULT) {
   const list = tandas || [];
-  if (!tandaSearchActive(filters)) return list.slice().sort(byTandaLabel);
+  const cmp = tandaComparator(sort);
+  if (!tandaSearchActive(filters)) return list.slice().sort(cmp);
   const words = _norm(filters.text || "").trim().split(/\s+/).filter(Boolean);
   const hits = [];
   for (const t of list) {
@@ -1845,7 +1897,7 @@ function searchTandas(tandas, filters = EMPTY_TANDA_SEARCH) {
     if (ok) hits.push({ t, score });
   }
   if (words.length) hits.sort((a, b) => b.score - a.score);
-  else hits.sort((a, b) => byTandaLabel(a.t, b.t));
+  else hits.sort((a, b) => cmp(a.t, b.t));
   return hits.map((h) => h.t);
 }
 
@@ -1875,8 +1927,9 @@ function sanitizeTandaFilters(filters, tandas) {
 }
 
 /* Search + filter toolbar for the manage view's tanda grid/list. Mirrors the
- * library's SongSearchBar but over tanda facets (no sort — tandas keep DJ order). */
-function TandaSearchBar({ filters, onChange, options, countLabel }) {
+ * library's SongSearchBar but over tanda facets. `sortControl` is the optional
+ * ordering select, slotted into the actions row next to the match count. */
+function TandaSearchBar({ filters, onChange, options, countLabel, sortControl }) {
   const inputRef = useRef(null);
   const set = (key, val) => onChange({ ...filters, [key]: val });
   const clearText = () => { set("text", ""); inputRef.current && inputRef.current.focus(); };
@@ -1917,6 +1970,7 @@ function TandaSearchBar({ filters, onChange, options, countLabel }) {
           ) : null}
         </div>
         <div className="tv-search-actions">
+          {sortControl}
           {countLabel ? <span className="tv-count">{countLabel}</span> : null}
         </div>
       </div>
@@ -2084,7 +2138,11 @@ function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew
   const options = useMemo(() => buildTandaFilterOptions(source, filters), [source, ...dropFilters, I18N.locale]);
   const setFiltersSafe = (next) => setFilters(sanitizeTandaFilters(next, source));
   const activeFilters = useMemo(() => ({ ...filters, text: debouncedText }), [debouncedText, ...dropFilters]);
-  const filtered = useMemo(() => searchTandas(source, activeFilters), [source, activeFilters, I18N.locale]);
+  // Ordering applies to the DJ's own tandas; suggestions carry no creation
+  // date, so their tab stays alphabetical.
+  const [sort, setSort] = useTandaSort();
+  const filtered = useMemo(() => searchTandas(source, activeFilters, tab === "mine" ? sort : TANDA_SORT_DEFAULT),
+    [source, activeFilters, sort, tab, I18N.locale]);
   const searching = tandaSearchActive(activeFilters);
   const countLabel = searching
     ? (filtered.length ? tr("parts.tandaCount", { count: filtered.length }) : tr("parts.noMatches"))
@@ -2094,7 +2152,8 @@ function ManageGrid({ tab = "mine", tandas, suggestions, onEdit, onDelete, onNew
   // search/filter bar stays on top while the grid scrolls beneath it.
   const searchBar = (
     <div className="tv-tree-head">
-      <TandaSearchBar filters={filters} onChange={setFiltersSafe} options={options} countLabel={countLabel} />
+      <TandaSearchBar filters={filters} onChange={setFiltersSafe} options={options} countLabel={countLabel}
+        sortControl={tab === "mine" ? <TandaSortSelect sort={sort} setSort={setSort} /> : null} />
     </div>
   );
   const noMatch = (
@@ -2189,4 +2248,5 @@ Object.assign(window, {
   tandaMeta, tandaTypes, TandaLibCard, LibraryTree, ManageGrid,
   SongSearchBar, searchSongs, searchTree, buildSearchQuery, scoreSong, fuzzyScore, EMPTY_SEARCH,
   TandaSearchBar, searchTandas, buildTandaFilterOptions, EMPTY_TANDA_SEARCH,
+  useTandaSort, tandaComparator, TandaSortSelect,
 });

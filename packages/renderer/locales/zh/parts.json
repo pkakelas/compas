@@ -144,5 +144,9 @@
   "buildTanda": "编排 tanda",
   "browseSuggestions_one": "浏览 {count} 个推荐",
   "browseSuggestions_other": "浏览 {count} 个推荐",
-  "newTanda": "新建 tanda"
+  "newTanda": "新建 tanda",
+  "sortTandas": "tanda 排序",
+  "tandaSortName": "名称 A–Z",
+  "tandaSortNewest": "最新优先",
+  "tandaSortOldest": "最早优先"
 }

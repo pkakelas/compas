@@ -144,5 +144,9 @@
   "buildTanda": "Tanda oluştur",
   "browseSuggestions_one": "{count} öneriye göz at",
   "browseSuggestions_other": "{count} öneriye göz at",
-  "newTanda": "Yeni tanda"
+  "newTanda": "Yeni tanda",
+  "sortTandas": "Tandaları sırala",
+  "tandaSortName": "Ad A–Z",
+  "tandaSortNewest": "Önce en yeni",
+  "tandaSortOldest": "Önce en eski"
 }

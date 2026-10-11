@@ -162,5 +162,9 @@
   "browseSuggestions_few": "Посмотреть {count} предложения",
   "browseSuggestions_many": "Посмотреть {count} предложений",
   "browseSuggestions_other": "Посмотреть {count} предложения",
-  "newTanda": "Новая tanda"
+  "newTanda": "Новая tanda",
+  "sortTandas": "Сортировать tandas",
+  "tandaSortName": "Название А–Я",
+  "tandaSortNewest": "Сначала новые",
+  "tandaSortOldest": "Сначала старые"
 }
