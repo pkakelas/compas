@@ -143,6 +143,30 @@ export function buildSharedTanda(
 }
 
 /**
+ * A post the DJ made from one of their own tandas: each of its songs that is
+ * still in that tanda is theirs, whether or not it matched. (A song with no
+ * orchestra in the library never matches on its own, so the DJ's own tanda
+ * could read "2 of 4 in your library".) Songs are paired by title, taken the
+ * way sharing writes it, so a tanda edited since keeps only what it still has.
+ */
+export function claimOwnSongs(matched: MatchedTanda, tanda: Tanda): MatchedTanda {
+  const used = new Set(matched.songs.map(s => s.songId).filter(Boolean));
+  const mine = tanda.songs
+    .filter(s => !s.isCortina)
+    .map(s => ({id: s.id, key: strictTitleKey(sharedTitle(s.title, libOrqSurname(s), s.year).title)}));
+  const songs = matched.songs.map(s => {
+    if (s.songId) return s;
+    const key = strictTitleKey(s.title);
+    const hit = key ? mine.find(m => !used.has(m.id) && m.key === key) : undefined;
+    if (!hit) return s;
+    used.add(hit.id);
+    return {...s, songId: hit.id};
+  });
+  const owned = songs.filter(s => s.songId).length;
+  return {...matched, songs, owned, ready: owned === songs.length};
+}
+
+/**
  * Read a snapshot posted by someone else and match it against this library.
  * The input is untrusted (it came from another user through the backend), so
  * every field is checked and clipped before it is used or shown. Returns null

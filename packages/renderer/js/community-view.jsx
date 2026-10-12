@@ -153,11 +153,11 @@ function CommunitySignIn() {
   );
 }
 
-function CommunityView({ onOpenSettings, homeSignal, active }) {
+function CommunityView({ homeSignal, active }) {
   const community = useCommunity();
   if (!community.loaded || !community.configured) return <div className="tv" />;
   return community.user
-    ? <CommunityFeed user={community.user} onOpenSettings={onOpenSettings} homeSignal={homeSignal} active={active} />
+    ? <CommunityFeed user={community.user} homeSignal={homeSignal} active={active} />
     : <div className="tv"><CommunitySignIn /></div>;
 }
 
@@ -186,50 +186,28 @@ function DeleteAccountModal({ onCancel, onConfirm, busy, error }) {
   );
 }
 
-function CommunityAccountCard({ onOpenCommunity, jump }) {
-  const community = useCommunity();
-  const user = community.user;
-  const formRef = React.useRef(null);
+/* ---------- the profile form ----------
+   The picture, name, handle, city and bio — what other DJs see. Edited in place
+   on the DJ's own page in the Community tab, and in Settings ▸ Community. The
+   picture changes as soon as one is picked; the words wait for "Save profile".
+   `children` go at the end of the button row (Settings puts Sign out there). */
+function CommunityProfileForm({ user, onSaved, onCancel, autoFocus, children }) {
   const [form, setForm] = React.useState({ displayName: "", handle: "", city: "", bio: "" });
-  const [busy, setBusy] = React.useState(null); // "save" | "signout" | "delete" | null
+  const [busy, setBusy] = React.useState(null); // "save" | "avatar" | null
   const [error, setError] = React.useState("");
   const [saved, setSaved] = React.useState(false);
-  const [confirmDelete, setConfirmDelete] = React.useState(false);
-  const [deleteError, setDeleteError] = React.useState("");
+  // The form can be on screen twice (Settings stays mounted behind the
+  // Community tab), so each copy labels its own fields.
+  const uid = "cm-acct-" + React.useId().replace(/:/g, "");
 
   // Re-seed the form whenever the stored profile changes (sign in, save). The
   // "Saved" confirmation is cleared only when the account itself changes — a
   // save updates the profile too, and must not wipe its own confirmation.
-  const profileKey = user ? [user.id, user.displayName, user.handle, user.city, user.bio].join("|") : "";
+  const profileKey = [user.id, user.displayName, user.handle, user.city, user.bio].join("|");
   React.useEffect(() => {
-    if (user) setForm({ displayName: user.displayName || "", handle: user.handle || "", city: user.city || "", bio: user.bio || "" });
+    setForm({ displayName: user.displayName || "", handle: user.handle || "", city: user.city || "", bio: user.bio || "" });
   }, [profileKey]);
-  const userId = user ? user.id : "";
-  React.useEffect(() => { setError(""); setSaved(false); }, [userId]);
-
-  // Arriving from "Edit profile": bring this card to the top of Settings and
-  // put the cursor in the name field. `jump` is a counter, 0 until first used.
-  React.useEffect(() => {
-    const form = formRef.current;
-    if (!jump || !form) return;
-    const card = form.closest(".tp-set-card") || form;
-    card.scrollIntoView({ block: "start" });
-    const input = form.querySelector("input");
-    if (input) input.focus({ preventScroll: true });
-  }, [jump]);
-
-  if (!community.configured) return null;
-
-  const icon = <I.heart s={16} />;
-  if (!user) {
-    return (
-      <SettingsCard icon={icon} title={tr("common.nav.Community")} desc={tr("community.cardDesc")}>
-        <SetRow label={tr("community.accountLabel")} desc={tr("community.notSignedIn")}>
-          <button className="tp-btn" onClick={onOpenCommunity}>{tr("community.signIn")}</button>
-        </SetRow>
-      </SettingsCard>
-    );
-  }
+  React.useEffect(() => { setError(""); setSaved(false); }, [user.id]);
 
   const set = (k) => (e) => { setForm((f) => ({ ...f, [k]: e.target.value })); setSaved(false); };
   const dirty = form.displayName !== (user.displayName || "") || form.handle !== (user.handle || "")
@@ -241,13 +219,9 @@ function CommunityAccountCard({ onOpenCommunity, jump }) {
     setError(""); setBusy("save");
     const res = await CommunityStore.updateProfile({ displayName: form.displayName, handle: form.handle, city: form.city || null, bio: form.bio || null });
     setBusy(null);
-    if (res.ok) setSaved(true); else setError(res.error);
-  };
-  const signOut = async () => {
-    if (busy) return;
-    setBusy("signout");
-    await CommunityStore.signOut();
-    setBusy(null);
+    if (!res.ok) { setError(res.error); return; }
+    setSaved(true);
+    if (onSaved) onSaved();
   };
   // The picture: upload a photo, take the Google one, pick a drawn one, or
   // remove it (then the app picks a drawn one from the id).
@@ -268,6 +242,95 @@ function CommunityAccountCard({ onOpenCommunity, jump }) {
   const isPhoto = !!(user.avatar && /^https?:\/\//.test(user.avatar));
   const currentPreset = isPhoto ? -1 : communityPresetFor(user.id, user.avatar);
 
+  return (
+    <form className="cm-acct" onSubmit={save} noValidate
+      onKeyDown={onCancel ? (e) => { if (e.key === "Escape" && !busy) { e.preventDefault(); onCancel(); } } : undefined}>
+      <div className="cm-acct-avatar">
+        <CommunityAvatar id={user.id} avatar={user.avatar} size="lg" />
+        <div className="tp-flex1 cm-acct-avatar-main">
+          <div className="cm-acct-avatar-title">{tr("community.profilePicture")}</div>
+          <div className="cm-acct-avatar-btns">
+            <button type="button" className="tp-btn sm" onClick={pickPhoto} disabled={!!busy}>
+              {busy === "avatar" ? tr("community.saving") : tr("community.uploadPhoto")}
+            </button>
+            {user.googleAvatar && user.avatar !== user.googleAvatar && (
+              <button type="button" className="tp-btn sm" onClick={() => setAvatar(user.googleAvatar)} disabled={!!busy}>{tr("community.useGooglePhoto")}</button>
+            )}
+            {isPhoto && (
+              <button type="button" className="tp-btn sm ghost" onClick={() => setAvatar(null)} disabled={!!busy}>{tr("community.removePhoto")}</button>
+            )}
+          </div>
+          <div className="cm-acct-presets" role="radiogroup" aria-label={tr("community.pickPicture")}>
+            {Array.from({ length: CM_AVATAR_COUNT }, (_, k) => (
+              <button type="button" role="radio" key={k} aria-checked={currentPreset === k} aria-label={tr("community.pictureN", { n: k + 1 })}
+                className={"cm-preset" + (currentPreset === k ? " on" : "")} disabled={!!busy}
+                onClick={() => setAvatar("preset:" + k)}><CommunityPresetArt k={k} /></button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="cm-acct-fields">
+        <div className="cm-field">
+          <label htmlFor={uid + "-name"}>{tr("community.name")}</label>
+          <input id={uid + "-name"} className="cm-input" maxLength={60} value={form.displayName} onChange={set("displayName")}
+            autoFocus={autoFocus} />
+        </div>
+        <div className="cm-field">
+          <label htmlFor={uid + "-handle"}>{tr("community.handle")}</label>
+          <input id={uid + "-handle"} className="cm-input" maxLength={24} value={form.handle}
+            autoCapitalize="none" spellCheck={false}
+            onChange={(e) => { setForm((f) => ({ ...f, handle: e.target.value.toLowerCase() })); setSaved(false); }} />
+        </div>
+        <div className="cm-field">
+          <label htmlFor={uid + "-city"}>{tr("community.city")} <span className="cm-opt">{tr("community.optional")}</span></label>
+          <input id={uid + "-city"} className="cm-input" maxLength={60} value={form.city} onChange={set("city")} />
+        </div>
+        <div className="cm-field cm-acct-wide">
+          <label htmlFor={uid + "-bio"}>{tr("community.aboutYou")} <span className="cm-opt">{tr("community.optional")}</span></label>
+          <textarea id={uid + "-bio"} className="cm-input cm-textarea" rows={2} maxLength={280} value={form.bio} onChange={set("bio")}
+            placeholder={tr("community.bioPh")} />
+        </div>
+      </div>
+      <div className="tp-set-row-l"><div className="ds">{tr("community.profileVisible")}</div></div>
+      {error && <div className="cm-error" role="alert">{error}</div>}
+      <div className="cm-acct-actions">
+        <button type="submit" className="tp-btn primary" disabled={!!busy || !dirty}>
+          {busy === "save" ? tr("community.saving") : saved && !dirty ? tr("community.profileSaved") : tr("community.saveProfile")}
+        </button>
+        {onCancel && <button type="button" className="tp-btn" onClick={onCancel} disabled={busy === "save"}>{tr("common.cancel")}</button>}
+        <span className="tp-spacer" />
+        {children}
+      </div>
+    </form>
+  );
+}
+
+function CommunityAccountCard({ onOpenCommunity }) {
+  const community = useCommunity();
+  const user = community.user;
+  const [busy, setBusy] = React.useState(null); // "signout" | "delete" | null
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [deleteError, setDeleteError] = React.useState("");
+
+  if (!community.configured) return null;
+
+  const icon = <I.heart s={16} />;
+  if (!user) {
+    return (
+      <SettingsCard icon={icon} title={tr("common.nav.Community")} desc={tr("community.cardDesc")}>
+        <SetRow label={tr("community.accountLabel")} desc={tr("community.notSignedIn")}>
+          <button className="tp-btn" onClick={onOpenCommunity}>{tr("community.signIn")}</button>
+        </SetRow>
+      </SettingsCard>
+    );
+  }
+
+  const signOut = async () => {
+    if (busy) return;
+    setBusy("signout");
+    await CommunityStore.signOut();
+    setBusy(null);
+  };
   const deleteAccount = async () => {
     setDeleteError(""); setBusy("delete");
     const res = await CommunityStore.deleteAccount();
@@ -278,67 +341,14 @@ function CommunityAccountCard({ onOpenCommunity, jump }) {
   return (
     <SettingsCard icon={icon} title={tr("common.nav.Community")}
       desc={user.email ? tr("community.signedInAs", { email: user.email }) : tr("community.signedIn")}>
-      <form className="cm-acct" ref={formRef} onSubmit={save} noValidate>
-        <div className="cm-acct-avatar">
-          <CommunityAvatar id={user.id} avatar={user.avatar} size="lg" />
-          <div className="tp-flex1 cm-acct-avatar-main">
-            <div className="cm-acct-avatar-title">{tr("community.profilePicture")}</div>
-            <div className="cm-acct-avatar-btns">
-              <button type="button" className="tp-btn sm" onClick={pickPhoto} disabled={!!busy}>
-                {busy === "avatar" ? tr("community.saving") : tr("community.uploadPhoto")}
-              </button>
-              {user.googleAvatar && user.avatar !== user.googleAvatar && (
-                <button type="button" className="tp-btn sm" onClick={() => setAvatar(user.googleAvatar)} disabled={!!busy}>{tr("community.useGooglePhoto")}</button>
-              )}
-              {isPhoto && (
-                <button type="button" className="tp-btn sm ghost" onClick={() => setAvatar(null)} disabled={!!busy}>{tr("community.removePhoto")}</button>
-              )}
-            </div>
-            <div className="cm-acct-presets" role="radiogroup" aria-label={tr("community.pickPicture")}>
-              {Array.from({ length: CM_AVATAR_COUNT }, (_, k) => (
-                <button type="button" role="radio" key={k} aria-checked={currentPreset === k} aria-label={tr("community.pictureN", { n: k + 1 })}
-                  className={"cm-preset" + (currentPreset === k ? " on" : "")} disabled={!!busy}
-                  onClick={() => setAvatar("preset:" + k)}><CommunityPresetArt k={k} /></button>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="cm-acct-fields">
-          <div className="cm-field">
-            <label htmlFor="cm-acct-name">{tr("community.name")}</label>
-            <input id="cm-acct-name" className="cm-input" maxLength={60} value={form.displayName} onChange={set("displayName")} />
-          </div>
-          <div className="cm-field">
-            <label htmlFor="cm-acct-handle">{tr("community.handle")}</label>
-            <input id="cm-acct-handle" className="cm-input" maxLength={24} value={form.handle}
-              autoCapitalize="none" spellCheck={false}
-              onChange={(e) => { setForm((f) => ({ ...f, handle: e.target.value.toLowerCase() })); setSaved(false); }} />
-          </div>
-          <div className="cm-field">
-            <label htmlFor="cm-acct-city">{tr("community.city")} <span className="cm-opt">{tr("community.optional")}</span></label>
-            <input id="cm-acct-city" className="cm-input" maxLength={60} value={form.city} onChange={set("city")} />
-          </div>
-          <div className="cm-field cm-acct-wide">
-            <label htmlFor="cm-acct-bio">{tr("community.aboutYou")} <span className="cm-opt">{tr("community.optional")}</span></label>
-            <textarea id="cm-acct-bio" className="cm-input cm-textarea" rows={2} maxLength={280} value={form.bio} onChange={set("bio")}
-              placeholder={tr("community.bioPh")} />
-          </div>
-        </div>
-        <div className="tp-set-row-l"><div className="ds">{tr("community.profileVisible")}</div></div>
-        {error && <div className="cm-error" role="alert">{error}</div>}
-        <div className="cm-acct-actions">
-          <button type="submit" className="tp-btn primary" disabled={!!busy || !dirty}>
-            {busy === "save" ? tr("community.saving") : saved && !dirty ? tr("community.profileSaved") : tr("community.saveProfile")}
-          </button>
-          <span className="tp-spacer" />
-          <button type="button" className="tp-btn" onClick={signOut} disabled={!!busy}>
-            {busy === "signout" ? tr("community.signingOut") : tr("community.signOut")}
-          </button>
-          <button type="button" className="tp-btn ghost cm-danger" onClick={() => { setDeleteError(""); setConfirmDelete(true); }} disabled={!!busy}>
-            {tr("community.deleteAccountDots")}
-          </button>
-        </div>
-      </form>
+      <CommunityProfileForm user={user}>
+        <button type="button" className="tp-btn" onClick={signOut} disabled={!!busy}>
+          {busy === "signout" ? tr("community.signingOut") : tr("community.signOut")}
+        </button>
+        <button type="button" className="tp-btn ghost cm-danger" onClick={() => { setDeleteError(""); setConfirmDelete(true); }} disabled={!!busy}>
+          {tr("community.deleteAccountDots")}
+        </button>
+      </CommunityProfileForm>
       {confirmDelete && (
         <DeleteAccountModal busy={busy === "delete"} error={deleteError}
           onCancel={() => setConfirmDelete(false)} onConfirm={deleteAccount} />
@@ -347,4 +357,4 @@ function CommunityAccountCard({ onOpenCommunity, jump }) {
   );
 }
 
-Object.assign(window, { CommunityView, CommunityAccountCard });
+Object.assign(window, { CommunityView, CommunityAccountCard, CommunityProfileForm });

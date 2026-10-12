@@ -62,7 +62,6 @@
   "pictureFileTooLarge": "这张图片太大了，请选择小于 25 MB 的图片。",
   "notAPicture": "这个文件不是 Compás 能读取的图片。",
   "tandaGone": "这个 tanda 已不存在。",
-  "alreadyShared": "这个 tanda 已经分享过了。",
   "writeSomething": "请先写点内容。",
   "writeComment": "请先写下评论内容。",
   "reportReason": "请简单说明问题所在。",

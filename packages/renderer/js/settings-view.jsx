@@ -360,7 +360,7 @@ function AboutFooter() {
 }
 
 /* ============================ SETTINGS VIEW ============================ */
-function SettingsView({ t, setTweak, onReplayTour, onOpenCommunity, communityJump }) {
+function SettingsView({ t, setTweak, onReplayTour, onOpenCommunity }) {
   return (
     <div className="tv">
       <div className="tv-head">
@@ -384,7 +384,7 @@ function SettingsView({ t, setTweak, onReplayTour, onOpenCommunity, communityJum
 
           <LibraryDisplayCard t={t} setTweak={setTweak} />
 
-          <CommunityAccountCard onOpenCommunity={onOpenCommunity} jump={communityJump} />
+          <CommunityAccountCard onOpenCommunity={onOpenCommunity} />
 
           <SettingsCard icon={<I.spark s={16} />} title={tr("settings.appearanceTitle")}
             desc={tr("settings.appearanceDesc")}>

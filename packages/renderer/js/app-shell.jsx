@@ -217,12 +217,8 @@ function AppBody({ t, setTweak }) {
     window.addEventListener("compas:navigate", onNavigate);
     return () => window.removeEventListener("compas:navigate", onNavigate);
   }, []);
-  // "Edit profile" (Community tab) opens Settings scrolled to the Community
-  // card with the name field focused. The counter re-triggers it on every click.
-  const [profileJump, setProfileJump] = useState(0);
-  const openProfileSettings = () => { setView("Settings"); setProfileJump((n) => n + 1); };
   // Clicking Community in the top bar always lands on the general feed, even
-  // if "My posts" or "Saved" was showing last time (or is showing now).
+  // if "Saved" or a DJ's page was showing last time (or is showing now).
   const [feedHome, setFeedHome] = useState(0);
   // Someone who has never opened the Community tab gets a small "new" dot on
   // it — an honest pointer to a feature they haven't seen, not a made-up count.
@@ -275,12 +271,12 @@ function AppBody({ t, setTweak }) {
       </div>
       {community.configured && (
         <div className="tp-view" style={{ display: view === "Community" ? undefined : "none" }}>
-          <CommunityView onOpenSettings={openProfileSettings} homeSignal={feedHome} active={view === "Community"} />
+          <CommunityView homeSignal={feedHome} active={view === "Community"} />
         </div>
       )}
       <div className="tp-view" style={{ display: view === "Settings" ? undefined : "none" }}>
         <SettingsView t={t} setTweak={setTweak} onReplayTour={startOnboarding}
-          onOpenCommunity={() => setView("Community")} communityJump={profileJump} />
+          onOpenCommunity={() => setView("Community")} />
       </div>
 
       <PlayerBar />

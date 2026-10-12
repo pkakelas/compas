@@ -11,16 +11,19 @@ import {
   type FeedSort,
   type ProfileInput,
 } from '../services/community.js';
-import {buildSharedTanda, matchSharedTanda, type MatchedTanda} from '../services/community-share.js';
+import {buildSharedTanda, claimOwnSongs, matchSharedTanda, type MatchedTanda} from '../services/community-share.js';
 import {buildLibraryIndex} from '../services/suggest-tandas.js';
 import {
   claimLegacyShares,
   clearSharedPost,
+  listSharedPosts,
+  listTandaSharedPosts,
   listLegacyShares,
   setShareAccount,
   getLibrary,
   listCollectionTandas,
   setTandaSharedPost,
+  type Tanda,
 } from './Database.js';
 
 const str = (v: unknown, max: number): string => (typeof v === 'string' ? v.slice(0, max) : '');
@@ -247,7 +250,6 @@ export class CommunityModule implements AppModule {
         if (!(await signedIn())) return {ok: false, error: 'communityErrors.signInFirst'};
         const tanda = findTanda(tandaId);
         if (!tanda) return {ok: false, error: 'communityErrors.tandaGone'};
-        if (tanda.sharedPostId) return {ok: false, error: 'communityErrors.alreadyShared'};
         const built = buildSharedTanda(tanda, includeTags !== false);
         if (!built.ok) return built;
         const posted = await community.createPost({
@@ -256,7 +258,8 @@ export class CommunityModule implements AppModule {
           tanda: built.tanda,
         });
         if (!posted.ok) return posted;
-        // Filed under the account the post was made as.
+        // Filed under the account the post was made as. A tanda can be shared
+        // again: each time is a post of its own.
         setTandaSharedPost(tanda.id, posted.id, posted.userId);
         return {ok: true, postId: posted.id, tandas: listCollectionTandas()};
       },
@@ -267,10 +270,11 @@ export class CommunityModule implements AppModule {
       if (!me) return {ok: false, error: 'communityErrors.signInFirst'};
       const tanda = findTanda(tandaId);
       if (!tanda) return {ok: false, error: 'communityErrors.tandaGone'};
-      if (tanda.sharedPostId) {
-        const removed = await community.deletePost(tanda.sharedPostId);
+      // Taking a tanda down takes down every post it was shared as.
+      for (const postId of listTandaSharedPosts(tanda.id, me)) {
+        const removed = await community.deletePost(postId);
         if (!removed.ok) return removed;
-        setTandaSharedPost(tanda.id, null, me);
+        clearSharedPost(postId);
       }
       return {ok: true, tandas: listCollectionTandas()};
     });
@@ -309,8 +313,17 @@ export class CommunityModule implements AppModule {
         // Matching happens here, on this computer: the backend never learns what
         // is in the library.
         const index = buildLibraryIndex(getLibrary());
-        const localByPost = new Map<string, string>();
-        for (const t of listCollectionTandas()) if (t.sharedPostId) localByPost.set(t.sharedPostId, t.id);
+        // The DJ's own posts, by the tanda each was shared from (a tanda can
+        // be shared more than once): their songs are the DJ's own.
+        const me = await signedIn();
+        const tandasById = new Map(listCollectionTandas().map(t => [t.id, t]));
+        const ownByPost = new Map<string, Tanda>();
+        if (me) {
+          for (const [post, tandaId] of listSharedPosts(me)) {
+            const t = tandasById.get(tandaId);
+            if (t) ownByPost.set(post, t);
+          }
+        }
 
         const posts: FeedPost[] = [];
         let hasMore = true;
@@ -326,7 +339,9 @@ export class CommunityModule implements AppModule {
           hasMore = page.rows.length > FEED_PAGE;
           offset += rows.length;
           for (const r of rows) {
-            const tanda = r.kind === 'tanda' ? matchSharedTanda(index, r.tanda) : null;
+            const own = r.author_id === page.userId ? ownByPost.get(r.id) : undefined;
+            let tanda = r.kind === 'tanda' ? matchSharedTanda(index, r.tanda) : null;
+            if (tanda && own && !tanda.ready) tanda = claimOwnSongs(tanda, own);
             if (!postId && show === 'ready' && !tanda?.ready) continue;
             if (!postId && show === 'missing' && (!tanda || tanda.ready)) continue;
             posts.push({
@@ -348,7 +363,7 @@ export class CommunityModule implements AppModule {
                 avatar: avatarOf(r.author_id, r.author_avatar),
               },
               tanda,
-              localTandaId: localByPost.get(r.id) ?? null,
+              localTandaId: own?.id ?? null,
               comments: [],
             });
           }

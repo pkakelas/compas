@@ -35,6 +35,18 @@ let musicRoot: string;
 
 const post = (id: string) => page.locator(`.cm-post[data-post-id="${id}"]`);
 const myPost = () => stub.posts.find(p => p.author_id === ME && p.kind === 'tanda');
+// The feed's controls: "Show" is a segmented switch, the order a small menu,
+// the orchestra a searchable picker.
+const show = (label: string) => page.getByRole('radiogroup', {name: 'Show'}).getByRole('radio', {name: label}).click();
+const sortBy = async (label: string) => {
+  await page.getByRole('button', {name: /^Sort by:/}).click();
+  await page.getByRole('menuitemradio', {name: label}).click();
+};
+const orchestraButton = () => page.getByRole('button', {name: /^Orchestra:/});
+const pickOrchestra = async (name: string) => {
+  await orchestraButton().click();
+  await page.getByRole('option', {name: new RegExp(`^${name}`)}).click();
+};
 
 test.describe.configure({mode: 'serial'});
 
@@ -103,10 +115,35 @@ test('the feed shows other DJs’ posts matched against this library', async () 
   // The headline names the tanda: "Marta Kowalczyk shared Di Sarli, late night".
   await expect(marta.locator('.cm-post-author')).toHaveText(/Marta Kowalczyk\s+shared\s+Di Sarli, late night/);
   await expect(marta).toContainText('For the last hour, when the lights are low.');
+  // What is here is said once, for the whole tanda; a song that isn't here is
+  // just quieter, with no tick.
   await expect(marta.locator('.cm-match')).toHaveText('2 of 3 in your library');
   await expect(marta.locator('.cm-post-song', {hasText: 'Nido Gaucho'}).getByRole('img', {name: 'In your library'})).toBeVisible();
-  await expect(marta.locator('.cm-post-song', {hasText: 'Tristeza Marina'})).toContainText('Missing');
+  const tristeza = marta.locator('.cm-post-song', {hasText: 'Tristeza Marina'});
+  await expect(tristeza).toHaveClass(/is-missing/);
+  await expect(tristeza.getByRole('img', {name: 'In your library'})).toHaveCount(0);
+  await expect(tristeza).not.toContainText('Missing');
   await expect(marta.getByRole('button', {name: 'Play tanda'})).toHaveCount(0);
+  // The genre leads the line about the music (the sharer's "Tango" type tag
+  // isn't repeated next to it), with the years.
+  await expect(marta.locator('.cm-post-tanda-by .tp-tag')).toHaveText('Tango');
+  await expect(marta.locator('.cm-post-tanda-by .tv-tag', {hasText: 'Tango'})).toHaveCount(0);
+  await expect(marta.locator('.cm-post-tanda-by')).toContainText('1942–1943');
+
+  // Its song list can be copied from the post's menu, to go and find it.
+  // (Caught on its way to the clipboard, so the real one is left alone.)
+  await page.evaluate(() => {
+    navigator.clipboard.writeText = async (text: string) => { (window as any).__copied = text; };
+  });
+  await marta.getByRole('button', {name: 'Post options'}).click();
+  await marta.getByRole('menuitem', {name: 'Copy song list'}).click();
+  await expect(page.locator('.tv-toast')).toContainText('Song list copied');
+  expect(await page.evaluate(() => (window as any).__copied)).toBe([
+    'Di Sarli, late night',
+    '1. Nido Gaucho — Carlos Di Sarli, Alberto Podestá (1942)',
+    '2. Verdemar — Carlos Di Sarli, Alberto Podestá (1943)',
+    '3. Tristeza Marina — Carlos Di Sarli, Alberto Podestá (1943)',
+  ].join('\n'));
 
   const lucia = post(STUB_LUCIA_POST);
   await expect(lucia.locator('.cm-post-author')).toContainText('posted');
@@ -116,9 +153,35 @@ test('the feed shows other DJs’ posts matched against this library', async () 
   // The feed ends on an invitation to share.
   await expect(page.getByText('That’s it for now.')).toBeVisible();
 
-  // The two controls start on "Everything", sorted by "Popular".
-  await expect(page.getByLabel('Show')).toHaveValue('all');
-  await expect(page.getByLabel('Sort by')).toHaveValue('popular');
+  // The controls start on "Everything", sorted by "Popular".
+  await expect(page.getByRole('radiogroup', {name: 'Show'}).getByRole('radio', {name: 'Everything'})).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('button', {name: 'Sort by: Popular'})).toBeVisible();
+});
+
+test('a tanda shared without a name is named after its music', async () => {
+  stub.posts.push({
+    id: 'abcdabcd-abcd-4bcd-8bcd-abcdabcdabcd',
+    author_id: STUB_MARTA,
+    kind: 'tanda',
+    note: '',
+    tanda: {name: null, tags: [], songs: [
+      {title: 'Tabernero', orq: 'Aníbal Troilo', singer: 'Francisco Fiorentino', year: 1941, genre: 'tango'},
+      {title: 'Toda mi vida', orq: 'Aníbal Troilo', singer: 'Francisco Fiorentino y Amadeo Mandarino', year: 1941, genre: 'tango'},
+      {title: 'Pájaro ciego', orq: 'Aníbal Troilo', singer: 'Francisco Fiorentino', year: 1942, genre: 'tango'},
+    ]},
+    created_at: '2026-01-02T12:00:00.000Z',
+  });
+  await page.getByRole('button', {name: 'Refresh'}).click();
+  const troilo = post('abcdabcd-abcd-4bcd-8bcd-abcdabcdabcd');
+  await expect(troilo.locator('.cm-post-author')).toHaveText(/Marta Kowalczyk\s+shared\s+Aníbal Troilo · Tango · 1941–1942/);
+  // Each singer once, though one credit names two.
+  await expect(troilo.locator('.cm-post-tanda-by')).toContainText('Francisco Fiorentino, Amadeo Mandarino');
+  await expect(troilo.locator('.cm-post-tanda-by')).not.toContainText('Francisco Fiorentino, Francisco Fiorentino');
+  await expect(troilo.locator('.cm-match')).toHaveText('None in your library');
+
+  stub.posts.splice(stub.posts.findIndex(p => p.id === 'abcdabcd-abcd-4bcd-8bcd-abcdabcdabcd'), 1);
+  await page.getByRole('button', {name: 'Refresh'}).click();
+  await expect(troilo).toHaveCount(0);
 });
 
 test('sharing a tanda posts song details only', async () => {
@@ -164,30 +227,28 @@ test('my shared tanda is ready to play from the feed', async () => {
   await expect(mine.locator('.cm-match')).toHaveCount(0);
   await expect(mine.getByRole('button', {name: 'Add to my tandas'})).toHaveCount(0);
 
-  // "Show" filters the feed; the two tanda choices depend on this library.
-  const show = page.getByLabel('Show');
-  await show.selectOption({label: 'Tandas I can play'});
+  // "Show" filters the feed; "Can play" depends on this library.
+  await show('Can play');
   await expect(page.locator('.cm-post')).toHaveCount(1);
   await expect(mine).toBeVisible();
-  await show.selectOption({label: 'Tandas I can’t play yet'});
-  await expect(page.locator('.cm-post')).toHaveCount(1);
-  await expect(post(STUB_MARTA_POST)).toBeVisible();
-  await show.selectOption({label: 'Discussions'});
+  await show('Discussions');
   await expect(page.locator('.cm-post')).toHaveCount(1);
   await expect(post(STUB_LUCIA_POST)).toBeVisible();
-  await show.selectOption({label: 'Everything'});
+  // Discussions have no orchestra, so there is no orchestra to pick.
+  await expect(orchestraButton()).toHaveCount(0);
+  await show('Everything');
   await expect(page.locator('.cm-post')).toHaveCount(3);
 
-  // "Sort by": newest puts the post just shared first; most liked follows the
+  // The order: newest puts the post just shared first; most liked follows the
   // likes; popular weighs both, so the fresh post beats two old quiet ones.
-  const sortBy = page.getByLabel('Sort by');
   const firstPost = page.locator('.cm-post').first();
-  await sortBy.selectOption({label: 'Newest'});
+  await sortBy('Newest');
   await expect(firstPost).toHaveAttribute('data-post-id', myPost()!.id);
+  await expect(page.getByRole('button', {name: 'Sort by: Newest'})).toBeVisible();
   stub.likes.add(`${STUB_LUCIA_POST}|${STUB_MARTA}`);
-  await sortBy.selectOption({label: 'Most liked'});
+  await sortBy('Most liked');
   await expect(firstPost).toHaveAttribute('data-post-id', STUB_LUCIA_POST);
-  await sortBy.selectOption({label: 'Popular'});
+  await sortBy('Popular');
   await expect(firstPost).toHaveAttribute('data-post-id', myPost()!.id);
   stub.likes.delete(`${STUB_LUCIA_POST}|${STUB_MARTA}`);
   await page.getByRole('button', {name: 'Refresh'}).click();
@@ -242,31 +303,35 @@ test('the feed can be narrowed to one orchestra', async () => {
   await page.getByRole('button', {name: 'Refresh'}).click();
   await expect(page.locator('.cm-post')).toHaveCount(4);
 
-  // The list offers every shared orchestra, most shared first.
-  // (Other tabs have their own "Orchestra" pickers; this is the feed's.)
-  const orchestra = page.locator('.cm-filters').getByLabel('Orchestra');
-  await expect(orchestra.locator('option')).toHaveText(['All orchestras', 'Carlos Di Sarli', 'Rodolfo Biagi']);
-
-  await orchestra.selectOption({label: 'Rodolfo Biagi'});
+  // The picker lists every shared orchestra, most shared first, and narrows
+  // as the DJ types; Enter picks the first match.
+  await expect(orchestraButton()).toHaveAccessibleName('Orchestra: All orchestras');
+  await orchestraButton().click();
+  const options = page.getByRole('listbox', {name: 'Orchestra'}).getByRole('option');
+  await expect(options).toHaveText([/^All orchestras/, /^Carlos Di Sarli/, /^Rodolfo Biagi/]);
+  await page.getByLabel('Search orchestras').fill('biá');
+  await expect(options).toHaveText([/^Rodolfo Biagi/]);
+  await page.getByLabel('Search orchestras').press('Enter');
+  await expect(orchestraButton()).toHaveAccessibleName('Orchestra: Rodolfo Biagi');
   await expect(page.locator('.cm-post')).toHaveCount(1);
   await expect(page.locator('.cm-post')).toContainText('Biagi valses');
 
   // Clicking an orchestra's name on a post does the same.
-  await orchestra.selectOption({label: 'All orchestras'});
+  await pickOrchestra('All orchestras');
   await expect(page.locator('.cm-post')).toHaveCount(4);
   await post(STUB_MARTA_POST).getByRole('button', {name: 'Carlos Di Sarli'}).click();
-  await expect(orchestra).toHaveValue('sarli');
+  await expect(orchestraButton()).toHaveAccessibleName('Orchestra: Carlos Di Sarli');
   await expect(page.locator('.cm-post')).toHaveCount(2);
   await expect(post(STUB_LUCIA_POST)).toHaveCount(0);
 
   // It combines with "Show": of Di Sarli's tandas, only the one fully owned.
-  await page.getByLabel('Show').selectOption({label: 'Tandas I can play'});
+  await show('Can play');
   await expect(page.locator('.cm-post')).toHaveCount(1);
   await expect(post(myPost()!.id)).toBeVisible();
 
   // Leave the feed as the next tests expect it.
-  await page.getByLabel('Show').selectOption({label: 'Everything'});
-  await orchestra.selectOption({label: 'All orchestras'});
+  await show('Everything');
+  await pickOrchestra('All orchestras');
   stub.posts.splice(stub.posts.findIndex(p => p.id === 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'), 1);
   await page.getByRole('button', {name: 'Refresh'}).click();
   await expect(page.locator('.cm-post')).toHaveCount(3);
@@ -295,8 +360,16 @@ test('likes, comments and replies reach the backend', async () => {
   await expect(marta.locator('.cm-bubble', {hasText: 'Nido gaucho as the opener is brave.'})).toContainText('Test DJ');
   await expect(comment(marta)).toHaveText(/Comment\s*1/);
 
-  // Reply to Marta's comment on the question post.
+  // A conversation is folded to one line — how many, and the newest — until
+  // it is opened.
   const lucia = post(STUB_LUCIA_POST);
+  await expect(lucia.locator('.cm-comment')).toHaveCount(0);
+  await expect(lucia.locator('.cm-peek')).toContainText('View 1 comment');
+  await expect(lucia.locator('.cm-peek')).toContainText('Marta Kowalczyk A light vals. Nothing heavy.');
+  await lucia.locator('.cm-peek').click();
+  await expect(lucia.locator('.cm-peek')).toHaveCount(0);
+
+  // Reply to Marta's comment on the question post.
   await lucia.locator('.cm-comment', {hasText: 'A light vals'}).getByRole('button', {name: 'Reply'}).click();
   await expect(lucia).toContainText('Replying to Marta Kowalczyk');
   await lucia.getByLabel('Write a comment').fill('Biagi works well for that.');
@@ -501,14 +574,19 @@ test('likes and comments on my posts arrive as notifications', async () => {
   await rows.filter({hasText: 'commented on your tanda'}).click();
   await expect(page.locator('.cm-post')).toHaveCount(1);
   await expect(post(mine.id)).toContainText('Great opener, borrowing it.');
+  // Back, the list is as it was left — but the row just opened is no longer new.
   await page.getByRole('button', {name: 'Back to notifications'}).click();
   await expect(page.locator('.cm-notif')).toHaveCount(3);
-  // Nothing is new on a second visit.
-  await expect(page.locator('.cm-notif-dot')).toHaveCount(0);
+  await expect(rows.filter({hasText: 'commented on your tanda'}).locator('.cm-notif-dot')).toHaveCount(0);
+  await expect(page.locator('.cm-notif-dot')).toHaveCount(2);
 
   // The welcome leads to the feed.
   await page.locator('.cm-notif', {hasText: 'Welcome to the Community.'}).click();
   await expect(page.getByRole('navigation', {name: 'Community'}).getByRole('button', {name: 'Feed'})).toHaveAttribute('aria-current', 'page');
+  // Nothing is new on a second visit.
+  await nav.getByRole('button', {name: /Notifications/}).click();
+  await expect(page.locator('.cm-notif')).toHaveCount(3);
+  await expect(page.locator('.cm-notif-dot')).toHaveCount(0);
 
   // Leave the feed as the next tests expect it.
   stub.likes.delete(`${mine.id}|${STUB_MARTA}`);
@@ -545,33 +623,58 @@ test('a like on my comment arrives as a notification', async () => {
   await expect(page.locator('.cm-post')).toHaveCount(4);
 });
 
-test('saved posts and my posts have their own lists', async () => {
+test('saved posts have their own list, and my posts are on my page', async () => {
   await post(STUB_MARTA_POST).getByRole('button', {name: 'Save', exact: true}).click();
   await expect(post(STUB_MARTA_POST).getByRole('button', {name: 'Saved'})).toHaveAttribute('aria-pressed', 'true');
 
-  // Posting belongs to the feed: the other two lists have no composer.
+  // Posting belongs to the feed: elsewhere there is no composer.
   const composer = page.locator('.cm-composer');
   const nav = page.getByRole('navigation', {name: 'Community'});
   await nav.getByRole('button', {name: 'Saved'}).click();
   await expect(page.locator('.cm-post')).toHaveCount(1);
   await expect(post(STUB_MARTA_POST)).toBeVisible();
-  await expect(composer).toHaveCount(0);
-  await expect(page.getByLabel('Show')).toBeVisible();
+  await expect(composer).toBeHidden();
+  await expect(page.getByRole('radiogroup', {name: 'Show'})).toBeVisible();
 
-  await nav.getByRole('button', {name: 'My posts'}).click();
+  // The DJ's own card in the rail opens their page: their posts, newest first,
+  // and no "Show" filter (their own tandas are always theirs).
+  await page.locator('.cm-me-btn').click();
+  await expect(page.locator('.cm-me-btn')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('.cm-profile').getByRole('heading', {name: 'Test DJ'})).toBeVisible();
   await expect(page.locator('.cm-post')).toHaveCount(2);
   await expect(post(STUB_MARTA_POST)).toHaveCount(0);
-  await expect(composer).toHaveCount(0);
-  // …and no "Show" filter either (your own tandas are always yours) — only the order.
-  await expect(page.getByLabel('Show')).toHaveCount(0);
-  await expect(page.getByLabel('Sort by')).toBeVisible();
-  await expect(page.getByRole('heading', {name: 'My posts'})).toBeVisible();
+  await expect(composer).toBeHidden();
+  await expect(page.getByRole('radiogroup', {name: 'Show'})).toHaveCount(0);
 
   // The Community tab in the top bar always goes back to the general feed.
   await page.getByRole('tab', {name: 'Community'}).click();
   await expect(nav.getByRole('button', {name: 'Feed'})).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('.cm-post')).toHaveCount(4);
   await expect(composer).toBeVisible();
+});
+
+test('Back from a DJ’s page returns to the same place in the feed', async () => {
+  // A short window, so the feed scrolls.
+  const size = page.viewportSize();
+  await page.setViewportSize({width: 1100, height: 560});
+  const scroller = page.locator('.cm-scroll').first();
+  await expect.poll(() => scroller.evaluate(el => el.scrollHeight > el.clientHeight + 200)).toBe(true);
+  // The DJ who wrote the last post, a good way down the feed.
+  const author = page.locator('.cm-post').last().locator('.cm-post-head .cm-name-btn');
+  await author.scrollIntoViewIfNeeded();
+  const before = await scroller.evaluate(el => el.scrollTop);
+  expect(before).toBeGreaterThan(0);
+  const name = (await author.textContent())!;
+  await author.click();
+  // Their page lists their posts only — never the feed's while theirs load.
+  await expect(page.locator('.cm-profile').getByRole('heading', {name})).toBeVisible();
+  await expect(page.locator('.cm-post').first()).toBeVisible();
+  await expect(page.locator('.cm-post .cm-post-head .cm-name-btn').filter({hasNotText: name})).toHaveCount(0);
+
+  await page.getByRole('button', {name: 'Back', exact: true}).click();
+  await expect(page.locator('.cm-post')).toHaveCount(4);
+  expect(await scroller.evaluate(el => el.scrollTop)).toBe(before);
+  if (size) await page.setViewportSize(size);
 });
 
 test('a DJ has a page, and can be followed', async () => {
@@ -585,7 +688,7 @@ test('a DJ has a page, and can be followed', async () => {
   await expect(card.getByRole('tab', {name: '0 followers'})).toBeVisible();
   await expect(page.locator('.cm-post')).toHaveCount(1);
   await expect(marta).toBeVisible();
-  await expect(page.locator('.cm-composer')).toHaveCount(0);
+  await expect(page.locator('.cm-composer')).toBeHidden();
 
   // Follow: the button and the count say so, and the backend has it.
   const follow = card.getByRole('button', {name: 'Follow', exact: true});
@@ -622,8 +725,10 @@ test('a DJ has a page, and can be followed', async () => {
   await expect(card.getByRole('button', {name: 'Follow', exact: true})).toBeVisible();
   expect(stub.follows.has(`${ME}|${STUB_MARTA}`)).toBe(false);
   stub.follows.delete(`${STUB_MARTA}|${ME}`);
-  await page.getByRole('button', {name: 'Back', exact: true}).click();
+  // Back says where it goes: her page was opened from the notifications.
+  await page.getByRole('button', {name: 'Back to notifications'}).click();
   await expect(card).toHaveCount(0);
+  await expect(page.locator('.cm-notif', {hasText: 'started following you'})).toBeVisible();
   await nav.getByRole('button', {name: 'Feed'}).click();
   await expect(marta).toBeVisible();
 });
@@ -661,11 +766,12 @@ test('a post can be edited by its author', async () => {
   const stored = stub.posts.find(p => p.note === 'Which transfer of Bahia Blanca do you use?');
   expect(stored?.edited_at).toBeTruthy();
 
-  // Someone else's post offers no editing.
+  // Someone else's post offers no editing (its song list can be copied).
   await post(STUB_MARTA_POST).getByRole('button', {name: 'Post options'}).click();
   await expect(post(STUB_MARTA_POST).getByRole('menuitem', {name: 'Edit post'})).toHaveCount(0);
+  await expect(post(STUB_MARTA_POST).getByRole('menuitem', {name: 'Copy song list'})).toBeVisible();
   await page.keyboard.press('Escape');
-  await post(STUB_MARTA_POST).getByRole('button', {name: 'Post options'}).click();
+  await expect(post(STUB_MARTA_POST).getByRole('menu')).toHaveCount(0);
 
   // Gone again, for the tests that follow.
   stub.posts.splice(stub.posts.indexOf(stored!), 1);
@@ -692,6 +798,32 @@ test('a post can be reported, and its author blocked', async () => {
   await expect(post(STUB_LUCIA_POST)).not.toContainText('A light vals');
 });
 
+test('a shared tanda can be shared again, as a new post', async () => {
+  // Test DJ's tanda is shared (by the dialog, above). The composer still
+  // offers it, marked as shared; posting it again makes a second post, first
+  // in the feed.
+  await gotoView(page, 'Community');
+  await page.getByRole('button', {name: 'Add a tanda'}).click();
+  const item = page.getByRole('menu', {name: 'Your tandas'}).getByRole('menuitem', {name: new RegExp(TANDA_NAME)});
+  await expect(item).toContainText('Shared');
+  await item.click();
+  await page.getByRole('button', {name: 'Post', exact: true}).click();
+  const mine = () => stub.posts.filter(p => p.author_id === ME && p.kind === 'tanda');
+  await expect.poll(() => mine().length).toBe(2);
+  const newest = mine().reduce((a, b) => (a.created_at > b.created_at ? a : b));
+  await expect(page.locator('.cm-post').first()).toHaveAttribute('data-post-id', newest.id);
+
+  // The card still says "Shared", with a button to share it again; the dialog
+  // says that this makes a new post.
+  await gotoView(page, 'Tandas');
+  await expect(page.getByRole('button', {name: 'Shared', exact: true})).toBeVisible();
+  await page.getByRole('button', {name: 'Share again'}).click();
+  const dialog = page.getByRole('dialog', {name: 'Share to Community'});
+  await expect(dialog).toContainText('You’ve shared this tanda before');
+  await dialog.getByRole('button', {name: 'Cancel'}).click();
+  await expect(dialog).toHaveCount(0);
+});
+
 test('unsharing takes the post down and unmarks the tanda', async () => {
   await gotoView(page, 'Tandas');
   // Clicking "Shared" asks before taking the tanda down.
@@ -700,6 +832,7 @@ test('unsharing takes the post down and unmarks the tanda', async () => {
 
   await expect(page.getByRole('button', {name: 'Share', exact: true})).toBeVisible();
   await expect(page.getByRole('button', {name: 'Shared', exact: true})).toHaveCount(0);
+  // Every post it was shared as is gone, not just the newest.
   expect(myPost()).toBeUndefined();
 
   await gotoView(page, 'Community');
@@ -707,7 +840,7 @@ test('unsharing takes the post down and unmarks the tanda', async () => {
 });
 
 test('a tanda can be added to a post from the composer', async () => {
-  // (The tanda was unshared by the test above, so it can be shared again.)
+  // (The tanda was unshared by the test above.)
   const field = page.getByLabel('Write a post');
   await field.fill('Trying this as an opener on Friday.');
   // The tandas are listed right under the button; no dialog. A click elsewhere
@@ -720,14 +853,25 @@ test('a tanda can be added to a post from the composer', async () => {
   await field.click();
   await expect(list).toHaveCount(0);
   await add.click();
+  // The list can be searched.
+  await page.getByLabel('Search your tandas').fill('nothing like this');
+  await expect(list.getByRole('menuitem')).toHaveCount(0);
+  await expect(page.getByText('No tanda matches that.')).toBeVisible();
+  await page.getByLabel('Search your tandas').fill('sarli');
   await list.getByRole('menuitem', {name: new RegExp(TANDA_NAME)}).click();
   await expect(list).toHaveCount(0);
 
-  // The tanda sits in the composer, with what was typed still there.
+  // The tanda sits in the composer, with what was typed still there, and shows
+  // exactly what will be posted: its songs, and the DJ's tags only if wanted.
   await expect(page.locator('.cm-attached')).toContainText(TANDA_NAME);
   await expect(page.locator('.cm-compose-hint')).toContainText('Only the song details are shared');
   await expect(page.getByRole('button', {name: 'Add a tanda'})).toHaveCount(0);
   await expect(field).toHaveValue('Trying this as an opener on Friday.');
+  const preview = page.locator('.cm-compose-preview');
+  for (const title of TANDA_TITLES) await expect(preview).toContainText(title);
+  await expect(preview.locator('.tv-tag', {hasText: 'Tango'})).toBeVisible();
+  await preview.getByLabel('Include my tags').uncheck();
+  await expect(preview.locator('.tv-tag')).toHaveCount(0);
   await page.getByRole('button', {name: 'Post', exact: true}).click();
 
   // It is posted as a shared tanda, with those words as its note.
@@ -735,6 +879,7 @@ test('a tanda can be added to a post from the composer', async () => {
   await expect(first.locator('.cm-post-author')).toHaveText(new RegExp(`Test DJ\\s+shared\\s+${TANDA_NAME}`));
   await expect(first).toContainText('Trying this as an opener on Friday.');
   expect(myPost()).toMatchObject({kind: 'tanda', note: 'Trying this as an opener on Friday.'});
+  expect((myPost()!.tanda as {tags: unknown[]}).tags).toEqual([]);
   await expect(page.locator('.cm-attached')).toHaveCount(0);
 });
 
@@ -798,4 +943,25 @@ test('the Community follows the language, its error messages included', async ()
   await tab(common['nav.Settings']).click();
   await language.selectOption('en');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+});
+
+test('my own shared tanda is all in my library, even songs with no orchestra', async () => {
+  // The vals lose their orchestra here, so matching the post against the
+  // library alone could never find them — but they are the DJ's own songs.
+  await page.evaluate(async () => {
+    const c = (window as any).compas;
+    const lib = await c.getLibrary();
+    const vals = lib.songs.filter((s: any) => s.folder.includes('Biagi'));
+    await c.applySmartOrganize(vals.map((s: any) => ({id: s.id, orq: null})));
+    const tanda = await c.saveTanda({name: 'Valses without orchestra', songIds: vals.map((s: any) => s.id), tags: []});
+    const res = await c.community.share(tanda.id, '', true);
+    if (!res.ok) throw new Error(res.error);
+  });
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+  await gotoView(page, 'Community');
+  const mine = page.locator('.cm-post', {hasText: 'Valses without orchestra'});
+  await expect(mine.getByRole('button', {name: 'Play tanda'})).toBeVisible();
+  await expect(mine.locator('.cm-match')).toHaveCount(0);
+  await expect(mine.getByRole('img', {name: 'In your library'})).toHaveCount(2);
 });

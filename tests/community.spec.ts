@@ -36,6 +36,13 @@ async function launch(dir?: string) {
 
 test.describe.configure({mode: 'serial'});
 
+// The DJ's own page (the card at the top of the Community rail), with its
+// profile turned into the form, in place.
+async function editProfile() {
+  await page.locator('.cm-me-btn').click();
+  await page.locator('.cm-profile').getByRole('button', {name: 'Edit profile'}).click();
+}
+
 test.beforeAll(async () => {
   stub = await startCommunityStub();
   await launch();
@@ -83,42 +90,52 @@ test('a wrong password is explained, the right one signs in', async () => {
   await expect(page.locator('.cm-me-sub')).toHaveText('@dj_test');
 });
 
-test('the profile can be edited from Settings', async () => {
-  // "Edit profile" lands on the Community card itself, not the top of Settings
-  // (the card sits below the fold), with the name field ready to type in.
-  await page.getByRole('button', {name: 'Edit profile'}).click();
-  await expect(page.getByRole('tab', {name: 'Settings'})).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByLabel('Name', {exact: true})).toBeFocused();
-  await expect(page.getByLabel('Name', {exact: true})).toBeInViewport();
-  await expect(page.getByText(`Signed in as ${STUB_ACCOUNT.email}`)).toBeInViewport();
-  const save = page.getByRole('button', {name: 'Save profile'});
+test('the profile is edited in place, on the DJ’s own page', async () => {
+  // "Edit profile" turns the card on the DJ's page into the form, right there,
+  // with the name field ready to type in. The Community tab stays on screen.
+  await editProfile();
+  await expect(page.getByRole('tab', {name: 'Community'})).toHaveAttribute('aria-selected', 'true');
+  const form = page.locator('.cm-profile');
+  await expect(form.getByLabel('Name', {exact: true})).toBeFocused();
+  const save = form.getByRole('button', {name: 'Save profile'});
   await expect(save).toBeDisabled();
 
-  await page.getByLabel('City').fill('Athens');
-  await page.getByLabel('Name', {exact: true}).fill('Test DJ Renamed');
+  await form.getByLabel('City').fill('Athens');
+  await form.getByLabel('Name', {exact: true}).fill('Test DJ Renamed');
   await save.click();
-  await expect(page.getByRole('button', {name: 'Saved'})).toBeVisible();
+  // Saved: the page shows the profile again, as other DJs see it.
+  await expect(page.locator('.tv-toast')).toContainText('Profile saved');
+  await expect(form.getByRole('heading', {name: 'Test DJ Renamed'})).toBeVisible();
+  await expect(form).toContainText('@dj_test · Athens');
   expect(stub.profiles.get('11111111-1111-4111-8111-111111111111')).toMatchObject({
     display_name: 'Test DJ Renamed',
     city: 'Athens',
   });
-
-  // A handle the backend would reject never leaves the app.
-  await page.getByLabel('Handle').fill('no');
-  await page.getByRole('button', {name: 'Save profile'}).click();
-  await expect(page.getByRole('alert')).toContainText('3–24');
-  expect(stub.profiles.get('11111111-1111-4111-8111-111111111111')?.handle).toBe('dj_test');
-
-  await gotoView(page, 'Community');
   await expect(page.locator('.cm-me-name')).toHaveText('Test DJ Renamed');
   await expect(page.locator('.cm-me-sub')).toHaveText('@dj_test · Athens');
+
+  // A handle the backend would reject never leaves the app. Cancel leaves
+  // the profile as it was.
+  await form.getByRole('button', {name: 'Edit profile'}).click();
+  await form.getByLabel('Handle').fill('no');
+  await form.getByRole('button', {name: 'Save profile'}).click();
+  await expect(form.getByRole('alert')).toContainText('3–24');
+  expect(stub.profiles.get('11111111-1111-4111-8111-111111111111')?.handle).toBe('dj_test');
+  await form.getByRole('button', {name: 'Cancel'}).click();
+  await expect(form.getByRole('heading', {name: 'Test DJ Renamed'})).toBeVisible();
+
+  // Settings has the same profile, with the account's own controls.
+  await gotoView(page, 'Settings');
+  await expect(page.getByText(`Signed in as ${STUB_ACCOUNT.email}`)).toBeVisible();
+  await expect(page.getByLabel('Name', {exact: true})).toHaveValue('Test DJ Renamed');
+  await gotoView(page, 'Community');
 });
 
 test('the profile picture can be one of the drawn ones, or an uploaded photo', async () => {
   // With nothing chosen, the app draws one from the account id; picking
   // another is one click, and the backend remembers it.
-  await page.getByRole('button', {name: 'Edit profile'}).click();
-  const card = page.locator('.cm-acct-avatar');
+  await editProfile();
+  const card = page.locator('.cm-profile .cm-acct-avatar');
   const own = card.locator('.cm-avatar');
   await expect(own).toHaveAttribute('data-preset', /^\d+$/);
   await card.getByRole('radio', {name: 'Picture 4'}).click();
@@ -150,7 +167,7 @@ test('the profile picture can be one of the drawn ones, or an uploaded photo', a
   // Everywhere the DJ appears, it is the photo now.
   await gotoView(page, 'Community');
   await expect(page.locator('.cm-me img.cm-avatar')).toBeVisible();
-  await page.getByRole('button', {name: 'Edit profile'}).click();
+  await editProfile();
 
   // A second photo is a file of its own; the first is deleted once replaced.
   await stubFolderDialog(app, png);

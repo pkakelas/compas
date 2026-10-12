@@ -92,7 +92,8 @@ export type Tanda = {
   tags: TandaTag[];
   // False for a tanda that exists only inside an imported playlist.
   inCollection: boolean;
-  // The Community post this tanda was shared as, or null when it isn't shared.
+  // The Community post this tanda was last shared as (it can be shared more
+  // than once), or null when it isn't shared.
   sharedPostId: string | null;
   // Epoch milliseconds when the tanda was first saved (the DB's created_at),
   // so the views can order by creation as well as by name.
@@ -194,13 +195,14 @@ function migrate(d: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_tanda_tags_label ON tanda_tags(label);
 
-    -- Community: the post each tanda was shared as, per account — two DJs who
-    -- sign in on the same computer each see only their own "Shared".
+    -- Community: the posts each tanda was shared as, per account — two DJs who
+    -- sign in on the same computer each see only their own "Shared". A tanda
+    -- can be shared again, so it can have several; rowid keeps their order.
     CREATE TABLE IF NOT EXISTS tanda_shares (
       tanda_id INTEGER NOT NULL REFERENCES tandas(id) ON DELETE CASCADE,
       user_id  TEXT NOT NULL,
       post_id  TEXT NOT NULL,
-      PRIMARY KEY (tanda_id, user_id)
+      PRIMARY KEY (tanda_id, user_id, post_id)
     );
 
     CREATE TABLE IF NOT EXISTS library_roots (
@@ -232,6 +234,26 @@ function migrate(d: Database.Database): void {
       PRIMARY KEY (playlist_id, position)
     );
   `);
+
+  // tanda_shares used to hold one post per tanda and account (the key was
+  // tanda + account). Rebuilt with the post in the key, keeping what it had.
+  const shareKey = d.prepare('PRAGMA table_info(tanda_shares)').all() as {name: string; pk: number}[];
+  if (!shareKey.some(c => c.name === 'post_id' && c.pk > 0)) {
+    d.transaction(() => {
+      d.exec(`
+        CREATE TABLE tanda_shares_new (
+          tanda_id INTEGER NOT NULL REFERENCES tandas(id) ON DELETE CASCADE,
+          user_id  TEXT NOT NULL,
+          post_id  TEXT NOT NULL,
+          PRIMARY KEY (tanda_id, user_id, post_id)
+        );
+        INSERT INTO tanda_shares_new (tanda_id, user_id, post_id)
+          SELECT tanda_id, user_id, post_id FROM tanda_shares ORDER BY rowid;
+        DROP TABLE tanda_shares;
+        ALTER TABLE tanda_shares_new RENAME TO tanda_shares;
+      `);
+    })();
+  }
 
   // Loudness/silence analysis columns. Raw measurements only — the player
   // derives the playback gain (from a target LUFS setting) and the trim offsets
@@ -687,7 +709,8 @@ export function listTandas(): Tanda[] {
   );
   const shares = new Map<number, string>();
   if (shareAccount) {
-    const rows = d.prepare('SELECT tanda_id, post_id FROM tanda_shares WHERE user_id = ?').all(shareAccount) as {
+    // Oldest first, so each tanda ends up with its newest post.
+    const rows = d.prepare('SELECT tanda_id, post_id FROM tanda_shares WHERE user_id = ? ORDER BY rowid').all(shareAccount) as {
       tanda_id: number;
       post_id: string;
     }[];
@@ -709,13 +732,13 @@ export function listCollectionTandas(): Tanda[] {
   return listTandas().filter(t => t.inCollection);
 }
 
-/** Record (or, with null, clear) the post a tanda was shared as by `userId` —
- *  the account that made (or took down) the post, named by the caller rather
- *  than read from whoever is signed in at this moment. */
+/** Record one more post a tanda was shared as by `userId` (or, with null,
+ *  forget all of them) — the account that made (or took down) the posts,
+ *  named by the caller rather than read from whoever is signed in now. */
 export function setTandaSharedPost(id: string, postId: string | null, userId: string): void {
   const d = getDb();
   if (postId) {
-    d.prepare('INSERT OR REPLACE INTO tanda_shares (tanda_id, user_id, post_id) VALUES (?, ?, ?)').run(
+    d.prepare('INSERT OR IGNORE INTO tanda_shares (tanda_id, user_id, post_id) VALUES (?, ?, ?)').run(
       Number(id),
       userId,
       postId,
@@ -723,6 +746,23 @@ export function setTandaSharedPost(id: string, postId: string | null, userId: st
   } else {
     d.prepare('DELETE FROM tanda_shares WHERE tanda_id = ? AND user_id = ?').run(Number(id), userId);
   }
+}
+
+/** Every post `userId` shared one of their tandas as: post id → tanda id. */
+export function listSharedPosts(userId: string): Map<string, string> {
+  const rows = getDb().prepare('SELECT tanda_id, post_id FROM tanda_shares WHERE user_id = ?').all(userId) as {
+    tanda_id: number;
+    post_id: string;
+  }[];
+  return new Map(rows.map(r => [r.post_id, String(r.tanda_id)]));
+}
+
+/** Every post a tanda was shared as by `userId`, oldest first. */
+export function listTandaSharedPosts(id: string, userId: string): string[] {
+  const rows = getDb()
+    .prepare('SELECT post_id FROM tanda_shares WHERE tanda_id = ? AND user_id = ? ORDER BY rowid')
+    .all(Number(id), userId) as {post_id: string}[];
+  return rows.map(r => r.post_id);
 }
 
 /** Forget a Community post that no longer exists, whichever tanda pointed at it. */

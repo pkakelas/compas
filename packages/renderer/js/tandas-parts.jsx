@@ -2034,14 +2034,19 @@ function TandaSearchBar({ filters, onChange, options, countLabel, sortControl })
 
 /* ============================ MANAGE GRID ============================ */
 /* Share control for one of the DJ's own tandas: "Share" until it is shared,
- * then a quiet "Shared" that takes it down again (the view confirms first).
+ * then a quiet "Shared" that takes it down again (the view confirms first),
+ * with a small button beside it to share it again as a new post.
  * Rendered only when the view passes the handlers, which it does only in
  * builds that have Community. */
 function TandaShareButton({ t, onShare, onUnshare }) {
   if (!onShare) return null;
   return t.sharedPostId ? (
-    <button type="button" className="tv-share on" onClick={() => onUnshare(t)}
-      title={tr("community.sharedHint")}><I.check s={12} /> {tr("community.shared")}</button>
+    <>
+      <button type="button" className="tv-share on" onClick={() => onUnshare(t)}
+        title={tr("community.sharedHint")}><I.check s={12} /> {tr("community.shared")}</button>
+      <button type="button" className="tv-share icon" onClick={() => onShare(t)}
+        aria-label={tr("community.shareAgain")} title={tr("community.shareAgain")}><I.upload s={12} /></button>
+    </>
   ) : (
     <button type="button" className="tv-share" onClick={() => onShare(t)} disabled={!t.songs.length}
       title={tr("community.shareHint")}><I.upload s={12} /> {tr("community.share")}</button>

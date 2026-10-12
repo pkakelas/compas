@@ -3034,6 +3034,8 @@ button.tp-nav {
 .tv-share:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tv-share.on { color: var(--vals); border-color: var(--vals-line); background: var(--vals-soft); }
 .tv-share.on:hover { color: var(--vals); border-color: var(--vals); background: var(--vals-soft); }
+/* "Share again", beside "Shared": just the icon */
+.tv-share.icon { width: 26px; padding: 0; justify-content: center; }
 
 /* ---- avatars: a photo, or one of the app's drawn pictures ---- */
 .cm-avatar.sm { width: 28px; height: 28px; }
@@ -3055,14 +3057,44 @@ button.tp-nav {
 .cm-preset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .cm-preset:disabled { opacity: .6; cursor: default; }
 
-/* ---- feed layout: a narrow rail and a reading-width post column ---- */
+/* ---- feed layout: a narrow rail, a reading-width post column, and (on wide
+   windows) a side column of things to do next ---- */
 .cm-feed {
-  width: 100%; max-width: 960px; margin: 0 auto; padding: 24px 30px 44px;
+  width: 100%; max-width: 1300px; margin: 0 auto; padding: 24px 30px 44px;
   display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: center; gap: 24px;
 }
-/* the rail stays put while the posts scroll past it */
+/* the rail and the side column stay put while the posts scroll past them */
 .cm-rail { flex: 1 1 200px; max-width: 240px; min-width: 0; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 24px; }
 .cm-col { flex: 1 1 420px; max-width: 620px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.cm-side { flex: 0 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 24px; }
+@media (max-width: 1180px) { .cm-side { display: none; } }
+.cm-side-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 14px 12px; }
+.cm-side-title { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
+.cm-side-share { display: flex; gap: 12px; align-items: flex-start; }
+.cm-side-share-ic {
+  width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent);
+}
+.cm-side-share-text { font-size: 13px; line-height: 1.45; color: var(--ink); margin: 2px 0 10px; }
+.cm-side-people { display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; }
+.cm-side-person { display: flex; align-items: center; gap: 6px; }
+.cm-side-person .cm-person-main { gap: 10px; padding: 6px; }
+.cm-side-person .cm-person-name { font-size: 13px; }
+.cm-side-person .cm-person-sub { font-size: 12px; }
+.cm-side-person .cm-follow { height: 30px; padding: 0 11px; }
+/* a quieter Follow here: three loud buttons would pull the eye off the feed */
+.cm-side-person .cm-follow.primary { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-deep); box-shadow: none; }
+.cm-side-person .cm-follow.primary:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.cm-side-orqs { display: flex; flex-wrap: wrap; gap: 6px; }
+.cm-orq-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line-2); background: transparent; color: var(--ink); font: 500 12.5px var(--sans);
+  transition: background .12s, border-color .12s;
+}
+.cm-orq-chip .n { font: 600 11px var(--mono); color: var(--ink-2); }
+.cm-orq-chip:hover { background: var(--surface-2); }
+.cm-orq-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-deep); }
+.cm-orq-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .cm-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
 .cm-nav-item {
   display: flex; align-items: center; gap: 11px; height: 40px; padding: 0 12px; border-radius: 10px;
@@ -3072,7 +3104,7 @@ button.tp-nav {
 .cm-nav-item.on { background: var(--surface-2); color: var(--ink); font-weight: 600; }
 .cm-nav-item.on svg { color: var(--accent); }
 .cm-nav-item:focus-visible, .cm-act:focus-visible, .cm-composer-btn:focus-visible, .cm-newpill:focus-visible, .cm-ptab:focus-visible, .cm-person-main:focus-visible, .cm-me-btn:focus-visible, .cm-name-btn:focus-visible,
-.cm-meta-btn:focus-visible, .cm-more:focus-visible, .cm-send:focus-visible, .cm-tanda-menu button:focus-visible, .cm-attached-x:focus-visible {
+.cm-meta-btn:focus-visible, .cm-more:focus-visible, .cm-send:focus-visible, .cm-menu button:focus-visible, .cm-attached-x:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 
@@ -3116,9 +3148,12 @@ button.tp-nav {
 /* ---- a DJ's page ---- */
 .cm-me-btn { width: 100%; cursor: pointer; font: inherit; color: inherit; text-align: left; }
 .cm-me-btn:hover { border-color: var(--line-2); }
+.cm-me-btn.on { border-color: var(--accent-line); background: var(--surface-2); }
 .cm-name-btn { padding: 0; border: none; background: none; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
 .cm-name-btn:hover { text-decoration: underline; }
 .cm-profile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px 22px 0; }
+.cm-profile.is-editing { padding-bottom: 20px; }
+.cm-profile.is-editing .cm-profile-name { margin: 0 0 16px; }
 .cm-profile-head { display: flex; align-items: flex-start; gap: 16px; }
 .cm-avatar.lg { width: 64px; height: 64px; font-size: 20px; }
 .cm-profile-id { min-width: 0; }
@@ -3179,23 +3214,59 @@ button.tp-nav {
 }
 .cm-attached-x:hover { background: var(--line); color: var(--ink); }
 .cm-compose-hint { flex: 1 1 140px; min-width: 0; font-size: 12.5px; line-height: 1.3; color: var(--ink-2); }
-/* the DJ's tandas, listed under "Add a tanda" */
-.cm-tanda-menu { left: 0; right: auto; width: 300px; max-height: 300px; overflow-y: auto; }
+/* the DJ's tandas, listed under "Add a tanda", with a search on top */
+.cm-tanda-menu { left: 0; right: auto; width: 320px; }
+/* a popover with a search field and a list that scrolls under it */
+.cm-pop { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.cm-pop .cm-menu-list { max-height: 280px; overflow-y: auto; padding: 5px; }
+.cm-menu-search {
+  display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 40px; flex: none;
+  border-bottom: 1px solid var(--line); color: var(--ink-2); cursor: text;
+}
+.cm-menu-search input { flex: 1; min-width: 0; height: 100%; border: none; outline: none; background: transparent; color: var(--ink); font: 500 13.5px var(--sans); }
+.cm-menu-search input::placeholder { color: var(--ink-3s); }
+.cm-menu-list button.is-active { background: var(--surface-2); }
+.cm-menu-list button.on { font-weight: 700; }
+/* what a tanda added to a post will send: its songs, and the tags if wanted */
+.cm-compose-preview { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); }
+.cm-compose-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
+.cm-compose-preview-head .cm-check { text-transform: none; letter-spacing: 0; }
+.cm-compose-songs { margin: 8px 0 0; padding: 0 0 0 20px; display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--ink); }
+.cm-compose-songs li { padding-left: 2px; }
+.cm-compose-songs li::marker { font: 11px var(--mono); color: var(--ink-3s); }
+.cm-compose-songs .t { font-weight: 600; }
+.cm-compose-songs .m { margin-left: 8px; color: var(--ink-2); font-size: 12px; }
+.cm-compose-preview .tv-tagrow { margin-top: 8px; }
+.cm-check.sm { gap: 7px; font-size: 12.5px; font-weight: 500; color: var(--ink-2); }
+.cm-check.sm input { width: 14px; height: 14px; }
 .cm-tanda-menu-empty { padding: 10px; font-size: 13px; line-height: 1.4; color: var(--ink-2); }
 .cm-pick-name { display: block; font-size: 13.5px; font-weight: 600; }
+/* a tanda shared before (it can be shared again) */
+.cm-pick-shared { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; font-size: 11px; font-weight: 600; color: var(--vals); }
 .cm-pick-sub { display: block; font-size: 12px; color: var(--ink-2); }
 .cm-pick-n { font: 12px var(--mono); color: var(--ink-2); flex: none; }
 .cm-textarea { height: auto; padding: 10px 13px; resize: vertical; line-height: 1.45; }
 
-/* the feed's two controls: what to show, and in what order */
-/* One row, however many controls there are: each takes an equal share of the
-   width, with its label sitting small above it, so nothing wraps. */
-.cm-filters { display: flex; align-items: flex-end; gap: 10px; }
-.cm-filter { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
-.cm-filter > span { padding-left: 2px; }
-.cm-select { width: 100%; min-width: 0; height: 36px; font-weight: 500; text-overflow: ellipsis; }
-.cm-filters .cm-list-title { flex: 2 1 0; align-self: center; }
-.cm-refresh { flex: none; height: 36px; width: 36px; }
+/* the feed's controls, in one quiet row: what to show (a segmented switch),
+   which orchestra (a searchable picker), and — on the right — the order */
+.cm-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cm-seg button { padding: 6px 12px; white-space: nowrap; }
+.cm-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cm-filter-btn {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 220px; height: 32px; padding: 0 10px 0 12px; cursor: pointer;
+  border-radius: 9px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); font: 600 12.5px var(--sans);
+}
+.cm-filter-btn:hover, .cm-filter-btn[aria-expanded="true"] { background: var(--surface-2); }
+.cm-filter-btn.on { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-deep); }
+.cm-filter-btn.quiet { border-color: transparent; background: transparent; color: var(--ink-2); }
+.cm-filter-btn.quiet:hover, .cm-filter-btn.quiet[aria-expanded="true"] { background: var(--surface-2); color: var(--ink); }
+.cm-filter-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cm-filter-val { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-caret { display: inline-flex; flex: none; transform: rotate(90deg); opacity: .7; }
+.cm-filters .cm-menu-wrap > .cm-menu { left: 0; right: auto; }
+.cm-filters .cm-pop { width: 280px; }
+.cm-filters .cm-sort-menu { left: auto; right: 0; min-width: 180px; }
+.cm-refresh { flex: none; height: 32px; width: 32px; }
 .cm-empty-btn { margin-top: 14px; }
 .cm-list-title { flex: 1; margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
 /* one-line explanation of the library check (or what to do without a library) */
@@ -3225,6 +3296,10 @@ button.tp-nav {
 .cm-skel .b1 { width: 70%; height: 14px; }
 .cm-skel .b2 { height: 58px; margin-top: 12px; border-radius: 12px; }
 .cm-skel .b3 { width: 45%; height: 12px; margin-top: 12px; }
+.cm-skel-row { display: flex; align-items: center; gap: 12px; padding: 14px; border-bottom: 1px solid var(--line); }
+.cm-skel-row:last-child { border-bottom: none; }
+.cm-skel-row .av { width: 28px; height: 28px; flex: none; }
+.cm-skel-row .l1 { width: 60%; max-width: 260px; }
 @keyframes cmPulse { 50% { opacity: .55; } }
 .cm-sentinel { height: 1px; }
 .cm-end { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 20px 16px 8px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
@@ -3243,6 +3318,16 @@ button.tp-nav {
 .cm-post-edit { margin-top: 12px; }
 .cm-post-edit .cm-textarea { display: block; width: 100%; font-size: 15px; }
 .cm-post-edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+/* A post the DJ has just made drops in at the top of the feed and glows once. */
+.cm-post.is-arriving { animation: cmArrive .5s cubic-bezier(.2, .8, .3, 1), cmGlow 2.8s ease-out; }
+@keyframes cmArrive {
+  from { opacity: 0; transform: translateY(-18px) scale(.98); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes cmGlow {
+  0%, 30% { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 18px 44px -22px var(--shadow-accent); }
+  100%    { border-color: var(--line); box-shadow: 0 0 0 0 transparent; }
+}
 /* a question is the post — let it be the loudest thing in it */
 .cm-post.is-question .cm-post-note { font-size: 19px; font-weight: 600; line-height: 1.35; letter-spacing: -.01em; }
 
@@ -3265,6 +3350,7 @@ button.tp-nav {
 .cm-post-tanda-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .cm-post-tanda-by { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12.5px; color: var(--ink-2); }
 .cm-post-tanda-by .tv-tag { height: 20px; font-size: 10.5px; padding: 0 8px; }
+.cm-years { font: 12px var(--mono); }
 .cm-post-tname { font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
 /* an orchestra name on a post: click it to see only that orchestra's tandas */
 .cm-orq-link { padding: 0; border: none; background: none; font: inherit; color: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
@@ -3286,10 +3372,15 @@ button.tp-nav {
 .cm-post-tanda-name { flex: 1; min-width: 0; font-size: 16px; font-weight: 700; letter-spacing: -.015em; line-height: 1.25; color: var(--ink); overflow-wrap: anywhere; }
 .cm-post-tanda-sub { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; }
 .cm-share-preview-top .tv-tcard-tags { margin-top: 9px; }
-.cm-match { flex: none; margin: 0; }
-/* "1 of 4 in your library" — said plainly, in the same quiet voice as the line
-   it sits on; no badge. */
-.cm-match-partial { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+/* "1 of 4 in your library", said once for the whole tanda: a dot a song,
+   filled for the ones the DJ has. */
+.cm-match {
+  flex: none; display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; margin: 0;
+  border-radius: 999px; background: var(--surface-2); font-size: 12px; font-weight: 600; color: var(--ink-2); white-space: nowrap;
+}
+.cm-dots { display: inline-flex; gap: 3px; }
+.cm-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); }
+.cm-dots i.on { background: var(--vals); }
 .cm-post-songs { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px 8px; }
 .cm-post-tanda .cm-post-songs { padding: 8px 0 0; }
 .cm-post-tanda .cm-post-song { margin: 0 -8px; padding: 3px 8px; }
@@ -3309,15 +3400,13 @@ button.tp-nav {
 .cm-post-song .d { font: 12px var(--mono); color: var(--ink-2); flex: none; min-width: 32px; text-align: right; }
 .cm-post-song .own { flex: none; display: inline-flex; color: var(--vals); }
 /* A song the DJ has gets a green tick and full-strength text; one they don't
-   is simply dimmed, with a plain "Missing" where the tick would be. */
-.cm-post-song .miss { flex: none; font-size: 11.5px; color: var(--ink-3s); }
-.cm-post-song.is-missing .t { color: var(--ink-3s); }
+   is simply quieter — the badge above already says how many are missing. */
+.cm-post-song.is-missing .t { color: var(--ink-2); }
 .cm-post-song.is-missing .d { color: var(--ink-3s); }
 .cm-post-song.is-clickable { cursor: pointer; transition: background .12s; }
 .cm-post-song.is-clickable:hover { background: var(--surface-2); }
 .cm-post-song.playing { background: var(--accent-soft); }
 .cm-post-song.playing .t { color: var(--accent-deep); font-weight: 600; }
-.cm-post-foot-note { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
 
 /* a light row of actions under the post — no rules, no full-width bar */
 .cm-post-actions { display: flex; flex-wrap: wrap; gap: 2px; margin: 10px -10px -6px; }
@@ -3334,9 +3423,20 @@ button.tp-nav {
 @keyframes cmPop { 0% { transform: scale(1); } 40% { transform: scale(1.4); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) {
   .cm-skel, .cm-act.pop svg, .cm-meta-like.pop svg { animation: none; }
+  .cm-post.is-arriving { animation: cmGlow 2.8s ease-out; }
 }
 
 /* ---- conversation ---- */
+/* Folded: how many comments, and the newest one, on a single line. */
+.cm-peek {
+  display: flex; align-items: baseline; gap: 10px; width: 100%; margin: 12px 0 -4px; padding: 10px 0 2px; cursor: pointer;
+  border: none; border-top: 1px solid var(--line); background: none; color: var(--ink-2); font: 500 12.5px var(--sans); text-align: left;
+}
+.cm-peek-n { flex: none; font-weight: 700; color: var(--ink-2); }
+.cm-peek-last { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.cm-peek-last b { font-weight: 700; color: var(--ink); }
+.cm-peek:hover .cm-peek-n { color: var(--ink); text-decoration: underline; }
+.cm-peek:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .cm-more { display: block; margin: 14px 0 -4px; padding: 0; border: none; background: none; font: 600 12.5px var(--sans); color: var(--ink-2); cursor: pointer; }
 .cm-more:hover { color: var(--ink); text-decoration: underline; }
 .cm-comments { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
@@ -3413,7 +3513,5 @@ button.tp-nav {
   .cm-acct-fields { grid-template-columns: minmax(0, 1fr); }
   .cm-feed { padding: 16px; gap: 16px; }
   .cm-rail { max-width: none; position: static; }
-  .cm-filters { flex-wrap: wrap; }
-  .cm-filter { flex: 1 1 140px; }
   .cm-comment.is-reply { margin-left: 20px; }
 }
