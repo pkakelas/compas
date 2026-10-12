@@ -798,6 +798,32 @@ test('a post can be reported, and its author blocked', async () => {
   await expect(post(STUB_LUCIA_POST)).not.toContainText('A light vals');
 });
 
+test('a shared tanda can be shared again, as a new post', async () => {
+  // Test DJ's tanda is shared (by the dialog, above). The composer still
+  // offers it, marked as shared; posting it again makes a second post, first
+  // in the feed.
+  await gotoView(page, 'Community');
+  await page.getByRole('button', {name: 'Add a tanda'}).click();
+  const item = page.getByRole('menu', {name: 'Your tandas'}).getByRole('menuitem', {name: new RegExp(TANDA_NAME)});
+  await expect(item).toContainText('Shared');
+  await item.click();
+  await page.getByRole('button', {name: 'Post', exact: true}).click();
+  const mine = () => stub.posts.filter(p => p.author_id === ME && p.kind === 'tanda');
+  await expect.poll(() => mine().length).toBe(2);
+  const newest = mine().reduce((a, b) => (a.created_at > b.created_at ? a : b));
+  await expect(page.locator('.cm-post').first()).toHaveAttribute('data-post-id', newest.id);
+
+  // The card still says "Shared", with a button to share it again; the dialog
+  // says that this makes a new post.
+  await gotoView(page, 'Tandas');
+  await expect(page.getByRole('button', {name: 'Shared', exact: true})).toBeVisible();
+  await page.getByRole('button', {name: 'Share again'}).click();
+  const dialog = page.getByRole('dialog', {name: 'Share to Community'});
+  await expect(dialog).toContainText('You’ve shared this tanda before');
+  await dialog.getByRole('button', {name: 'Cancel'}).click();
+  await expect(dialog).toHaveCount(0);
+});
+
 test('unsharing takes the post down and unmarks the tanda', async () => {
   await gotoView(page, 'Tandas');
   // Clicking "Shared" asks before taking the tanda down.
@@ -806,6 +832,7 @@ test('unsharing takes the post down and unmarks the tanda', async () => {
 
   await expect(page.getByRole('button', {name: 'Share', exact: true})).toBeVisible();
   await expect(page.getByRole('button', {name: 'Shared', exact: true})).toHaveCount(0);
+  // Every post it was shared as is gone, not just the newest.
   expect(myPost()).toBeUndefined();
 
   await gotoView(page, 'Community');
@@ -813,7 +840,7 @@ test('unsharing takes the post down and unmarks the tanda', async () => {
 });
 
 test('a tanda can be added to a post from the composer', async () => {
-  // (The tanda was unshared by the test above, so it can be shared again.)
+  // (The tanda was unshared by the test above.)
   const field = page.getByLabel('Write a post');
   await field.fill('Trying this as an opener on Friday.');
   // The tandas are listed right under the button; no dialog. A click elsewhere

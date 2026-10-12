@@ -933,8 +933,10 @@ function CommunityComposer({ user, pickSignal, flash, onPosted }) {
 
   // The field is taller while there is something to post.
   const composing = text.length > 0 || !!attached;
-  // The DJ's tandas that can be added: not shared yet, and not empty.
-  const shareable = (store.tandas || []).filter((t) => !t.sharedPostId && t.songs.length > 0);
+  // The DJ's tandas that can be added: any with songs. One shared before can
+  // be shared again (a new post); those not shared yet come first.
+  const shareable = (store.tandas || []).filter((t) => t.songs.length > 0)
+    .sort((a, b) => (a.sharedPostId ? 1 : 0) - (b.sharedPostId ? 1 : 0));
   const q = cmFold(query.trim());
   const matches = !q ? shareable : shareable.filter((t) => {
     const m = tandaMeta(t);
@@ -1046,7 +1048,10 @@ function CommunityComposer({ user, pickSignal, flash, onPosted }) {
                       return (
                         <button type="button" role="menuitem" key={t.id} onClick={() => attach(t)}>
                           <span className="tp-flex1">
-                            <span className="cm-pick-name">{t.name || m.orq}</span>
+                            <span className="cm-pick-name">
+                              {t.name || m.orq}
+                              {t.sharedPostId && <span className="cm-pick-shared"><I.check s={11} /> {tr("community.shared")}</span>}
+                            </span>
                             <span className="cm-pick-sub">{[t.name ? m.orq : null, m.singer || null, genreLabel(m.genre), m.year || null].filter(Boolean).join(" · ")}</span>
                           </span>
                           <span className="cm-pick-n">{tr("community.songs", { count: t.songs.length })}</span>
@@ -1054,11 +1059,7 @@ function CommunityComposer({ user, pickSignal, flash, onPosted }) {
                       );
                     })}
                   </div>
-                  {shareable.length === 0 && (
-                    <div className="cm-tanda-menu-empty">
-                      {(store.tandas || []).length ? tr("community.allShared") : tr("community.noTandas")}
-                    </div>
-                  )}
+                  {shareable.length === 0 && <div className="cm-tanda-menu-empty">{tr("community.noTandas")}</div>}
                   {shareable.length > 0 && matches.length === 0 && (
                     <div className="cm-tanda-menu-empty">{tr("community.noTandaMatches")}</div>
                   )}

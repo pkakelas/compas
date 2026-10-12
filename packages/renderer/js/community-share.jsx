@@ -78,6 +78,8 @@ function ShareTandaModal({ tanda, onClose, onShared }) {
   return shell(
     <>
       <div className="cm-share-body">
+        {/* Shared before: this makes a new post; the earlier one stays. */}
+        {tanda.sharedPostId && <div className="cm-notice">{tr("community.shareAgainNote")}</div>}
         {/* what gets posted */}
         <div className="cm-share-preview">
           {!preview && <div className="cm-share-loading">{tr("community.preparingPreview")}</div>}

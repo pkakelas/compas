@@ -16,6 +16,7 @@ import {buildLibraryIndex} from '../services/suggest-tandas.js';
 import {
   claimLegacyShares,
   clearSharedPost,
+  listTandaSharedPosts,
   listLegacyShares,
   setShareAccount,
   getLibrary,
@@ -247,7 +248,6 @@ export class CommunityModule implements AppModule {
         if (!(await signedIn())) return {ok: false, error: 'communityErrors.signInFirst'};
         const tanda = findTanda(tandaId);
         if (!tanda) return {ok: false, error: 'communityErrors.tandaGone'};
-        if (tanda.sharedPostId) return {ok: false, error: 'communityErrors.alreadyShared'};
         const built = buildSharedTanda(tanda, includeTags !== false);
         if (!built.ok) return built;
         const posted = await community.createPost({
@@ -256,7 +256,8 @@ export class CommunityModule implements AppModule {
           tanda: built.tanda,
         });
         if (!posted.ok) return posted;
-        // Filed under the account the post was made as.
+        // Filed under the account the post was made as. A tanda can be shared
+        // again: each time is a post of its own.
         setTandaSharedPost(tanda.id, posted.id, posted.userId);
         return {ok: true, postId: posted.id, tandas: listCollectionTandas()};
       },
@@ -267,10 +268,11 @@ export class CommunityModule implements AppModule {
       if (!me) return {ok: false, error: 'communityErrors.signInFirst'};
       const tanda = findTanda(tandaId);
       if (!tanda) return {ok: false, error: 'communityErrors.tandaGone'};
-      if (tanda.sharedPostId) {
-        const removed = await community.deletePost(tanda.sharedPostId);
+      // Taking a tanda down takes down every post it was shared as.
+      for (const postId of listTandaSharedPosts(tanda.id, me)) {
+        const removed = await community.deletePost(postId);
         if (!removed.ok) return removed;
-        setTandaSharedPost(tanda.id, null, me);
+        clearSharedPost(postId);
       }
       return {ok: true, tandas: listCollectionTandas()};
     });

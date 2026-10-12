@@ -3034,6 +3034,8 @@ button.tp-nav {
 .tv-share:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tv-share.on { color: var(--vals); border-color: var(--vals-line); background: var(--vals-soft); }
 .tv-share.on:hover { color: var(--vals); border-color: var(--vals); background: var(--vals-soft); }
+/* "Share again", beside "Shared": just the icon */
+.tv-share.icon { width: 26px; padding: 0; justify-content: center; }
 
 /* ---- avatars: a photo, or one of the app's drawn pictures ---- */
 .cm-avatar.sm { width: 28px; height: 28px; }
@@ -3239,6 +3241,8 @@ button.tp-nav {
 .cm-check.sm input { width: 14px; height: 14px; }
 .cm-tanda-menu-empty { padding: 10px; font-size: 13px; line-height: 1.4; color: var(--ink-2); }
 .cm-pick-name { display: block; font-size: 13.5px; font-weight: 600; }
+/* a tanda shared before (it can be shared again) */
+.cm-pick-shared { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; font-size: 11px; font-weight: 600; color: var(--vals); }
 .cm-pick-sub { display: block; font-size: 12px; color: var(--ink-2); }
 .cm-pick-n { font: 12px var(--mono); color: var(--ink-2); flex: none; }
 .cm-textarea { height: auto; padding: 10px 13px; resize: vertical; line-height: 1.45; }
