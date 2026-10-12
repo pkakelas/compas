@@ -112,23 +112,24 @@ test('the feed shows other DJs’ posts matched against this library', async () 
   await gotoView(page, 'Community');
   const marta = post(STUB_MARTA_POST);
   await expect(marta).toContainText('Marta Kowalczyk');
-  // The headline names the tanda: "Marta Kowalczyk shared Di Sarli, late night".
-  await expect(marta.locator('.cm-post-author')).toHaveText(/Marta Kowalczyk\s+shared\s+Di Sarli, late night/);
+  // Who shared it and what they wrote come first; then the music: the
+  // orchestra and its singers, then genre, years and the sharer's name for it.
+  await expect(marta.locator('.cm-post-author')).toContainText('Marta Kowalczyk');
+  await expect(marta.locator('.cm-tanda-orq')).toHaveText('Carlos Di Sarli');
+  await expect(marta.locator('.cm-tanda-singers')).toHaveText('Alberto Podestá');
+  await expect(marta.locator('.cm-post-meta')).toContainText('Di Sarli, late night');
   await expect(marta).toContainText('For the last hour, when the lights are low.');
-  // What is here is said once, for the whole tanda; a song that isn't here is
-  // just quieter, with no tick.
-  await expect(marta.locator('.cm-match')).toHaveText('2 of 3 in your library');
+  // A song that is here has a tick; one that isn't is just quieter.
   await expect(marta.locator('.cm-post-song', {hasText: 'Nido Gaucho'}).getByRole('img', {name: 'In your library'})).toBeVisible();
   const tristeza = marta.locator('.cm-post-song', {hasText: 'Tristeza Marina'});
   await expect(tristeza).toHaveClass(/is-missing/);
   await expect(tristeza.getByRole('img', {name: 'In your library'})).toHaveCount(0);
   await expect(tristeza).not.toContainText('Missing');
-  await expect(marta.getByRole('button', {name: 'Play tanda'})).toHaveCount(0);
   // The genre leads the line about the music (the sharer's "Tango" type tag
   // isn't repeated next to it), with the years.
-  await expect(marta.locator('.cm-post-tanda-by .tp-tag')).toHaveText('Tango');
-  await expect(marta.locator('.cm-post-tanda-by .tv-tag', {hasText: 'Tango'})).toHaveCount(0);
-  await expect(marta.locator('.cm-post-tanda-by')).toContainText('1942–1943');
+  await expect(marta.locator('.cm-post-meta .tp-tag')).toHaveText('Tango');
+  await expect(marta.locator('.cm-post-meta .tv-tag', {hasText: 'Tango'})).toHaveCount(0);
+  await expect(marta.locator('.cm-post-meta')).toContainText('1942–1943');
 
   // Its song list can be copied from the post's menu, to go and find it.
   // (Caught on its way to the clipboard, so the real one is left alone.)
@@ -146,7 +147,8 @@ test('the feed shows other DJs’ posts matched against this library', async () 
   ].join('\n'));
 
   const lucia = post(STUB_LUCIA_POST);
-  await expect(lucia.locator('.cm-post-author')).toContainText('posted');
+  await expect(lucia.locator('.cm-post-author')).toContainText('Lucía Rivas');
+  await expect(lucia.locator('.cm-tanda')).toHaveCount(0);
   await expect(lucia).toContainText('What do you play right after a Pugliese tanda?');
   await expect(lucia).toContainText('A light vals. Nothing heavy.');
 
@@ -158,7 +160,7 @@ test('the feed shows other DJs’ posts matched against this library', async () 
   await expect(page.getByRole('button', {name: 'Sort by: Popular'})).toBeVisible();
 });
 
-test('a tanda shared without a name is named after its music', async () => {
+test('a tanda is described by its music, each singer once', async () => {
   stub.posts.push({
     id: 'abcdabcd-abcd-4bcd-8bcd-abcdabcdabcd',
     author_id: STUB_MARTA,
@@ -173,11 +175,12 @@ test('a tanda shared without a name is named after its music', async () => {
   });
   await page.getByRole('button', {name: 'Refresh'}).click();
   const troilo = post('abcdabcd-abcd-4bcd-8bcd-abcdabcdabcd');
-  await expect(troilo.locator('.cm-post-author')).toHaveText(/Marta Kowalczyk\s+shared\s+Aníbal Troilo · Tango · 1941–1942/);
+  await expect(troilo.locator('.cm-tanda-orq')).toHaveText('Aníbal Troilo');
+  await expect(troilo.locator('.cm-post-meta')).toContainText('Tango');
+  await expect(troilo.locator('.cm-post-meta')).toContainText('1941–1942');
   // Each singer once, though one credit names two.
-  await expect(troilo.locator('.cm-post-tanda-by')).toContainText('Francisco Fiorentino, Amadeo Mandarino');
-  await expect(troilo.locator('.cm-post-tanda-by')).not.toContainText('Francisco Fiorentino, Francisco Fiorentino');
-  await expect(troilo.locator('.cm-match')).toHaveText('None in your library');
+  await expect(troilo.locator('.cm-tanda-singers')).toHaveText('Francisco Fiorentino, Amadeo Mandarino');
+  await expect(troilo.getByRole('img', {name: 'In your library'})).toHaveCount(0);
 
   stub.posts.splice(stub.posts.findIndex(p => p.id === 'abcdabcd-abcd-4bcd-8bcd-abcdabcdabcd'), 1);
   await page.getByRole('button', {name: 'Refresh'}).click();
@@ -221,10 +224,8 @@ test('my shared tanda is ready to play from the feed', async () => {
   await gotoView(page, 'Community');
   const mine = post(myPost()!.id);
   await expect(mine).toContainText('Test DJ');
-  // Ready: the title row offers Play instead of a "missing songs" count, and
-  // there is nothing to add — it is already the DJ's own tanda.
-  await expect(mine.getByRole('button', {name: 'Play tanda'})).toBeVisible();
-  await expect(mine.locator('.cm-match')).toHaveCount(0);
+  // Every song is here, and there is nothing to add: it is the DJ's own tanda.
+  await expect(mine.getByRole('img', {name: 'In your library'})).toHaveCount(3);
   await expect(mine.getByRole('button', {name: 'Add to my tandas'})).toHaveCount(0);
 
   // "Show" filters the feed; "Can play" depends on this library.
@@ -254,10 +255,11 @@ test('my shared tanda is ready to play from the feed', async () => {
   await page.getByRole('button', {name: 'Refresh'}).click();
   await expect(page.locator('.cm-post')).toHaveCount(3);
 
-  // Play starts the tanda in place: its first song shows as playing.
-  await mine.getByRole('button', {name: 'Play tanda'}).click();
+  // A song that is here can be listened to right there, and shows as playing.
+  await mine.locator('.cm-post-song', {hasText: 'Nido Gaucho'}).click();
   await expect(mine.locator('.cm-post-song.playing')).toHaveCount(1, {timeout: 15_000});
-  await expect(mine.locator('.cm-post-song.playing')).toContainText(/Bahia Blanca|Nido Gaucho|Verdemar/);
+  await expect(mine.locator('.cm-post-song.playing')).toContainText('Nido Gaucho');
+  await mine.locator('.cm-post-song', {hasText: 'Nido Gaucho'}).click();
 });
 
 test('posts that arrive while reading are offered, not forced', async () => {
@@ -526,7 +528,7 @@ test('a post is written in the composer', async () => {
   await postButton.click();
 
   const first = page.locator('.cm-post').first();
-  await expect(first.locator('.cm-post-author')).toHaveText(/Test DJ\s+posted/);
+  await expect(first.locator('.cm-post-author')).toContainText('Test DJ');
   await expect(first).toContainText('Which transfer of Verdemar do you use?');
   expect(stub.posts.some(p => p.kind === 'question' && p.author_id === ME)).toBe(true);
   await expect(field).toHaveValue('');
@@ -660,7 +662,7 @@ test('Back from a DJ’s page returns to the same place in the feed', async () =
   const scroller = page.locator('.cm-scroll').first();
   await expect.poll(() => scroller.evaluate(el => el.scrollHeight > el.clientHeight + 200)).toBe(true);
   // The DJ who wrote the last post, a good way down the feed.
-  const author = page.locator('.cm-post').last().locator('.cm-post-head .cm-name-btn');
+  const author = page.locator('.cm-post').last().locator('.cm-post-name');
   await author.scrollIntoViewIfNeeded();
   const before = await scroller.evaluate(el => el.scrollTop);
   expect(before).toBeGreaterThan(0);
@@ -669,7 +671,7 @@ test('Back from a DJ’s page returns to the same place in the feed', async () =
   // Their page lists their posts only — never the feed's while theirs load.
   await expect(page.locator('.cm-profile').getByRole('heading', {name})).toBeVisible();
   await expect(page.locator('.cm-post').first()).toBeVisible();
-  await expect(page.locator('.cm-post .cm-post-head .cm-name-btn').filter({hasNotText: name})).toHaveCount(0);
+  await expect(page.locator('.cm-post .cm-post-name').filter({hasNotText: name})).toHaveCount(0);
 
   await page.getByRole('button', {name: 'Back', exact: true}).click();
   await expect(page.locator('.cm-post')).toHaveCount(4);
@@ -680,7 +682,7 @@ test('Back from a DJ’s page returns to the same place in the feed', async () =
 test('a DJ has a page, and can be followed', async () => {
   // A name on a post opens the DJ's page: who they are, and their posts.
   const marta = post(STUB_MARTA_POST);
-  await marta.locator('.cm-post-head').getByRole('button', {name: 'Marta Kowalczyk'}).click();
+  await marta.locator('.cm-post-name').click();
   const card = page.locator('.cm-profile');
   await expect(card.getByRole('heading', {name: 'Marta Kowalczyk'})).toBeVisible();
   await expect(card).toContainText('@marta · Kraków');
@@ -876,7 +878,8 @@ test('a tanda can be added to a post from the composer', async () => {
 
   // It is posted as a shared tanda, with those words as its note.
   const first = page.locator('.cm-post').first();
-  await expect(first.locator('.cm-post-author')).toHaveText(new RegExp(`Test DJ\\s+shared\\s+${TANDA_NAME}`));
+  await expect(first.locator('.cm-post-author')).toContainText('Test DJ');
+  await expect(first.locator('.cm-post-meta')).toContainText(TANDA_NAME);
   await expect(first).toContainText('Trying this as an opener on Friday.');
   expect(myPost()).toMatchObject({kind: 'tanda', note: 'Trying this as an opener on Friday.'});
   expect((myPost()!.tanda as {tags: unknown[]}).tags).toEqual([]);
