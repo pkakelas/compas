@@ -3,6 +3,9 @@ import type {ModuleContext} from '../ModuleContext.js';
 import {session} from 'electron';
 
 const AUDIO_PERMISSIONS = new Set(['media', 'audioCapture', 'speaker-selection']);
+// Writing plain text to the clipboard (the Community's "Copy song list"). Only
+// writing: nothing in the app reads the clipboard.
+const ALLOWED = new Set([...AUDIO_PERMISSIONS, 'clipboard-sanitized-write']);
 
 /**
  * Lets the renderer enumerate audio output devices (with real labels) and route
@@ -11,7 +14,8 @@ const AUDIO_PERMISSIONS = new Set(['media', 'audioCapture', 'speaker-selection']
  * another.
  *
  * Without these handlers Chromium hides device labels and refuses
- * `setSinkId` to any non-default device.
+ * `setSinkId` to any non-default device. Also lets the renderer write text to
+ * the clipboard, which the same handlers would otherwise refuse.
  */
 export class MediaDevicePermissionsModule implements AppModule {
   async enable({app}: ModuleContext): Promise<void> {
@@ -19,10 +23,10 @@ export class MediaDevicePermissionsModule implements AppModule {
     const ses = session.defaultSession;
 
     ses.setPermissionRequestHandler((_wc, permission, callback) => {
-      callback(AUDIO_PERMISSIONS.has(permission));
+      callback(ALLOWED.has(permission));
     });
 
-    ses.setPermissionCheckHandler((_wc, permission) => AUDIO_PERMISSIONS.has(permission));
+    ses.setPermissionCheckHandler((_wc, permission) => ALLOWED.has(permission));
   }
 }
 
