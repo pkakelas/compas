@@ -4,12 +4,13 @@
 // actions. Every action resolves to `{ok: true, state}` or `{ok: false, error}`
 // so callers can show the message as-is: the main process sends a message key
 // (communityErrors.*), and it is worded here, in the DJ's language.
-// `feedVersion` ticks whenever something was posted or removed from outside the
-// feed (sharing from the Tandas tab), so an open feed knows to reload.
+// `feedVersion` ticks whenever something was posted or removed, so an open feed
+// knows to reload. `justPosted` is the post the DJ has just made here
+// ({id, n}; `n` counts, so each post is news), which the feed shows first.
 // `unread` is the number of new notifications (the bell in the top bar);
 // `openNotifications` ticks when the bell is clicked, so the Community tab
 // knows to show them.
-let _cmState = { loaded: false, configured: false, user: null, feedVersion: 0, unread: 0, openNotifications: 0 };
+let _cmState = { loaded: false, configured: false, user: null, feedVersion: 0, justPosted: null, unread: 0, openNotifications: 0 };
 const _cmSubs = new Set();
 let _cmUnsub = null;
 
@@ -84,6 +85,10 @@ async function _cmDataTandas(name, ...args) {
   return res;
 }
 
+function _cmPosted(id) {
+  if (id) _cmSet({ justPosted: { id, n: (_cmState.justPosted ? _cmState.justPosted.n : 0) + 1 } });
+}
+
 const CommunityStore = {
   get: () => _cmState,
   subscribe(fn) {
@@ -116,11 +121,19 @@ const CommunityStore = {
   avatarPick: () => _cmCall("avatarPick"),
 
   sharePreview: (tandaId, includeTags) => _cmData("sharePreview", tandaId, includeTags),
-  shareTanda: (tandaId, note, includeTags) => _cmDataTandas("share", tandaId, note, includeTags),
+  async shareTanda(tandaId, note, includeTags) {
+    const res = await _cmDataTandas("share", tandaId, note, includeTags);
+    if (res.ok && res.postId) _cmPosted(res.postId);
+    return res;
+  },
   unshareTanda: (tandaId) => _cmDataTandas("unshare", tandaId),
   deletePost: (postId) => _cmDataTandas("deletePost", postId),
   editPost: (postId, note) => _cmData("editPost", postId, note),
-  ask: (text) => _cmData("ask", text),
+  async ask(text) {
+    const res = await _cmData("ask", text);
+    if (res.ok) { _cmPosted(res.id); _cmSet({ feedVersion: _cmState.feedVersion + 1 }); }
+    return res;
+  },
   feed: (opts) => _cmData("feed", opts),
   latest: () => _cmData("latest"),
   orchestras: () => _cmData("orchestras"),

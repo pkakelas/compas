@@ -261,8 +261,9 @@ const CM_NOTE_MAX = 500;
 
 /* ---------- a post ----------
    Its conversation stays folded to one line until the DJ opens it (`expanded`,
-   kept by the feed so it survives going to a DJ's page and back). */
-function CommunityPost({ post, me, tandaSigs, expanded, onExpand, onChange, onRemove, onReload, onPickOrq, onOpenProfile, flash, ask }) {
+   kept by the feed so it survives going to a DJ's page and back). A post the
+   DJ has just made is `arriving`: it drops in at the top and glows once. */
+function CommunityPost({ post, me, tandaSigs, expanded, arriving, onExpand, onChange, onRemove, onReload, onPickOrq, onOpenProfile, flash, ask }) {
   const player = usePlayer();
   const [menuOpen, setMenuOpen] = React.useState(false);
   const menuRef = React.useRef(null);
@@ -448,7 +449,7 @@ function CommunityPost({ post, me, tandaSigs, expanded, onExpand, onChange, onRe
   const name = <button type="button" className="cm-name-btn" onClick={() => onOpenProfile(post.author.id)}>{post.author.name}</button>;
   const tandaTitle = post.tanda ? cmTandaTitle(post.tanda) : "";
   return (
-    <article className={"cm-post" + (post.kind === "question" ? " is-question" : "")} data-post-id={post.id}>
+    <article className={"cm-post" + (post.kind === "question" ? " is-question" : "") + (arriving ? " is-arriving" : "")} data-post-id={post.id}>
       <div className="cm-post-head">
         <CommunityAvatar id={post.author.id} avatar={post.author.avatar} />
         <div className="tp-flex1">
@@ -973,7 +974,7 @@ function CommunityComposer({ user, pickSignal, flash, onPosted }) {
     const wasTanda = !!attached;
     setText(""); detach(); setIncludeTags(true);
     flash(wasTanda ? tr("community.sharedToCommunity") : tr("community.posted"));
-    onPosted(wasTanda);
+    onPosted();
   };
 
   // The quiet line beside the buttons: what sharing a tanda sends, or (once
@@ -1241,6 +1242,12 @@ function CommunityFeed({ user, homeSignal, active }) {
   // newer has turned up since (the "New posts" pill).
   const newestSeen = React.useRef(null);
   const [hasNew, setHasNew] = React.useState(false);
+  // The post the DJ has just made (here or from a tanda card): first in the
+  // feed whatever the order, until they refresh or move on once it has been
+  // shown (`shown`); and arriving, with a little animation, while new.
+  const fresh = React.useRef(null); // {id, post, shown} | null
+  const dropFresh = () => { if (fresh.current && fresh.current.shown) fresh.current = null; };
+  const [arrivingId, setArrivingId] = React.useState(null);
 
   /* -- moving around -- */
   const remember = () => {
@@ -1250,11 +1257,11 @@ function CommunityFeed({ user, homeSignal, active }) {
   };
   const toTop = () => { scrollTarget.current = 0; };
   // Start a fresh trail (the rail, the top bar)…
-  const start = (next) => { cache.current.clear(); toTop(); setEditingProfile(false); setTrail([next]); };
+  const start = (next) => { dropFresh(); cache.current.clear(); toTop(); setEditingProfile(false); setTrail([next]); };
   // …step into a place (Back returns here)…
   const push = (next) => { remember(); toTop(); setEditingProfile(false); setTrail((t) => t.concat(next)); };
   // …or change this one in place (a filter, a tab).
-  const update = (patch) => { toTop(); setTrail((t) => t.slice(0, -1).concat({ ...t[t.length - 1], ...patch })); };
+  const update = (patch) => { dropFresh(); toTop(); setTrail((t) => t.slice(0, -1).concat({ ...t[t.length - 1], ...patch })); };
   const back = () => {
     if (!below) return;
     remember();
@@ -1279,8 +1286,21 @@ function CommunityFeed({ user, homeSignal, active }) {
     setLoading(true); setError("");
     const res = await CommunityStore.feed(cmPlaceQuery(p, s));
     if (mine !== request.current) return; // a newer load superseded this one
+    // The post just made goes first in the unfiltered feed — fetched on its
+    // own if this page of the feed doesn't have it.
+    let posts = res.ok ? res.posts : [];
+    const f = fresh.current;
+    if (res.ok && f && p.kind === "list" && p.scope === "all" && p.show === "all" && !p.orq) {
+      let first = posts.find((x) => x.id === f.id) || f.post;
+      if (!first) {
+        const one = await CommunityStore.feed({ scope: "all", postId: f.id });
+        if (mine !== request.current) return;
+        first = one.ok ? one.posts[0] : null;
+      }
+      if (first) { posts = [first].concat(posts.filter((x) => x.id !== f.id)); f.post = first; f.shown = true; }
+    }
     setLoading(false);
-    if (res.ok) setList({ key: k, posts: res.posts, hasMore: res.hasMore, nextOffset: res.nextOffset });
+    if (res.ok) setList({ key: k, posts, hasMore: res.hasMore, nextOffset: res.nextOffset });
     else setError(res.error);
     if (p.kind !== "list") return;
     // Whatever was newest at this moment has now been seen.
@@ -1290,6 +1310,7 @@ function CommunityFeed({ user, homeSignal, active }) {
   };
   const loadOrchestras = () => CommunityStore.orchestras().then((res) => { if (res.ok) setOrchestras(res.orchestras); });
   const reload = () => {
+    dropFresh();
     if (key) load(place, sort);
     if (place.kind === "notifications") setNotifs(null);
     if (place.kind === "profile") setProfileTick((n) => n + 1);
@@ -1317,6 +1338,7 @@ function CommunityFeed({ user, homeSignal, active }) {
     if (lastUser.current === user.id) return;
     lastUser.current = user.id;
     profiles.current.clear();
+    fresh.current = null;
     setNotifs(null); setOpenThreads(new Set());
     start(CM_HOME);
   }, [user.id]);
@@ -1349,6 +1371,24 @@ function CommunityFeed({ user, homeSignal, active }) {
     if (atRoot) { toTop(); reload(); return; }
     start({ kind: "list", scope: id, show: "all", orq: "" });
   };
+
+  // A post was just made: the next load of the feed (the store has asked for
+  // one) puts it first, and it arrives at the top of the page.
+  const postedSeen = React.useRef(community.justPosted);
+  React.useEffect(() => {
+    const posted = community.justPosted;
+    if (!posted || posted === postedSeen.current) return;
+    postedSeen.current = posted;
+    fresh.current = { id: posted.id, post: null, shown: false };
+    setArrivingId(posted.id);
+    if (place.kind === "list" && place.scope === "all") toTop();
+  }, [community.justPosted]);
+  // The arrival plays once the DJ can see it; after that it is just a post.
+  React.useEffect(() => {
+    if (!arrivingId || !active) return undefined;
+    const timer = setTimeout(() => setArrivingId(null), 6000);
+    return () => clearTimeout(timer);
+  }, [arrivingId, active]);
 
   // The bell in the top bar was clicked: show the notifications. (Both signals
   // are counters; a click from before this feed was on screen doesn't count.)
@@ -1449,8 +1489,9 @@ function CommunityFeed({ user, homeSignal, active }) {
     else toTop();
     setPickSignal((n) => n + 1);
   };
-  // Sharing a tanda refreshes the feed by itself; plain words need a nudge.
-  const onPosted = (wasTanda) => { if (!wasTanda) reload(); };
+  // Posting reloads the feed by itself (through the store). A filter that
+  // would hide the new post steps aside, so it is there, first.
+  const onPosted = () => { if (place.show !== "all" || place.orq) update({ show: "all", orq: "" }); };
 
   // Notifications: a row leads to its post (or the DJ who followed), and is no
   // longer new once opened.
@@ -1658,7 +1699,7 @@ function CommunityFeed({ user, homeSignal, active }) {
 
             {showPosts && posts.map((p) => (
               <CommunityPost key={p.id} post={p} me={user} tandaSigs={tandaSigs}
-                expanded={place.kind === "post" || openThreads.has(p.id)} onExpand={expand}
+                expanded={place.kind === "post" || openThreads.has(p.id)} arriving={p.id === arrivingId} onExpand={expand}
                 onChange={changePost} onRemove={removePost} onReload={reloadAll} onPickOrq={pickOrq}
                 onOpenProfile={openProfile} flash={flash} ask={ask} />
             ))}

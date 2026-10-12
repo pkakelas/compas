@@ -3314,6 +3314,16 @@ button.tp-nav {
 .cm-post-edit { margin-top: 12px; }
 .cm-post-edit .cm-textarea { display: block; width: 100%; font-size: 15px; }
 .cm-post-edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+/* A post the DJ has just made drops in at the top of the feed and glows once. */
+.cm-post.is-arriving { animation: cmArrive .5s cubic-bezier(.2, .8, .3, 1), cmGlow 2.8s ease-out; }
+@keyframes cmArrive {
+  from { opacity: 0; transform: translateY(-18px) scale(.98); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes cmGlow {
+  0%, 30% { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 18px 44px -22px var(--shadow-accent); }
+  100%    { border-color: var(--line); box-shadow: 0 0 0 0 transparent; }
+}
 /* a question is the post — let it be the loudest thing in it */
 .cm-post.is-question .cm-post-note { font-size: 19px; font-weight: 600; line-height: 1.35; letter-spacing: -.01em; }
 
@@ -3409,6 +3419,7 @@ button.tp-nav {
 @keyframes cmPop { 0% { transform: scale(1); } 40% { transform: scale(1.4); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) {
   .cm-skel, .cm-act.pop svg, .cm-meta-like.pop svg { animation: none; }
+  .cm-post.is-arriving { animation: cmGlow 2.8s ease-out; }
 }
 
 /* ---- conversation ---- */
