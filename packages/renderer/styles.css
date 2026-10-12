@@ -2991,9 +2991,10 @@ button.tp-nav {
 
 /* the signed-in DJ's own card (feed rail) */
 .cm-me {
-  display: flex; align-items: center; gap: 14px; padding: 16px 18px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  background: transparent; border: none; border-radius: 12px;
 }
+.cm-me .cm-avatar { width: 40px; height: 40px; }
 .cm-avatar {
   width: 44px; height: 44px; flex: none; border-radius: 50%; display: grid; place-items: center;
   background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent-deep);
@@ -3001,10 +3002,7 @@ button.tp-nav {
 }
 .cm-me-name { font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cm-me-sub { font-size: 12.5px; color: var(--ink-2); margin-top: 1px; }
-.cm-empty {
-  text-align: center; padding: 44px 24px; background: var(--surface);
-  border: 1px dashed var(--line-2); border-radius: var(--r);
-}
+.cm-empty { text-align: center; padding: 44px 24px 36px; }
 .cm-empty-ic {
   width: 46px; height: 46px; margin: 0 auto 14px; border-radius: 50%; display: grid; place-items: center;
   color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line);
@@ -3039,6 +3037,7 @@ button.tp-nav {
 
 /* ---- avatars: a photo, or one of the app's drawn pictures ---- */
 .cm-avatar.sm { width: 28px; height: 28px; }
+.cm-avatar.xs { width: 22px; height: 22px; }
 .cm-avatar { overflow: hidden; padding: 0; }
 .cm-avatar svg { display: block; width: 100%; height: 100%; }
 .cm-avatar.is-photo { object-fit: cover; border-color: var(--line-2); background: var(--surface-2); }
@@ -3066,11 +3065,13 @@ button.tp-nav {
 /* the rail and the side column stay put while the posts scroll past them */
 .cm-rail { flex: 1 1 200px; max-width: 240px; min-width: 0; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 24px; }
 .cm-col { flex: 1 1 420px; max-width: 620px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
-.cm-side { flex: 0 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 24px; }
+.cm-side { flex: 0 1 280px; min-width: 0; display: flex; flex-direction: column; position: sticky; top: 24px; }
 @media (max-width: 1180px) { .cm-side { display: none; } }
-.cm-side-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 14px 12px; }
-.cm-side-title { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
-.cm-side-share { display: flex; gap: 12px; align-items: flex-start; }
+.cm-side-card { padding: 18px 0; border-top: 1px solid var(--line); }
+.cm-side-card:first-child, .cm-side-share + .cm-side-card { padding-top: 4px; border-top: none; }
+.cm-side-title { margin: 0 0 10px; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+/* the one call to action: a soft panel */
+.cm-side-share { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 18px; padding: 14px; border-radius: 14px; background: var(--surface-2); }
 .cm-side-share-ic {
   width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center;
   background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent);
@@ -3095,7 +3096,7 @@ button.tp-nav {
 .cm-orq-chip:hover { background: var(--surface-2); }
 .cm-orq-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-deep); }
 .cm-orq-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.cm-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.cm-nav { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; border-top: 1px solid var(--line); }
 .cm-nav-item {
   display: flex; align-items: center; gap: 11px; height: 40px; padding: 0 12px; border-radius: 10px;
   border: none; background: transparent; color: var(--ink-2); font: 500 14px var(--sans); cursor: pointer; text-align: left;
@@ -3129,13 +3130,14 @@ button.tp-nav {
   text-align: center; background: var(--accent); color: var(--on-accent); font: 700 10px/16px var(--mono);
 }
 .cm-nav-n { margin-left: auto; }
-.cm-notifs { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.cm-notifs { display: flex; flex-direction: column; gap: 2px; margin: 0 -10px; }
 .cm-notif {
-  display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 12px 14px; text-align: left; cursor: pointer;
-  border: none; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit;
+  display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 12px 10px; text-align: left; cursor: pointer;
+  border: none; border-radius: 12px; background: transparent; color: var(--ink); font: inherit;
 }
-.cm-notif:last-child { border-bottom: none; }
 .cm-notif:hover { background: var(--surface-2); }
+.cm-notif.is-unread { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+.cm-notif.is-unread:hover { background: var(--accent-soft); }
 .cm-notif:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .cm-notif-text { display: block; font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
 .cm-notif-text b { font-weight: 700; color: var(--ink); }
@@ -3143,16 +3145,18 @@ button.tp-nav {
 .cm-notif-when { display: block; margin-top: 3px; font-size: 12px; color: var(--ink-2); }
 .cm-notif .tp-flex1 { min-width: 0; }
 .cm-notif-dot { width: 9px; height: 9px; flex: none; margin-top: 6px; border-radius: 50%; background: var(--accent); }
-.cm-back { align-self: flex-start; }
+/* Back: a quiet link above the page it leaves */
+.cm-back { align-self: flex-start; height: 30px; margin: -4px 0 -6px -10px; padding: 0 10px; border-color: transparent; background: transparent; color: var(--ink-2); }
+.cm-back:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); border-color: transparent; }
 
 /* ---- a DJ's page ---- */
 .cm-me-btn { width: 100%; cursor: pointer; font: inherit; color: inherit; text-align: left; }
-.cm-me-btn:hover { border-color: var(--line-2); }
-.cm-me-btn.on { border-color: var(--accent-line); background: var(--surface-2); }
+.cm-me-btn:hover, .cm-me-btn.on { background: var(--surface-2); }
 .cm-name-btn { padding: 0; border: none; background: none; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
 .cm-name-btn:hover { text-decoration: underline; }
-.cm-profile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px 22px 0; }
-.cm-profile.is-editing { padding-bottom: 20px; }
+.cm-profile { padding: 6px 0 0; }
+/* editing one's own: the form in a soft panel, like the other forms */
+.cm-profile.is-editing { padding: 20px 22px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
 .cm-profile.is-editing .cm-profile-name { margin: 0 0 16px; }
 .cm-profile-head { display: flex; align-items: flex-start; gap: 16px; }
 .cm-avatar.lg { width: 64px; height: 64px; font-size: 20px; }
@@ -3164,7 +3168,7 @@ button.tp-nav {
   background: var(--surface-2); font-size: 11.5px; font-weight: 600; color: var(--ink-2);
 }
 .cm-profile-bio { margin: 14px 0 0; font-size: 14.5px; line-height: 1.5; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
-.cm-profile-tabs { display: flex; gap: 4px; margin-top: 16px; border-top: 1px solid var(--line); }
+.cm-profile-tabs { display: flex; gap: 4px; margin-top: 18px; border-bottom: 1px solid var(--line); }
 .cm-ptab {
   display: inline-flex; align-items: center; gap: 5px; height: 44px; padding: 0 12px; margin-bottom: -1px;
   border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--ink-2); font: 500 13.5px var(--sans); cursor: pointer;
@@ -3173,9 +3177,8 @@ button.tp-nav {
 .cm-ptab:hover { color: var(--ink); }
 .cm-ptab.on { color: var(--ink); border-bottom-color: var(--accent); }
 .cm-follow { flex: none; }
-.cm-people { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
-.cm-person { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border-bottom: 1px solid var(--line); }
-.cm-person:last-child { border-bottom: none; }
+.cm-people { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; }
+.cm-person { display: flex; align-items: center; gap: 10px; padding: 2px 8px 2px 0; }
 .cm-person-main {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 6px 8px; border: none; border-radius: 10px;
   background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer;
@@ -3189,11 +3192,16 @@ button.tp-nav {
 
 /* ---- composer: one field; under it "Add a tanda" (or the tanda added) and "Post" ---- */
 .cm-composer {
-  display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 14px 16px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  display: grid; grid-template-columns: 40px minmax(0, 1fr); column-gap: 14px; margin: 0; padding: 2px 0 18px;
+  border-bottom: 1px solid var(--line);
 }
-.cm-composer-main { flex: 1; min-width: 0; }
-.cm-composer .cm-composer-input { display: block; width: 100%; min-height: 44px; padding: 11px 16px; border-radius: 22px; resize: none; background: var(--bg); }
+.cm-composer > .cm-avatar { width: 40px; height: 40px; }
+.cm-composer-main { min-width: 0; }
+.cm-composer .cm-composer-input {
+  display: block; width: 100%; min-height: 42px; padding: 10px 16px; border-radius: 21px; resize: none;
+  background: var(--surface); border-color: var(--line);
+}
+.cm-composer .cm-composer-input:hover { border-color: var(--line-2); }
 .cm-composer.is-open .cm-composer-input { border-radius: 12px; }
 .cm-ask-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .cm-ask-actions > .tp-btn { flex: none; margin-left: auto; }
@@ -3286,18 +3294,16 @@ button.tp-nav {
 .cm-newpill svg { transform: rotate(180deg); }
 
 /* loading placeholders, and the invisible marker that loads older posts */
-.cm-skels { display: flex; flex-direction: column; gap: 16px; }
+.cm-skels { display: flex; flex-direction: column; }
 .cm-skel { animation: cmPulse 1.4s ease-in-out infinite; }
 .cm-skel i { display: block; border-radius: 6px; background: var(--surface-2); }
-.cm-skel-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-.cm-skel .av { width: 44px; height: 44px; border-radius: 50%; }
-.cm-skel .l1 { width: 180px; height: 12px; }
+.cm-skel .av { width: 40px; height: 40px; border-radius: 50%; }
+.cm-skel .l1 { width: 180px; height: 12px; margin-top: 4px; }
 .cm-skel .l2 { width: 110px; height: 10px; margin-top: 8px; }
-.cm-skel .b1 { width: 70%; height: 14px; }
+.cm-skel .b1 { width: 70%; height: 14px; margin-top: 16px; }
 .cm-skel .b2 { height: 58px; margin-top: 12px; border-radius: 12px; }
 .cm-skel .b3 { width: 45%; height: 12px; margin-top: 12px; }
-.cm-skel-row { display: flex; align-items: center; gap: 12px; padding: 14px; border-bottom: 1px solid var(--line); }
-.cm-skel-row:last-child { border-bottom: none; }
+.cm-skel-row { display: flex; align-items: center; gap: 12px; padding: 12px 10px; }
 .cm-skel-row .av { width: 28px; height: 28px; flex: none; }
 .cm-skel-row .l1 { width: 60%; max-width: 260px; }
 @keyframes cmPulse { 50% { opacity: .55; } }
@@ -3307,15 +3313,35 @@ button.tp-nav {
 .cm-end .tp-btn { margin-top: 8px; }
 
 /* ---- a post ---- */
-.cm-post { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; }
-.cm-post-head { display: flex; align-items: center; gap: 12px; }
-.cm-post-author { font-size: 14px; color: var(--ink); }
-.cm-post-author b { font-weight: 700; }
-.cm-post-author span { color: var(--ink-2); }
-.cm-post-where { font-size: 12px; color: var(--ink-2); }
-.cm-post-note { margin: 12px 0 0; font-size: 15px; line-height: 1.45; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* A timeline, not a stack of boxes. Each post: the DJ's picture on the left
+   with a thin spine down their post, and beside it, in the order a DJ reads
+   it, who they are, what they wrote, then the tanda. A hairline between posts. */
+.cm-thread { display: flex; flex-direction: column; }
+.cm-post {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr); column-gap: 14px;
+  margin: 0 -14px; padding: 18px 14px 16px;
+}
+.cm-thread > .cm-post + .cm-post { border-top: 1px solid var(--line); }
+.cm-post-rail { display: flex; flex-direction: column; align-items: center; }
+.cm-post-rail::after { content: ""; flex: 1; width: 2px; margin: 10px 0 4px; border-radius: 1px; background: var(--line); }
+.cm-post-rail .cm-avatar { width: 40px; height: 40px; }
+.cm-post-avatar { display: block; padding: 0; border: none; border-radius: 50%; background: none; cursor: pointer; transition: opacity .12s; }
+.cm-post-avatar:hover { opacity: .85; }
+.cm-post-body { min-width: 0; }
+/* who: name, then where and when, on one line beside the top of the picture */
+.cm-post-head { display: flex; align-items: center; gap: 10px; min-height: 28px; margin-top: -3px; }
+.cm-post-author { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; font-size: 14.5px; color: var(--ink); white-space: nowrap; }
+.cm-post-author .cm-name-btn { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+.cm-post-where { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 13px; color: var(--ink-2); }
+/* what they wrote: the headline of the post */
+.cm-post-note { margin: 2px 0 0; font-size: 16px; line-height: 1.5; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* a question is the post: let it be the loudest thing in it */
+.cm-post.is-question .cm-post-note { font-size: 18.5px; font-weight: 600; line-height: 1.35; letter-spacing: -.012em; }
 /* editing a post's words, in place */
-.cm-post-edit { margin-top: 12px; }
+.cm-post-edit { margin-top: 8px; }
+/* the post's menu stays faint until the post is under the pointer */
+.cm-post-head .tv-tcbtn { opacity: .55; transition: opacity .12s; }
+.cm-post:hover .cm-post-head .tv-tcbtn, .cm-post-head .tv-tcbtn:focus-visible, .cm-post-head .tv-tcbtn[aria-expanded="true"] { opacity: 1; }
 .cm-post-edit .cm-textarea { display: block; width: 100%; font-size: 15px; }
 .cm-post-edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 /* A post the DJ has just made drops in at the top of the feed and glows once. */
@@ -3325,11 +3351,9 @@ button.tp-nav {
   to   { opacity: 1; transform: none; }
 }
 @keyframes cmGlow {
-  0%, 30% { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 18px 44px -22px var(--shadow-accent); }
-  100%    { border-color: var(--line); box-shadow: 0 0 0 0 transparent; }
+  0%, 30% { background-color: var(--accent-soft); }
+  100%    { background-color: transparent; }
 }
-/* a question is the post — let it be the loudest thing in it */
-.cm-post.is-question .cm-post-note { font-size: 19px; font-weight: 600; line-height: 1.35; letter-spacing: -.01em; }
 
 .cm-menu-wrap { position: relative; flex: none; }
 .cm-menu {
@@ -3343,15 +3367,36 @@ button.tp-nav {
 }
 .cm-menu button:hover { background: var(--surface-2); }
 
-/* The shared tanda: one quiet row (who plays it, and Play), then the songs
-   laid straight onto the post. Its name is in the post's headline. Only the
-   share dialog's preview of "what gets posted" is boxed. */
-.cm-post-tanda { margin-top: 12px; }
-.cm-post-tanda-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.cm-post-tanda-by { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12.5px; color: var(--ink-2); }
-.cm-post-tanda-by .tv-tag { height: 20px; font-size: 10.5px; padding: 0 8px; }
+/* The tanda in a post: a small record in the genre's colour, the orchestra
+   and its singers, and Play or how much of it is here; then a quiet line, and
+   the songs, numbered under the record. */
+.cm-tanda { margin-top: 12px; }
+.cm-post-head + .cm-tanda { margin-top: 8px; }
+.cm-tanda-line { display: flex; align-items: flex-start; gap: 10px; }
+.cm-tanda-what { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; padding-top: 4px; line-height: 1.35; white-space: nowrap; }
+/* the orchestra keeps its full name (wrapping only if it can't fit at all) */
+.cm-tanda-orq { flex: none; max-width: 100%; white-space: normal; font-size: 15px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.cm-tanda-orq.is-unknown { font-weight: 500; color: var(--ink-2); }
+/* the singers give way when there isn't room */
+.cm-tanda-singers { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; color: var(--ink-2); }
+.cm-tanda-singers::before { content: "·"; margin-right: 8px; color: var(--ink-3s); }
+.cm-tanda .cm-orq-link { text-decoration: none; font-weight: inherit; }
+.cm-tanda .cm-orq-link:hover { color: var(--accent-deep); text-decoration: underline; text-underline-offset: 3px; }
+/* the record: a spindle hole, a label in the genre's colour, the vinyl */
+.cm-disc {
+  --disc: var(--ink-3s);
+  display: block; width: 20px; height: 20px; flex: none; margin-top: 4px; border-radius: 50%;
+  background: radial-gradient(circle, var(--bg) 0 11%, var(--disc) 15% 44%, color-mix(in srgb, var(--disc) 24%, var(--bg)) 48% 100%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--disc) 50%, transparent);
+}
+.cm-disc.is-tango   { --disc: var(--accent); }
+.cm-disc.is-vals    { --disc: var(--vals); }
+.cm-disc.is-milonga { --disc: var(--milonga); }
+.cm-post-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0 0 30px; font-size: 12.5px; color: var(--ink-2); }
+.cm-post-meta .tv-tag { height: 20px; font-size: 10.5px; padding: 0 8px; }
 .cm-years { font: 12px var(--mono); }
-.cm-post-tname { font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+/* the sharer's own name for the tanda */
+.cm-post-tname { font-style: italic; color: var(--ink-2); overflow-wrap: anywhere; }
 /* an orchestra name on a post: click it to see only that orchestra's tandas */
 .cm-orq-link { padding: 0; border: none; background: none; font: inherit; color: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
 .cm-orq-link:hover { color: var(--ink); text-decoration-color: currentColor; }
@@ -3372,20 +3417,12 @@ button.tp-nav {
 .cm-post-tanda-name { flex: 1; min-width: 0; font-size: 16px; font-weight: 700; letter-spacing: -.015em; line-height: 1.25; color: var(--ink); overflow-wrap: anywhere; }
 .cm-post-tanda-sub { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; }
 .cm-share-preview-top .tv-tcard-tags { margin-top: 9px; }
-/* "1 of 4 in your library", said once for the whole tanda: a dot a song,
-   filled for the ones the DJ has. */
-.cm-match {
-  flex: none; display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; margin: 0;
-  border-radius: 999px; background: var(--surface-2); font-size: 12px; font-weight: 600; color: var(--ink-2); white-space: nowrap;
-}
-.cm-dots { display: inline-flex; gap: 3px; }
-.cm-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); }
-.cm-dots i.on { background: var(--vals); }
 .cm-post-songs { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px 8px; }
-.cm-post-tanda .cm-post-songs { padding: 8px 0 0; }
-.cm-post-tanda .cm-post-song { margin: 0 -8px; padding: 3px 8px; }
-.cm-post-tanda .tp-cuebadge { width: 22px; height: 22px; }
-.cm-post-tanda .tp-cuebadge svg { width: 12px; height: 12px; }
+.cm-post.is-tanda .cm-post-songs { padding: 8px 0 0; }
+.cm-post.is-tanda .cm-post-song { margin: 0 -8px; padding: 3px 8px; gap: 10px; }
+.cm-post.is-tanda .cm-post-song .n { width: 20px; }
+.cm-post.is-tanda .tp-cuebadge { width: 22px; height: 22px; }
+.cm-post.is-tanda .tp-cuebadge svg { width: 12px; height: 12px; }
 .cm-post-song { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 8px; }
 /* The number column shows the track number; the listen icon takes its place
    only under the pointer, and the playing bars while the song plays — a list
@@ -3411,10 +3448,12 @@ button.tp-nav {
 /* a light row of actions under the post — no rules, no full-width bar */
 .cm-post-actions { display: flex; flex-wrap: wrap; gap: 2px; margin: 10px -10px -6px; }
 .cm-act {
-  display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 10px;
-  border: none; border-radius: 9px; background: transparent; color: var(--ink-2); font: 600 13px var(--sans); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 10px;
+  border: none; border-radius: 9px; background: transparent; color: var(--ink-2); font: 500 13px var(--sans); cursor: pointer;
+  transition: background .12s, color .12s;
 }
 .cm-act:hover { background: var(--surface-2); color: var(--ink); }
+.cm-act:first-child:hover svg { color: var(--accent); }
 .cm-act.on { color: var(--accent-deep); }
 /* like / comment totals ride on their buttons */
 .cm-act-n { font: 600 12px var(--mono); opacity: .85; }
@@ -3429,8 +3468,8 @@ button.tp-nav {
 /* ---- conversation ---- */
 /* Folded: how many comments, and the newest one, on a single line. */
 .cm-peek {
-  display: flex; align-items: baseline; gap: 10px; width: 100%; margin: 12px 0 -4px; padding: 10px 0 2px; cursor: pointer;
-  border: none; border-top: 1px solid var(--line); background: none; color: var(--ink-2); font: 500 12.5px var(--sans); text-align: left;
+  display: flex; align-items: baseline; gap: 10px; width: 100%; margin: 8px 0 0; padding: 4px 0; cursor: pointer;
+  border: none; background: none; color: var(--ink-2); font: 500 12.5px var(--sans); text-align: left;
 }
 .cm-peek-n { flex: none; font-weight: 700; color: var(--ink-2); }
 .cm-peek-last { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
@@ -3439,7 +3478,7 @@ button.tp-nav {
 .cm-peek:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .cm-more { display: block; margin: 14px 0 -4px; padding: 0; border: none; background: none; font: 600 12.5px var(--sans); color: var(--ink-2); cursor: pointer; }
 .cm-more:hover { color: var(--ink); text-decoration: underline; }
-.cm-comments { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.cm-comments { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 /* A long conversation scrolls inside the post instead of stretching it. */
 .cm-comments.is-long { max-height: 360px; overflow-y: auto; padding-right: 6px; }
 .cm-comment { display: flex; gap: 10px; align-items: flex-start; }
@@ -3514,4 +3553,6 @@ button.tp-nav {
   .cm-feed { padding: 16px; gap: 16px; }
   .cm-rail { max-width: none; position: static; }
   .cm-comment.is-reply { margin-left: 20px; }
+  .cm-post, .cm-composer { grid-template-columns: 34px minmax(0, 1fr); column-gap: 10px; }
+  .cm-post-rail .cm-avatar, .cm-composer > .cm-avatar { width: 34px; height: 34px; }
 }
