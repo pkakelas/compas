@@ -132,7 +132,9 @@ function PostTanda({ post, inMyTandas, preview, onPlay, onAdd, onPickOrq }) {
 }
 
 /* ---------- one comment (bubble + actions) ---------- */
-function PostComment({ c, isReply, onReply, onDelete, onOpenProfile }) {
+function PostComment({ c, isReply, onLike, onReply, onDelete, onOpenProfile }) {
+  // A like just given plays the same small pop as a post's.
+  const [likePop, setLikePop] = React.useState(false);
   return (
     <div className={"cm-comment" + (isReply ? " is-reply" : "")}>
       <CommunityAvatar id={c.author.id} avatar={c.author.avatar} size="sm" />
@@ -145,6 +147,11 @@ function PostComment({ c, isReply, onReply, onDelete, onOpenProfile }) {
         </div>
         <div className="cm-comment-meta">
           <span>{communityAgo(c.createdAt)}</span>
+          <button type="button" className={"cm-meta-btn cm-meta-like" + (c.liked ? " on" : "") + (likePop ? " pop" : "")} aria-pressed={c.liked}
+            onClick={() => { setLikePop(!c.liked); onLike(c); }}>
+            {c.liked ? tr("community.liked") : tr("community.like")}
+            {c.likeCount > 0 && <span className="cm-meta-n"><I.heartFill s={11} /> {c.likeCount}</span>}
+          </button>
           <button type="button" className="cm-meta-btn" onClick={() => onReply(c)}>{tr("community.reply")}</button>
           {c.mine && <button type="button" className="cm-meta-btn" onClick={() => onDelete(c)}>{tr("common.delete")}</button>}
         </div>
@@ -201,6 +208,18 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
     }));
     apply(on);
     const res = await call(post.id, on);
+    if (!res.ok) { apply(!on); flash(res.error); }
+  };
+  // A comment's like works the same way.
+  const likeComment = async (c) => {
+    const on = !c.liked;
+    const apply = (v) => onChange(post.id, (p) => ({
+      ...p,
+      comments: p.comments.map((x) => (x.id === c.id && x.liked !== v
+        ? { ...x, liked: v, likeCount: Math.max(0, x.likeCount + (v ? 1 : -1)) } : x)),
+    }));
+    apply(on);
+    const res = await CommunityStore.likeComment(c.id, on);
     if (!res.ok) { apply(!on); flash(res.error); }
   };
 
@@ -403,9 +422,9 @@ function CommunityPost({ post, me, tandaSigs, onChange, onRemove, onReload, onPi
         <div className={"cm-comments" + (loaded.length > 5 ? " is-long" : "")} ref={listRef}>
           {tops.map((c) => (
             <React.Fragment key={c.id}>
-              <PostComment onOpenProfile={onOpenProfile} c={c} onReply={startReply} onDelete={deleteComment} />
+              <PostComment onOpenProfile={onOpenProfile} c={c} onLike={likeComment} onReply={startReply} onDelete={deleteComment} />
               {repliesOf(c.id).map((r) => (
-                <PostComment onOpenProfile={onOpenProfile} key={r.id} c={r} isReply onReply={startReply} onDelete={deleteComment} />
+                <PostComment onOpenProfile={onOpenProfile} key={r.id} c={r} isReply onLike={likeComment} onReply={startReply} onDelete={deleteComment} />
               ))}
             </React.Fragment>
           ))}
@@ -441,11 +460,12 @@ const CM_NOTIF_TEXT = {
   "comment.tanda": { titledKey: "community.notifCommentedTanda", untitledKey: "community.notifCommentedTandaUntitled" },
   "comment.post": { titledKey: "community.notifCommentedPost", untitledKey: "community.notifCommentedPostUntitled" },
   "reply": { titledKey: "community.notifReplied", untitledKey: "community.notifRepliedUntitled" },
+  "comment_like": { titledKey: "community.notifLikedComment", untitledKey: "community.notifLikedCommentUntitled" },
   "follow": { titledKey: "community.notifFollowed", untitledKey: "community.notifFollowed" },
 };
 function cmNotifText(n) {
   const what = n.postKind === "question" ? "post" : "tanda";
-  const text = n.kind === "reply" || n.kind === "follow" ? CM_NOTIF_TEXT[n.kind]
+  const text = n.kind === "reply" || n.kind === "comment_like" || n.kind === "follow" ? CM_NOTIF_TEXT[n.kind]
     : CM_NOTIF_TEXT[(n.kind === "like" ? "like." : "comment.") + what];
   const name = <b>{n.actor.name}</b>;
   return n.postTitle && n.kind !== "follow"

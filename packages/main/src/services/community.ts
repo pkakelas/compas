@@ -95,15 +95,17 @@ export type CommentRow = {
   parent_id: string | null;
   author_id: string;
   body: string;
+  like_count: number;
   created_at: string;
   author: {handle: string; display_name: string; avatar_url: string | null} | null;
 };
 
 /** A row of the backend's `my_notifications` view: something another DJ did
  *  with one of the signed-in DJ's posts or comments — or the one `welcome`
- *  entry every DJ gets from Compás itself, which is about no post. */
+ *  entry every DJ gets from Compás itself, which is about no post. A newer
+ *  backend may add kinds this app doesn't know yet. */
 export type NotificationRow = {
-  kind: 'like' | 'comment' | 'reply' | 'follow' | 'welcome';
+  kind: 'like' | 'comment' | 'reply' | 'follow' | 'welcome' | 'comment_like';
   created_at: string;
   actor_id: string;
   actor_name: string;
@@ -305,7 +307,7 @@ function googlePicture(meta: Record<string, unknown> | undefined): string | null
 // comments also reach profiles through comment_likes, and without it the
 // backend refuses the query as ambiguous.
 const COMMENT_COLUMNS =
-  'id, post_id, parent_id, author_id, body, created_at, author:profiles!author_id(handle, display_name, avatar_url)';
+  'id, post_id, parent_id, author_id, body, like_count, created_at, author:profiles!author_id(handle, display_name, avatar_url)';
 // Messages for the DJ are keys into the renderer's translations
 // (locales/<locale>/communityErrors.json) — the renderer words them in the
 // DJ's language. Placeholders travel as `errorVars`.
@@ -1063,15 +1065,17 @@ export class CommunityService {
     return {ok: true, commentCount: Number.isFinite(count) ? Math.max(0, count) : null};
   }
 
-  /** Like/unlike or save/unsave a post. Repeating the current state is fine. */
-  async #toggle(table: 'post_likes' | 'saves', postId: string, on: boolean): Promise<Outcome<object>> {
+  /** Like/unlike or save/unsave a post, or like/unlike a comment. Repeating
+   *  the current state is fine. */
+  async #toggle(table: 'post_likes' | 'saves' | 'comment_likes', id: string, on: boolean): Promise<Outcome<object>> {
     const client = this.#client();
     if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
     const userId = await this.#userId(client);
     if (!userId) return {ok: false, error: 'communityErrors.signInFirst'};
+    const column = table === 'comment_likes' ? 'comment_id' : 'post_id';
     const {error} = on
-      ? await client.from(table).insert({post_id: postId})
-      : await client.from(table).delete().eq('post_id', postId).eq('user_id', userId);
+      ? await client.from(table).insert(column === 'comment_id' ? {comment_id: id} : {post_id: id})
+      : await client.from(table).delete().eq(column, id).eq('user_id', userId);
     // 23505: already liked/saved — the state the DJ asked for.
     if (error && error.code !== '23505') return {ok: false, error: friendly(error, 'communityErrors.toggleFailed')};
     return {ok: true};
@@ -1083,6 +1087,20 @@ export class CommunityService {
 
   setSaved(postId: string, on: boolean): Promise<Outcome<object>> {
     return this.#toggle('saves', postId, on);
+  }
+
+  setCommentLiked(commentId: string, on: boolean): Promise<Outcome<object>> {
+    return this.#toggle('comment_likes', commentId, on);
+  }
+
+  /** Which of these comments the signed-in DJ has liked. */
+  async likedCommentIds(ids: string[]): Promise<Set<string>> {
+    const client = this.#client();
+    if (!client || ids.length === 0) return new Set();
+    const userId = await this.#userId(client);
+    if (!userId) return new Set();
+    const {data} = await client.from('comment_likes').select('comment_id').eq('user_id', userId).in('comment_id', ids);
+    return new Set((data ?? []).map(r => r.comment_id as string));
   }
 
   // ---- profiles and following -----------------------------------------------

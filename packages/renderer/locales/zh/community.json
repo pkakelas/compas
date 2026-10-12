@@ -223,6 +223,8 @@
   "notifLikedTandaUntitled": "{name} 赞了你的 tanda",
   "notifLikedPost": "{name} 赞了你的帖子 {title}",
   "notifLikedPostUntitled": "{name} 赞了你的帖子",
+  "notifLikedComment": "{name} 赞了你在 {title} 下的评论",
+  "notifLikedCommentUntitled": "{name} 赞了你的评论",
   "notifCommentedTanda": "{name} 评论了你的 tanda {title}",
   "notifCommentedTandaUntitled": "{name} 评论了你的 tanda",
   "notifCommentedPost": "{name} 评论了你的帖子 {title}",

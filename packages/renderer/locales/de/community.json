@@ -228,6 +228,8 @@
   "notifLikedTandaUntitled": "{name} hat deine Tanda geliked",
   "notifLikedPost": "{name} hat deinen Beitrag {title} geliked",
   "notifLikedPostUntitled": "{name} hat deinen Beitrag geliked",
+  "notifLikedComment": "{name} hat deinen Kommentar zu {title} geliked",
+  "notifLikedCommentUntitled": "{name} hat deinen Kommentar geliked",
   "notifCommentedTanda": "{name} hat deine Tanda {title} kommentiert",
   "notifCommentedTandaUntitled": "{name} hat deine Tanda kommentiert",
   "notifCommentedPost": "{name} hat deinen Beitrag {title} kommentiert",

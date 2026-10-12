@@ -228,6 +228,8 @@
   "notifLikedTandaUntitled": "A {name} le gustó tu tanda",
   "notifLikedPost": "A {name} le gustó tu publicación {title}",
   "notifLikedPostUntitled": "A {name} le gustó tu publicación",
+  "notifLikedComment": "A {name} le gustó tu comentario en {title}",
+  "notifLikedCommentUntitled": "A {name} le gustó tu comentario",
   "notifCommentedTanda": "{name} comentó tu tanda {title}",
   "notifCommentedTandaUntitled": "{name} comentó tu tanda",
   "notifCommentedPost": "{name} comentó tu publicación {title}",

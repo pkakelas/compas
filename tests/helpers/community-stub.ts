@@ -49,6 +49,9 @@ export type CommunityStub = {
   comments: StubComment[];
   /** "postId|userId" pairs. */
   likes: Set<string>;
+  /** "commentId|userId" pairs, and when each was given (ISO time). */
+  commentLikes: Set<string>;
+  commentLikedAt: Map<string, string>;
   saves: Set<string>;
   /** "blockerId|blockedId" pairs. */
   blocks: Set<string>;
@@ -106,6 +109,9 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
   const seenAt = new Map<string, string>();
   // When each like was given ("postId|userId" → ISO time).
   const likedAt = new Map<string, string>();
+  const commentLikes = new Set<string>();
+  // When each comment like was given ("commentId|userId" → ISO time).
+  const commentLikedAt = new Map<string, string>();
   const reports: Record<string, unknown>[] = [];
   const uploads = new Map<string, Buffer>();
   const uploadedAt = new Map<string, string>();
@@ -171,7 +177,8 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
     p.kind === 'tanda' ? ((p.tanda as {songs?: {orq?: string; orq_key?: string}[]})?.songs ?? []) : [];
   const orqKeys = (p: StubPost): string[] => [...new Set(tandaSongs(p).map(songKey).filter(Boolean))];
   // What the real `my_notifications` view returns: other people's likes and
-  // comments on my posts, and their replies to my comments elsewhere.
+  // comments on my posts, their replies to my comments elsewhere, and their
+  // likes on my comments.
   const notificationsFor = (me: string) => {
     const title = (p: StubPost) => (p.tanda as {name?: string} | null)?.name || p.note.slice(0, 80) || null;
     const name = (id: string) => profiles.get(id)?.display_name ?? '';
@@ -190,6 +197,14 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
       const kind = p.author_id === me ? 'comment' : parent?.author_id === me ? 'reply' : null;
       if (!kind) continue;
       rows.push({kind, created_at: c.created_at, actor_id: c.author_id, actor_name: name(c.author_id), actor_avatar: profiles.get(c.author_id)?.avatar_url ?? null,
+        post_id: p.id, post_kind: p.kind, post_title: title(p), comment_id: c.id, body: c.body.slice(0, 140)});
+    }
+    for (const key of commentLikes) {
+      const [commentId, userId] = key.split('|');
+      const c = comments.find(x => x.id === commentId);
+      const p = c && posts.find(x => x.id === c.post_id);
+      if (!c || !p || c.author_id !== me || userId === me || blocks.has(`${me}|${userId}`)) continue;
+      rows.push({kind: 'comment_like', created_at: commentLikedAt.get(key) ?? '2026-01-01T00:00:00.000Z', actor_id: userId, actor_name: name(userId), actor_avatar: profiles.get(userId)?.avatar_url ?? null,
         post_id: p.id, post_kind: p.kind, post_title: title(p), comment_id: c.id, body: c.body.slice(0, 140)});
     }
     for (const key of follows) {
@@ -238,7 +253,11 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
   });
   const commentRow = (c: StubComment) => {
     const a = profiles.get(c.author_id);
-    return {...c, author: a ? {handle: a.handle, display_name: a.display_name, avatar_url: a.avatar_url ?? null} : null};
+    return {
+      ...c,
+      like_count: [...commentLikes].filter(k => k.startsWith(c.id + '|')).length,
+      author: a ? {handle: a.handle, display_name: a.display_name, avatar_url: a.avatar_url ?? null} : null,
+    };
   };
 
   const userJson = (email: string, id: string) => ({
@@ -560,6 +579,29 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
           return json(res, 204);
         }
       }
+      if (table === 'comment_likes' && req.method === 'POST') {
+        const key = `${body.comment_id}|${me}`;
+        if (!comments.some(c => c.id === body.comment_id)) {
+          return json(res, 409, {code: '23503', message: 'insert or update on table "comment_likes" violates foreign key constraint'});
+        }
+        if (commentLikes.has(key)) return json(res, 409, {code: '23505', message: 'duplicate key value'});
+        commentLikes.add(key);
+        commentLikedAt.set(key, new Date().toISOString());
+        return json(res, 201);
+      }
+      if (table === 'comment_likes' && req.method === 'DELETE') {
+        if (eq(url, 'user_id') === me) commentLikes.delete(`${eq(url, 'comment_id')}|${me}`);
+        return json(res, 204);
+      }
+      // Which of these comments a DJ has liked.
+      if (table === 'comment_likes' && req.method === 'GET') {
+        const user = eq(url, 'user_id');
+        const ids = inList(url, 'comment_id') ?? [];
+        return json(res, 200, [...commentLikes]
+          .map(k => k.split('|'))
+          .filter(([commentId, userId]) => userId === user && ids.includes(commentId))
+          .map(([commentId]) => ({comment_id: commentId})));
+      }
       if (table === 'saves' && req.method === 'GET') {
         const mine = [...saves].filter(k => k.endsWith('|' + me)).map(k => ({post_id: k.split('|')[0]}));
         return json(res, 200, mine);
@@ -622,10 +664,13 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
       }
       if (table === 'comments' && req.method === 'DELETE') {
         const id = eq(url, 'id');
-        // Your own comment only — and then its replies too, as the real cascade does.
+        // Your own comment only — and then its replies and likes too, as the
+        // real cascade does.
         if (comments.some(c => c.id === id && c.author_id === me)) {
           for (let i = comments.length - 1; i >= 0; i--) {
-            if (comments[i].id === id || comments[i].parent_id === id) comments.splice(i, 1);
+            if (comments[i].id !== id && comments[i].parent_id !== id) continue;
+            for (const key of commentLikes) if (key.startsWith(comments[i].id + '|')) commentLikes.delete(key);
+            comments.splice(i, 1);
           }
         }
         return json(res, 204);
@@ -653,6 +698,8 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
     posts,
     comments,
     likes,
+    commentLikes,
+    commentLikedAt,
     saves,
     blocks,
     follows,

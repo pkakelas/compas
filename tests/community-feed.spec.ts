@@ -320,6 +320,50 @@ test('likes, comments and replies reach the backend', async () => {
   await expect.poll(() => stub.comments.some(c => c.body === 'Biagi works well for that.')).toBe(false);
 });
 
+test('comments can be liked', async () => {
+  const lucia = post(STUB_LUCIA_POST);
+  const seeded = stub.comments.find(c => c.body === 'A light vals. Nothing heavy.')!;
+  const like = lucia.locator('.cm-comment', {hasText: 'A light vals'}).getByRole('button', {name: /^Like/});
+  // Nobody has liked it yet: no total.
+  await expect(like).toHaveText('Like');
+  await expect(lucia.locator('.cm-meta-n')).toHaveCount(0);
+
+  // Lucía likes it; the total rides on the button.
+  stub.commentLikes.add(`${seeded.id}|${STUB_LUCIA}`);
+  await page.getByRole('button', {name: 'Refresh'}).click();
+  await expect(like).toHaveText(/^Like\s*1$/);
+  await expect(like).toHaveAttribute('aria-pressed', 'false');
+
+  await like.click();
+  await expect(like).toHaveText(/^Liked\s*2$/);
+  await expect(like).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => stub.commentLikes.has(`${seeded.id}|${ME}`)).toBe(true);
+  // The post's own like is a different button, and untouched.
+  await expect(lucia.getByRole('button', {name: 'Like', exact: true})).toHaveAttribute('aria-pressed', 'false');
+
+  // A fresh load knows the like is mine.
+  await page.getByRole('button', {name: 'Refresh'}).click();
+  await expect(like).toHaveText(/^Liked\s*2$/);
+  await expect(like).toHaveAttribute('aria-pressed', 'true');
+
+  await like.click();
+  await expect(like).toHaveText(/^Like\s*1$/);
+  await expect.poll(() => stub.commentLikes.has(`${seeded.id}|${ME}`)).toBe(false);
+
+  // A like the backend refuses (the comment is gone) is taken back.
+  const i = stub.comments.indexOf(seeded);
+  stub.comments.splice(i, 1);
+  await like.click();
+  await expect(page.locator('.tv-toast', {hasText: 'That didn’t go through. Try again.'})).toBeVisible();
+  await expect(like).toHaveText(/^Like\s*1$/);
+  await expect(like).toHaveAttribute('aria-pressed', 'false');
+  expect(stub.commentLikes.has(`${seeded.id}|${ME}`)).toBe(false);
+
+  // Back to the seeded comment, unliked, for the tests that follow.
+  stub.comments.splice(i, 0, seeded);
+  stub.commentLikes.clear();
+});
+
 test('a long conversation loads a page at a time and scrolls inside the post', async () => {
   // 30 more comments on the question, from the other DJ. Ten of them (3–12)
   // were made in the same instant, and the first page ends among them: none
@@ -469,6 +513,34 @@ test('likes and comments on my posts arrive as notifications', async () => {
   // Leave the feed as the next tests expect it.
   stub.likes.delete(`${mine.id}|${STUB_MARTA}`);
   stub.comments.splice(stub.comments.findIndex(c => c.id === 'abababab-abab-4bab-8bab-abababababab'), 1);
+  await nav.getByRole('button', {name: 'Feed'}).click();
+  await expect(page.locator('.cm-post')).toHaveCount(4);
+});
+
+test('a like on my comment arrives as a notification', async () => {
+  const bell = page.locator('.tp-bell');
+  const nav = page.getByRole('navigation', {name: 'Community'});
+  const mine = stub.comments.find(c => c.author_id === ME && c.body === 'Nido gaucho as the opener is brave.')!;
+  stub.commentLikes.add(`${mine.id}|${STUB_LUCIA}`);
+  stub.commentLikedAt.set(`${mine.id}|${STUB_LUCIA}`, new Date().toISOString());
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(bell).toHaveAccessibleName('Notifications, 1 new');
+
+  await bell.click();
+  const row = page.locator('.cm-notif', {hasText: 'liked your comment'});
+  await expect(row).toContainText('Lucía Rivas liked your comment on Di Sarli, late night');
+  // The comment's words, so it is plain which one.
+  await expect(row).toContainText('Nido gaucho as the opener is brave.');
+  await expect(row.locator('.cm-notif-dot')).toHaveCount(1);
+
+  // It opens the post the comment is on.
+  await row.click();
+  await expect(page.locator('.cm-post')).toHaveCount(1);
+  await expect(post(STUB_MARTA_POST).locator('.cm-comment', {hasText: 'Nido gaucho'}).getByRole('button', {name: /^Like/})).toHaveText(/^Like\s*1$/);
+
+  // Leave the feed as the next tests expect it.
+  stub.commentLikes.clear();
+  await page.getByRole('button', {name: 'Back to notifications'}).click();
   await nav.getByRole('button', {name: 'Feed'}).click();
   await expect(page.locator('.cm-post')).toHaveCount(4);
 });
