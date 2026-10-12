@@ -748,6 +748,15 @@ export function setTandaSharedPost(id: string, postId: string | null, userId: st
   }
 }
 
+/** Every post `userId` shared one of their tandas as: post id → tanda id. */
+export function listSharedPosts(userId: string): Map<string, string> {
+  const rows = getDb().prepare('SELECT tanda_id, post_id FROM tanda_shares WHERE user_id = ?').all(userId) as {
+    tanda_id: number;
+    post_id: string;
+  }[];
+  return new Map(rows.map(r => [r.post_id, String(r.tanda_id)]));
+}
+
 /** Every post a tanda was shared as by `userId`, oldest first. */
 export function listTandaSharedPosts(id: string, userId: string): string[] {
   const rows = getDb()

@@ -947,3 +947,24 @@ test('the Community follows the language, its error messages included', async ()
   await language.selectOption('en');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 });
+
+test('my own shared tanda is all in my library, even songs with no orchestra', async () => {
+  // The vals lose their orchestra here, so matching the post against the
+  // library alone could never find them — but they are the DJ's own songs.
+  await page.evaluate(async () => {
+    const c = (window as any).compas;
+    const lib = await c.getLibrary();
+    const vals = lib.songs.filter((s: any) => s.folder.includes('Biagi'));
+    await c.applySmartOrganize(vals.map((s: any) => ({id: s.id, orq: null})));
+    const tanda = await c.saveTanda({name: 'Valses without orchestra', songIds: vals.map((s: any) => s.id), tags: []});
+    const res = await c.community.share(tanda.id, '', true);
+    if (!res.ok) throw new Error(res.error);
+  });
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+  await gotoView(page, 'Community');
+  const mine = page.locator('.cm-post', {hasText: 'Valses without orchestra'});
+  // Without an orchestra, the tanda goes by its name; each song has its tick.
+  await expect(mine.locator('.cm-tanda-orq')).toHaveText('Valses without orchestra');
+  await expect(mine.getByRole('img', {name: 'In your library'})).toHaveCount(2);
+});
