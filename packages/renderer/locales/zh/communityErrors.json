@@ -56,6 +56,7 @@
   "followFailed": "无法关注这位 DJ，请重试。",
   "unfollowFailed": "无法取消关注，请重试。",
   "listFailed": "无法加载这个列表，请重试。",
+  "searchFailed": "无法搜索 DJ，请重试。",
   "reportFailed": "无法提交举报，请重试。",
   "blockFailed": "无法屏蔽这位 DJ，请重试。",
   "fileUnreadable": "无法读取这个文件。",

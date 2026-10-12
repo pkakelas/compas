@@ -153,6 +153,7 @@ const CommunityStore = {
   profile: (userId) => _cmData("profile", userId),
   follow: (userId, on) => _cmData("follow", userId, on),
   follows: (userId, which, offset) => _cmData("follows", userId, which, offset || 0),
+  findDjs: (query, offset) => _cmData("findDjs", query, offset || 0),
 };
 
 /* Switch the app to another top-level view from anywhere (AppBody listens). */

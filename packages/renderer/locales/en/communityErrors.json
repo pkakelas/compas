@@ -56,6 +56,7 @@
   "followFailed": "Couldn’t follow that DJ. Try again.",
   "unfollowFailed": "Couldn’t unfollow. Try again.",
   "listFailed": "Couldn’t load that list. Try again.",
+  "searchFailed": "Couldn’t search for DJs. Try again.",
   "reportFailed": "Couldn’t send the report. Try again.",
   "blockFailed": "Couldn’t block that DJ. Try again.",
   "fileUnreadable": "Couldn’t read that file.",

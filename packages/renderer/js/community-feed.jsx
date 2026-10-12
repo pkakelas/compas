@@ -767,8 +767,14 @@ function PeopleList({ userId, which, onOpen, onFollowChange, flash }) {
       </div>
     );
   }
+  return <PeopleRows people={people} onOpen={onOpen} onFollowChange={setFollowed} flash={flash}
+    hasMore={hasMore} onMore={more} loadingMore={loadingMore} />;
+}
+
+/* DJs, a row each: who they are (opening their page) and Follow. */
+function PeopleRows({ people, onOpen, onFollowChange, flash, hasMore, onMore, loadingMore, busy }) {
   return (
-    <div className="cm-people">
+    <div className={"cm-people" + (busy ? " is-busy" : "")} aria-busy={busy || undefined}>
       {people.map((p) => (
         <div className="cm-person" key={p.id}>
           <button type="button" className="cm-person-main" onClick={() => onOpen(p.id)}>
@@ -778,11 +784,77 @@ function PeopleList({ userId, which, onOpen, onFollowChange, flash }) {
               <span className="cm-person-sub">{[p.handle ? "@" + p.handle : null, p.city].filter(Boolean).join(" · ")}</span>
             </span>
           </button>
-          <FollowButton person={p} onChange={(on) => setFollowed(p.id, on)} flash={flash} />
+          <FollowButton person={p} onChange={(on) => onFollowChange(p.id, on)} flash={flash} />
         </div>
       ))}
-      {hasMore && <button type="button" className="tp-btn sm cm-people-more" onClick={more} disabled={loadingMore}>{tr("community.showMore")}</button>}
+      {hasMore && <button type="button" className="tp-btn sm cm-people-more" onClick={onMore} disabled={loadingMore}>{tr("community.showMore")}</button>}
     </div>
+  );
+}
+
+/* "Find a DJ": the DJs whose name, @handle or city match what is typed in the
+   rail, asked for once the typing pauses. What was found is kept by the feed
+   (`data`), so Back from a DJ's page shows the same list at once; until the
+   next search arrives, the last one stays on screen, dimmed. */
+const CM_FIND_DELAY_MS = 250;
+function FoundDjs({ query, data, onData, onOpen, onFollowChange, flash }) {
+  const q = query.trim();
+  const current = !!data && data.q === q;
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  React.useEffect(() => {
+    if (!q || current) return undefined;
+    let alive = true;
+    const timer = setTimeout(() => {
+      CommunityStore.findDjs(q, 0).then((res) => {
+        if (!alive) return;
+        onData(res.ok
+          ? { q, people: res.people, hasMore: res.hasMore, next: res.nextOffset, error: "" }
+          : { q, people: [], hasMore: false, next: 0, error: res.error });
+      });
+    }, CM_FIND_DELAY_MS);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [q, current]);
+  const more = async () => {
+    if (loadingMore || !current) return;
+    setLoadingMore(true);
+    const res = await CommunityStore.findDjs(q, data.next);
+    setLoadingMore(false);
+    if (!res.ok) { flash(res.error); return; }
+    onData((d) => (!d || d.q !== q ? d : {
+      ...d,
+      people: d.people.concat(res.people.filter((p) => !d.people.some((c) => c.id === p.id))),
+      hasMore: res.hasMore, next: res.nextOffset,
+    }));
+  };
+
+  return (
+    <>
+      <h2 className="cm-list-title">{tr("community.findDj")}</h2>
+      {!q && (
+        <div className="cm-empty">
+          <div className="cm-empty-ic"><I.search s={20} /></div>
+          <div className="cm-empty-title">{tr("community.findDjEmptyTitle")}</div>
+          <div className="cm-empty-sub">{tr("community.findDjEmptySub")}</div>
+        </div>
+      )}
+      {q && current && data.error && (
+        <div className="cm-error" role="alert">
+          {data.error} <button type="button" className="cm-link" onClick={() => onData(null)}>{tr("community.tryAgain")}</button>
+        </div>
+      )}
+      {q && !data && <RowsSkeleton label={tr("community.findingDjs")} />}
+      {q && data && data.people.length > 0 && (
+        <PeopleRows people={data.people} onOpen={onOpen} onFollowChange={onFollowChange} flash={flash} busy={!current}
+          hasMore={current && data.hasMore} onMore={more} loadingMore={loadingMore} />
+      )}
+      {q && current && !data.error && data.people.length === 0 && (
+        <div className="cm-empty">
+          <div className="cm-empty-ic"><I.users s={20} /></div>
+          <div className="cm-empty-title">{tr("community.noDjsFound", { query: q })}</div>
+          <div className="cm-empty-sub">{tr("community.noDjsFoundSub")}</div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1162,7 +1234,8 @@ const CM_SUGGESTIONS = 4;
      {kind: "list", scope, show, orq}   the feed, Following, Saved
      {kind: "profile", id, tab}         a DJ's page
      {kind: "post", id}                 one post (from a notification)
-     {kind: "notifications"} */
+     {kind: "notifications"}
+     {kind: "djs", q}                   "Find a DJ", and what was typed */
 const CM_HOME = { kind: "list", scope: "all", show: "all", orq: "" };
 // The posts a place lists, as a cache key (null: it lists no posts) and as a
 // feed query.
@@ -1222,6 +1295,10 @@ function CommunityFeed({ user, homeSignal, active }) {
   const [orchestras, setOrchestras] = React.useState([]);
   // The notifications, once fetched for this visit (null: fetch them).
   const [notifs, setNotifs] = React.useState(null);
+  // "Find a DJ": what is typed in the rail (the search heads its own trail),
+  // and the DJs last found — {q, people, hasMore, next, error} | null.
+  const findQ = trail[0].kind === "djs" ? trail[0].q : "";
+  const [found, setFound] = React.useState(null);
   // The DJ whose page is open: their card once loaded (null while loading;
   // false if there is no such DJ), and whether the DJ is editing their own.
   const profileId = place.kind === "profile" ? place.id : null;
@@ -1340,7 +1417,7 @@ function CommunityFeed({ user, homeSignal, active }) {
     lastUser.current = user.id;
     profiles.current.clear();
     fresh.current = null;
-    setNotifs(null); setOpenThreads(new Set());
+    setNotifs(null); setFound(null); setOpenThreads(new Set());
     start(CM_HOME);
   }, [user.id]);
 
@@ -1363,6 +1440,14 @@ function CommunityFeed({ user, homeSignal, active }) {
     push({ kind: "profile", id, tab: "posts" });
   };
   const openOwnPage = () => start({ kind: "profile", id: user.id, tab: "posts" });
+  // Typing in "Find a DJ" changes the search in place, or starts one (Back
+  // from a DJ found returns to it). Its clear button (or Escape) goes back to
+  // the feed.
+  const find = (q) => {
+    if (trail.length === 1 && place.kind === "djs") update({ q });
+    else start({ kind: "djs", q });
+  };
+  const stopFinding = () => start(CM_HOME);
 
   // A rail item: a fresh trail there. Already there, the click refreshes and
   // goes back to the top.
@@ -1534,12 +1619,16 @@ function CommunityFeed({ user, homeSignal, active }) {
     })();
     return () => { alive = false; };
   }, [user.id]);
-  const followChanged = (id, on) => setFollowing((f) => {
-    if (!f) return f;
-    const now = new Set(f.now);
-    if (on) now.add(id); else now.delete(id);
-    return { ...f, now };
-  });
+  const followChanged = (id, on) => {
+    setFollowing((f) => {
+      if (!f) return f;
+      const now = new Set(f.now);
+      if (on) now.add(id); else now.delete(id);
+      return { ...f, now };
+    });
+    setFound((d) => (d && d.people.some((p) => p.id === id)
+      ? { ...d, people: d.people.map((p) => (p.id === id ? { ...p, followed: on } : p)) } : d));
+  };
   // Authors of the posts loaded so far, with how many of their posts were seen.
   const authors = React.useRef(new Map());
   const [authorsTick, setAuthorsTick] = React.useState(0);
@@ -1596,6 +1685,18 @@ function CommunityFeed({ user, homeSignal, active }) {
                 {sub && <div className="cm-me-sub">{sub}</div>}
               </div>
             </button>
+            <label className="tp-search cm-find">
+              <I.search s={15} />
+              <input value={findQ} onChange={(e) => find(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Escape" && findQ) { e.preventDefault(); stopFinding(); } }}
+                placeholder={tr("community.findDj")} aria-label={tr("community.findDj")} />
+              {findQ && (
+                <button type="button" className="tv-search-clear" onClick={stopFinding}
+                  title={tr("parts.clearSearch")} aria-label={tr("parts.clearSearch")}>
+                  <I.x s={13} />
+                </button>
+              )}
+            </label>
             <nav className="cm-nav" aria-label={tr("common.nav.Community")}>
               {CM_SCOPES.map((s) => {
                 const Icon = I[s.icon];
@@ -1666,6 +1767,10 @@ function CommunityFeed({ user, homeSignal, active }) {
 
             {place.kind === "notifications" && (
               <NotificationsList data={notifs} onData={setNotifs} onOpen={openNotif} />
+            )}
+            {place.kind === "djs" && (
+              <FoundDjs query={place.q} data={found} onData={setFound} onOpen={openProfile}
+                onFollowChange={followChanged} flash={flash} />
             )}
             {place.kind === "profile" && (
               <>

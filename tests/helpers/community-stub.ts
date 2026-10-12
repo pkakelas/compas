@@ -467,6 +467,33 @@ export async function startCommunityStub(opts: {seedFeed?: boolean} = {}): Promi
         if (wantsObject) return rows.length ? json(res, 200, rows[0]) : json(res, 200, null);
         return json(res, 200, rows);
       }
+      // DJs by name, handle or city, as the real `search_profiles` finds them:
+      // every word somewhere, accents ignored; best matches first.
+      if (table === 'rpc/search_profiles') {
+        const fold = (t: string | null | undefined) => (t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+        const words = fold(String(body.query ?? '').slice(0, 80)).split(/[\s@,;·]+/).filter(Boolean);
+        const offset = Number(body.row_offset ?? 0);
+        const limit = Number(body.row_limit ?? 30);
+        if (!words.length) return json(res, 200, []);
+        const startsWord = (text: string, w: string) => text.startsWith(w) || text.includes(' ' + w);
+        const rank = (pr: Profile) => {
+          if (words.length === 1 && pr.handle === words[0]) return 0;
+          const w = words[0];
+          return startsWord(fold(pr.display_name), w) || pr.handle.startsWith(w) || pr.handle.includes('_' + w) ? 1 : 2;
+        };
+        const rows = [...profiles.values()]
+          .filter(pr => !blocks.has(`${me}|${pr.id}`))
+          .filter(pr => {
+            const hay = `${fold(pr.display_name)} ${pr.handle} ${fold(pr.city)}`;
+            return words.every(w => hay.includes(w));
+          })
+          .map(pr => ({pr, rank: rank(pr), card: profileCard(pr, me)}))
+          .sort((x, y) => x.rank - y.rank || y.card.follower_count - x.card.follower_count
+            || x.pr.display_name.localeCompare(y.pr.display_name))
+          .slice(offset, offset + limit)
+          .map(x => x.card);
+        return json(res, 200, rows);
+      }
       if (table === 'follows' && req.method === 'GET') {
         const select = url.searchParams.get('select') ?? '';
         const person = (id: string) => {
