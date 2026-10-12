@@ -1155,6 +1155,22 @@ export class CommunityService {
     return {ok: true, rows: (data ?? []) as unknown as FollowRow[], userId};
   }
 
+  /** DJs whose name, @handle or city match what was typed, best first
+   *  (the backend's `search_profiles`). */
+  async searchProfiles(
+    query: string,
+    offset: number,
+    limit: number,
+  ): Promise<Outcome<{rows: ProfileRow[]; userId: string}>> {
+    const client = this.#client();
+    if (!client) return {ok: false, error: NOT_CONFIGURED_MESSAGE};
+    const userId = await this.#userId(client);
+    if (!userId) return {ok: false, error: 'communityErrors.signInFirst'};
+    const {data, error} = await client.rpc('search_profiles', {query, row_limit: limit, row_offset: offset});
+    if (error) return {ok: false, error: friendly(error, 'communityErrors.searchFailed')};
+    return {ok: true, rows: (data ?? []) as ProfileRow[], userId};
+  }
+
   /** The ids of every DJ the signed-in DJ follows (to mark them in lists). */
   async followingIds(): Promise<Set<string>> {
     const client = this.#client();

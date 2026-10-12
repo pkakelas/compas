@@ -452,6 +452,11 @@ function communityFollow(userId: string, on: boolean) {
 function communityFollows(userId: string, which: 'followers' | 'following', offset: number) {
   return ipcRenderer.invoke('community:follows', userId, which, offset);
 }
+/** The DJs whose name, @handle or city match `query`, best first. Resolves to
+ *  `{ok, people, hasMore, nextOffset}`. */
+function communityFindDjs(query: string, offset: number) {
+  return ipcRenderer.invoke('community:findDjs', query, offset);
+}
 
 /** Subscribe to sign-in state changes (sign in/out, profile edits). The
  *  callback receives the fresh state. Returns an unsubscribe function. */
@@ -541,4 +546,5 @@ export {
   communityProfile,
   communityFollow,
   communityFollows,
+  communityFindDjs,
 };

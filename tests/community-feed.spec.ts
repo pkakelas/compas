@@ -735,6 +735,45 @@ test('a DJ has a page, and can be followed', async () => {
   await expect(marta).toBeVisible();
 });
 
+test('a DJ can be found by name, handle or city, with or without accents', async () => {
+  const find = page.getByRole('textbox', {name: 'Find a DJ'});
+  const found = page.locator('.cm-people .cm-person');
+  // Part of a name, typed without its accent.
+  await find.fill('luci');
+  await expect(found).toHaveCount(1);
+  await expect(found).toContainText('Lucía Rivas');
+  await expect(found).toContainText('@lucia');
+  // Every word must match: here a name and a city.
+  await find.fill('marta krakow');
+  await expect(found).toHaveCount(1);
+  await expect(found).toContainText('Marta Kowalczyk');
+  await find.fill('pugliese');
+  await expect(page.getByText('No DJ matches “pugliese”')).toBeVisible();
+  await expect(found).toHaveCount(0);
+
+  // A DJ found can be followed right there, or opened; Back returns to the
+  // same search, showing what changed on her page.
+  await find.fill('@marta');
+  await expect(found).toHaveCount(1);
+  await found.getByRole('button', {name: 'Follow', exact: true}).click();
+  await expect(found.getByRole('button', {name: 'Following'})).toHaveAttribute('aria-pressed', 'true');
+  expect(stub.follows.has(`${ME}|${STUB_MARTA}`)).toBe(true);
+  await found.getByRole('button', {name: /Marta Kowalczyk/}).click();
+  const card = page.locator('.cm-profile');
+  await expect(card.getByRole('heading', {name: 'Marta Kowalczyk'})).toBeVisible();
+  await card.getByRole('button', {name: 'Following'}).click();
+  await expect(card.getByRole('button', {name: 'Follow', exact: true})).toBeVisible();
+  expect(stub.follows.has(`${ME}|${STUB_MARTA}`)).toBe(false);
+  await page.getByRole('button', {name: 'Back', exact: true}).click();
+  await expect(find).toHaveValue('@marta');
+  await expect(found.getByRole('button', {name: 'Follow', exact: true})).toBeVisible();
+
+  // Clearing the box goes back to the feed.
+  await page.getByRole('button', {name: 'Clear search'}).click();
+  await expect(find).toHaveValue('');
+  await expect(post(STUB_MARTA_POST)).toBeVisible();
+});
+
 test('a post can be edited by its author', async () => {
   // Write something, then change it from the post's menu.
   await gotoView(page, 'Community');

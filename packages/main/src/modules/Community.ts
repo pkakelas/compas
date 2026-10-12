@@ -9,6 +9,7 @@ import {
   type CommunityState,
   type FeedScope,
   type FeedSort,
+  type FollowRow,
   type ProfileInput,
 } from '../services/community.js';
 import {buildSharedTanda, claimOwnSongs, matchSharedTanda, type MatchedTanda} from '../services/community-share.js';
@@ -529,13 +530,24 @@ export class CommunityModule implements AppModule {
       const id = uuid(userId);
       return id ? community.setFollow(id, on !== false) : BAD_REQUEST;
     });
+    // A DJ as a row of a list of people shows them.
+    const person = (p: NonNullable<FollowRow['profile']>, followed: boolean, userId: string) => ({
+      id: p.id,
+      handle: str(p.handle, 24),
+      name: str(p.display_name, 60) || 'DJ',
+      city: str(p.city, 60) || null,
+      followed,
+      mine: p.id === userId,
+      avatar: avatarOf(p.id, p.avatar_url),
+    });
+    const pageOffset = (offset: unknown) => (Number.isInteger(offset) && (offset as number) > 0 ? (offset as number) : 0);
     // A page of who follows a DJ, or whom they follow, each marked with
     // whether the signed-in DJ follows them.
     ipcMain.handle('community:follows', async (_event, userId: unknown, which: unknown, offset: unknown) => {
       const id = uuid(userId);
       if (!id) return BAD_REQUEST;
       const list = which === 'following' ? 'following' : 'followers';
-      const from = Number.isInteger(offset) && (offset as number) > 0 ? (offset as number) : 0;
+      const from = pageOffset(offset);
       const [page, followed] = await Promise.all([
         community.listFollows(id, list, from, FOLLOW_PAGE + 1),
         community.followingIds(),
@@ -544,15 +556,17 @@ export class CommunityModule implements AppModule {
       const people = page.rows
         .slice(0, FOLLOW_PAGE)
         .filter(r => r.profile)
-        .map(r => ({
-          id: r.profile!.id,
-          handle: str(r.profile!.handle, 24),
-          name: str(r.profile!.display_name, 60) || 'DJ',
-          city: str(r.profile!.city, 60) || null,
-          followed: followed.has(r.profile!.id),
-          mine: r.profile!.id === page.userId,
-          avatar: avatarOf(r.profile!.id, r.profile!.avatar_url),
-        }));
+        .map(r => person(r.profile!, followed.has(r.profile!.id), page.userId));
+      return {ok: true, people, hasMore: page.rows.length > FOLLOW_PAGE, nextOffset: from + FOLLOW_PAGE};
+    });
+    // A page of the DJs whose name, @handle or city match what was typed.
+    ipcMain.handle('community:findDjs', async (_event, query: unknown, offset: unknown) => {
+      const q = str(query, 80).trim();
+      if (!q) return {ok: true, people: [], hasMore: false, nextOffset: 0};
+      const from = pageOffset(offset);
+      const page = await community.searchProfiles(q, from, FOLLOW_PAGE + 1);
+      if (!page.ok) return page;
+      const people = page.rows.slice(0, FOLLOW_PAGE).map(r => person(r, !!r.viewer_follows, page.userId));
       return {ok: true, people, hasMore: page.rows.length > FOLLOW_PAGE, nextOffset: from + FOLLOW_PAGE};
     });
   }

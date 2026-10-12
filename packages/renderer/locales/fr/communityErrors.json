@@ -56,6 +56,7 @@
   "followFailed": "Impossible de suivre ce DJ. Réessayez.",
   "unfollowFailed": "Impossible de vous désabonner. Réessayez.",
   "listFailed": "Impossible de charger cette liste. Réessayez.",
+  "searchFailed": "Impossible de rechercher des DJs. Réessayez.",
   "reportFailed": "Impossible d’envoyer le signalement. Réessayez.",
   "blockFailed": "Impossible de bloquer ce DJ. Réessayez.",
   "fileUnreadable": "Impossible de lire ce fichier.",

@@ -104,5 +104,6 @@ window.compas = {
     profile: preload.communityProfile,
     follow: preload.communityFollow,
     follows: preload.communityFollows,
+    findDjs: preload.communityFindDjs,
   },
 };
