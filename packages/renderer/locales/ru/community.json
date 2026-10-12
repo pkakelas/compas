@@ -238,6 +238,8 @@
   "notifLikedTandaUntitled": "{name} оценил(а) вашу tanda",
   "notifLikedPost": "{name} оценил(а) вашу публикацию {title}",
   "notifLikedPostUntitled": "{name} оценил(а) вашу публикацию",
+  "notifLikedComment": "{name} оценил(а) ваш комментарий к публикации {title}",
+  "notifLikedCommentUntitled": "{name} оценил(а) ваш комментарий",
   "notifCommentedTanda": "{name} прокомментировал(а) вашу tanda {title}",
   "notifCommentedTandaUntitled": "{name} прокомментировал(а) вашу tanda",
   "notifCommentedPost": "{name} прокомментировал(а) вашу публикацию {title}",

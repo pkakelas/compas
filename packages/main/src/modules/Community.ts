@@ -49,6 +49,9 @@ const FOLLOW_PAGE = 30;
 const AVATAR_SIZE = 256;
 // Turns a DJ's stored picture into what the renderer shows (CommunityService.avatarUrl).
 type AvatarOf = (userId: string, value: unknown) => string | null;
+// The notification kinds this version knows how to word. Anything else a newer
+// backend sends is left out rather than shown as something it isn't.
+const NOTIFICATION_KINDS = new Set(['like', 'comment', 'reply', 'follow', 'welcome', 'comment_like']);
 
 /** A comment as the renderer shows it. */
 type FeedComment = {
@@ -56,6 +59,8 @@ type FeedComment = {
   parentId: string | null;
   body: string;
   createdAt: string;
+  likeCount: number;
+  liked: boolean;
   mine: boolean;
   author: {id: string; handle: string; name: string; avatar: string | null};
 };
@@ -81,12 +86,15 @@ type FeedPost = {
   comments: FeedComment[];
 };
 
-function toFeedComment(row: CommentRow, userId: string, avatarOf: AvatarOf): FeedComment {
+/** `liked` holds the ids of the comments the signed-in DJ has liked. */
+function toFeedComment(row: CommentRow, userId: string, avatarOf: AvatarOf, liked: Set<string>): FeedComment {
   return {
     id: row.id,
     parentId: row.parent_id,
     body: str(row.body, 1000),
     createdAt: row.created_at,
+    likeCount: Math.max(0, Number(row.like_count) || 0),
+    liked: liked.has(row.id),
     mine: row.author_id === userId,
     author: {
       id: row.author_id,
@@ -350,8 +358,9 @@ export class CommunityModule implements AppModule {
         const state = await community.getState();
         const loaded = await community.listCommentPreviews(posts.map(p => p.id), COMMENT_PREVIEW);
         if (loaded.ok) {
+          const liked = await community.likedCommentIds(loaded.rows.map(r => r.id));
           const byPost = new Map(posts.map(p => [p.id, p] as const));
-          for (const row of loaded.rows) byPost.get(row.post_id)?.comments.push(toFeedComment(row, state.user?.id ?? '', avatarOf));
+          for (const row of loaded.rows) byPost.get(row.post_id)?.comments.push(toFeedComment(row, state.user?.id ?? '', avatarOf, liked));
           // They arrive newest first; a conversation reads oldest first.
           for (const p of posts) p.comments.sort((x, y) => x.createdAt.localeCompare(y.createdAt));
         }
@@ -368,9 +377,10 @@ export class CommunityModule implements AppModule {
     ipcMain.handle('community:notifications', async () => {
       const listed = await community.listNotifications(50);
       if (!listed.ok) return listed;
-      const items = listed.rows.map(r => ({
-        key: `${r.kind}:${r.comment_id ?? `${r.post_id}:${r.actor_id}`}`,
-        kind: r.kind === 'like' || r.kind === 'reply' || r.kind === 'welcome' || r.kind === 'follow' ? r.kind : 'comment',
+      const items = listed.rows.filter(r => NOTIFICATION_KINDS.has(r.kind)).map(r => ({
+        // Many DJs can like the same comment, so the actor is part of the key.
+        key: `${r.kind}:${r.comment_id ?? r.post_id}:${r.actor_id}`,
+        kind: r.kind,
         createdAt: r.created_at,
         actor: {id: r.actor_id, name: str(r.actor_name, 60) || 'DJ', avatar: avatarOf(r.actor_id, r.actor_avatar)},
         postId: r.post_id,
@@ -401,6 +411,10 @@ export class CommunityModule implements AppModule {
       const id = uuid(postId);
       return id ? community.setSaved(id, on !== false) : BAD_REQUEST;
     });
+    ipcMain.handle('community:likeComment', (_event, commentId: unknown, on: unknown) => {
+      const id = uuid(commentId);
+      return id ? community.setCommentLiked(id, on !== false) : BAD_REQUEST;
+    });
 
     // Earlier comments of one post, a page at a time. Resolves to the page in
     // reading order (oldest first) and whether there is more before it.
@@ -415,10 +429,9 @@ export class CommunityModule implements AppModule {
       const cursor = at && cursorId ? {createdAt: at, id: cursorId} : null;
       const page = await community.listCommentsPage(id, cursor, COMMENT_PAGE + 1);
       if (!page.ok) return page;
-      const comments = page.rows
-        .slice(0, COMMENT_PAGE)
-        .map(row => toFeedComment(row, state.user?.id ?? '', avatarOf))
-        .reverse();
+      const rows = page.rows.slice(0, COMMENT_PAGE);
+      const liked = await community.likedCommentIds(rows.map(r => r.id));
+      const comments = rows.map(row => toFeedComment(row, state.user?.id ?? '', avatarOf, liked)).reverse();
       return {ok: true, comments, hasMore: page.rows.length > COMMENT_PAGE};
     });
 
@@ -432,7 +445,7 @@ export class CommunityModule implements AppModule {
         const state = await community.getState();
         const added = await community.addComment(id, text, uuid(parentId));
         if (!added.ok) return added;
-        return {ok: true, comment: toFeedComment(added.row, state.user?.id ?? '', avatarOf)};
+        return {ok: true, comment: toFeedComment(added.row, state.user?.id ?? '', avatarOf, new Set())};
       },
     );
     ipcMain.handle('community:deleteComment', (_event, commentId: unknown, postId: unknown) => {

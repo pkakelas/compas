@@ -228,6 +228,8 @@
   "notifLikedTandaUntitled": "{name} πάτησε «μου αρέσει» στην tanda σας",
   "notifLikedPost": "{name} πάτησε «μου αρέσει» στην ανάρτησή σας {title}",
   "notifLikedPostUntitled": "{name} πάτησε «μου αρέσει» στην ανάρτησή σας",
+  "notifLikedComment": "{name} πάτησε «μου αρέσει» στο σχόλιό σας στην ανάρτηση {title}",
+  "notifLikedCommentUntitled": "{name} πάτησε «μου αρέσει» στο σχόλιό σας",
   "notifCommentedTanda": "{name} σχολίασε την tanda σας {title}",
   "notifCommentedTandaUntitled": "{name} σχολίασε την tanda σας",
   "notifCommentedPost": "{name} σχολίασε την ανάρτησή σας {title}",

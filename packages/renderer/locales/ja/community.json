@@ -223,6 +223,8 @@
   "notifLikedTandaUntitled": "{name} さんがあなたの tanda にいいねしました",
   "notifLikedPost": "{name} さんがあなたの投稿 {title} にいいねしました",
   "notifLikedPostUntitled": "{name} さんがあなたの投稿にいいねしました",
+  "notifLikedComment": "{name} さんが {title} へのあなたのコメントにいいねしました",
+  "notifLikedCommentUntitled": "{name} さんがあなたのコメントにいいねしました",
   "notifCommentedTanda": "{name} さんがあなたの tanda {title} にコメントしました",
   "notifCommentedTandaUntitled": "{name} さんがあなたの tanda にコメントしました",
   "notifCommentedPost": "{name} さんがあなたの投稿 {title} にコメントしました",

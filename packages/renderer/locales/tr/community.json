@@ -228,6 +228,8 @@
   "notifLikedTandaUntitled": "{name} tandanızı beğendi",
   "notifLikedPost": "{name}, {title} gönderinizi beğendi",
   "notifLikedPostUntitled": "{name} gönderinizi beğendi",
+  "notifLikedComment": "{name}, {title} altındaki yorumunuzu beğendi",
+  "notifLikedCommentUntitled": "{name} yorumunuzu beğendi",
   "notifCommentedTanda": "{name}, {title} tandanıza yorum yaptı",
   "notifCommentedTandaUntitled": "{name} tandanıza yorum yaptı",
   "notifCommentedPost": "{name}, {title} gönderinize yorum yaptı",

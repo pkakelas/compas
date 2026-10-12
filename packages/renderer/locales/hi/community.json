@@ -228,6 +228,8 @@
   "notifLikedTandaUntitled": "{name} ने आपका tanda लाइक किया",
   "notifLikedPost": "{name} ने आपकी पोस्ट {title} लाइक की",
   "notifLikedPostUntitled": "{name} ने आपकी पोस्ट लाइक की",
+  "notifLikedComment": "{name} ने {title} पर आपकी टिप्पणी लाइक की",
+  "notifLikedCommentUntitled": "{name} ने आपकी टिप्पणी लाइक की",
   "notifCommentedTanda": "{name} ने आपके tanda {title} पर टिप्पणी की",
   "notifCommentedTandaUntitled": "{name} ने आपके tanda पर टिप्पणी की",
   "notifCommentedPost": "{name} ने आपकी पोस्ट {title} पर टिप्पणी की",

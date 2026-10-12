@@ -228,6 +228,8 @@
   "notifLikedTandaUntitled": "{name} liked your tanda",
   "notifLikedPost": "{name} liked your post {title}",
   "notifLikedPostUntitled": "{name} liked your post",
+  "notifLikedComment": "{name} liked your comment on {title}",
+  "notifLikedCommentUntitled": "{name} liked your comment",
   "notifCommentedTanda": "{name} commented on your tanda {title}",
   "notifCommentedTandaUntitled": "{name} commented on your tanda",
   "notifCommentedPost": "{name} commented on your post {title}",

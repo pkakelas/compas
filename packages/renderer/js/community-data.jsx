@@ -131,6 +131,7 @@ const CommunityStore = {
   openNotifications() { _cmSet({ openNotifications: _cmState.openNotifications + 1 }); },
   like: (postId, on) => _cmData("like", postId, on),
   save: (postId, on) => _cmData("save", postId, on),
+  likeComment: (commentId, on) => _cmData("likeComment", commentId, on),
   comments: (postId, before) => _cmData("comments", postId, before || null),
   comment: (postId, body, parentId) => _cmData("comment", postId, body, parentId || null),
   deleteComment: (commentId, postId) => _cmData("deleteComment", commentId, postId),

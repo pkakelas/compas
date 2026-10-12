@@ -402,6 +402,10 @@ function communitySave(postId: string, on: boolean) {
   return ipcRenderer.invoke('community:save', postId, on);
 }
 
+function communityLikeComment(commentId: string, on: boolean) {
+  return ipcRenderer.invoke('community:likeComment', commentId, on);
+}
+
 /** Earlier comments of a post, a page at a time. `before` is the created_at of
  *  the oldest comment already shown. Resolves to `{ok, comments, hasMore}`. */
 function communityComments(postId: string, before: {createdAt: string; id: string} | null) {
@@ -526,6 +530,7 @@ export {
   communityNotificationsSeen,
   communityLike,
   communitySave,
+  communityLikeComment,
   communityComments,
   communityComment,
   communityDeleteComment,

@@ -93,6 +93,7 @@ window.compas = {
     notificationsSeen: preload.communityNotificationsSeen,
     like: preload.communityLike,
     save: preload.communitySave,
+    likeComment: preload.communityLikeComment,
     comments: preload.communityComments,
     comment: preload.communityComment,
     deleteComment: preload.communityDeleteComment,
