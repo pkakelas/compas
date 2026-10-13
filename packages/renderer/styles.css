@@ -1022,18 +1022,24 @@ button.tp-nav {
 .tv-search-toolbar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; overflow: visible;
 }
+/* Wide panel: pickers and view / sort controls share one row. The filters keep
+   room for all four pickers, so if the row runs short (a long locale, a big
+   count) the controls drop to their own line as a block instead of stranding
+   the last picker below the others. */
 .tv-search-filters {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1; min-width: 0;
-  overflow: visible;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1;
+  min-width: calc(4 * 118px + 3 * 8px); overflow: visible;
 }
 .tv-search-actions {
   display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; margin-left: auto;
 }
 /* Narrower panel: the pickers share one full row in equal columns, and the
-   view / sort controls sit on a row of their own with the count at the end. */
-@container treehead (max-width: 1040px) {
+   view / sort controls sit on a row of their own with the count at the end.
+   The single row needs ~1050px in English at the pickers' minimum width, so
+   switch well before that — this also covers the default Live queue width. */
+@container treehead (max-width: 1200px) {
   .tv-search-filters {
-    flex: 1 1 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    flex: 1 1 100%; min-width: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .tv-search-filters .tv-pick { min-width: 0; max-width: none; }
   .tv-search-reset { grid-column: 1 / -1; justify-self: start; }
