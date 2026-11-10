@@ -77,14 +77,19 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "path=$bundle" >> $env:GITHUB_OUTPUT
 
+      # Each run's packages are ~750MB, so keep them only briefly — at the
+      # default 90 days a handful of releases fills the repo's artifact quota.
+      # A failed upload (quota, outage) must not stop the Store submission.
       - name: Upload packages
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: store-packages
           path: |
             dist/*.appx
             dist/*.msixbundle
           if-no-files-found: error
+          retention-days: 3
 
       - name: Check Partner Center access
         id: store
