@@ -299,13 +299,22 @@ function migrate(d: Database.Database): void {
     // Whether the file's genre tag has been considered for this song's style.
     // Imports used to ignore the tag and stamp 'mixed' on every song in a folder
     // without a style; those rows stay 0 until the startup backfill (see
-    // listMixedWithUncheckedTag) has read their tag.
+    // listSongsOwedTagStyle) has read their tag.
     ['genre_tag_checked', 'INTEGER NOT NULL DEFAULT 0'],
+    // Whether a song typed tango has had its genre tag read for a vals or
+    // milonga. Imports used to let a "Tango" folder override the tag, so a
+    // tagged vals in such a folder became tango (see styleWithTag); those rows
+    // stay 0 until the same startup backfill has read their tag.
+    ['tango_tag_checked', 'INTEGER NOT NULL DEFAULT 0'],
   ]);
   // Only the old 'mixed' rows are owed that backfill: a song the DJ later
   // re-types to Mixed must not be flipped back by its tag.
   if (addedSongColumns.includes('genre_tag_checked')) {
     d.exec(`UPDATE songs SET genre_tag_checked = 1 WHERE genre <> 'mixed'`);
+  }
+  // Likewise only today's tango rows, and not a song edit kept inside Compás.
+  if (addedSongColumns.includes('tango_tag_checked')) {
+    d.exec(`UPDATE songs SET tango_tag_checked = 1 WHERE genre <> 'tango' OR meta_locked = 1`);
   }
   // The background worker repeatedly asks "what's left?" — keep that cheap.
   d.exec(
@@ -417,8 +426,8 @@ export function importSongs(root: string, songs: ScannedSong[]): void {
   const now = Date.now();
 
   const upsertSong = d.prepare(`
-    INSERT INTO songs (path, title, artist, singer, album, year, duration_sec, mtime_ms, genre, genre_tag_checked, is_cortina, folder, folder_path, root, added_at)
-    VALUES (@path, @title, @artist, @singer, @album, @year, @durationSec, @mtimeMs, @genre, 1, @isCortina, @folder, @folderPath, @root, @added_at)
+    INSERT INTO songs (path, title, artist, singer, album, year, duration_sec, mtime_ms, genre, genre_tag_checked, tango_tag_checked, is_cortina, folder, folder_path, root, added_at)
+    VALUES (@path, @title, @artist, @singer, @album, @year, @durationSec, @mtimeMs, @genre, 1, 1, @isCortina, @folder, @folderPath, @root, @added_at)
     ON CONFLICT(path) DO UPDATE SET
       title = CASE WHEN songs.meta_locked = 1 THEN songs.title ELSE excluded.title END,
       artist = CASE WHEN songs.orq_locked = 1 OR songs.meta_locked = 1 THEN songs.artist
@@ -1199,28 +1208,35 @@ export function getSongMetaByPath(
 }
 
 /**
- * Songs still 'mixed' from an import that never looked at their genre tag —
- * the work list for the startup backfill.
+ * Songs an older import typed without looking at their genre tag — still
+ * 'mixed', or tango from a "Tango" folder — the work list for the startup
+ * backfill.
  */
-export function listMixedWithUncheckedTag(): {id: number; path: string; root: string}[] {
+export function listSongsOwedTagStyle(): {id: number; path: string; root: string; genre: string}[] {
   return getDb()
-    .prepare(`SELECT id, path, root FROM songs WHERE genre = 'mixed' AND genre_tag_checked = 0`)
-    .all() as {id: number; path: string; root: string}[];
+    .prepare(
+      `SELECT id, path, root, genre FROM songs
+       WHERE (genre = 'mixed' AND genre_tag_checked = 0)
+          OR (genre = 'tango' AND tango_tag_checked = 0 AND meta_locked = 0)`,
+    )
+    .all() as {id: number; path: string; root: string; genre: string}[];
 }
 
 /**
  * Record the backfill's findings: each song's tag is now checked, and a song
- * whose tag names a style takes it — unless the DJ re-typed it in the meantime.
- * Returns how many songs changed style.
+ * given a new `style` takes it — unless the DJ re-typed it away from `from` in
+ * the meantime. Returns how many songs changed style.
  */
-export function applyTagStyles(results: {id: number; style: string | null}[]): number {
+export function applyTagStyles(results: {id: number; from: string; style: string | null}[]): number {
   const d = getDb();
-  const setStyle = d.prepare(`UPDATE songs SET genre = ? WHERE id = ? AND genre = 'mixed'`);
-  const setChecked = d.prepare('UPDATE songs SET genre_tag_checked = 1 WHERE id = ?');
+  const setStyle = d.prepare(`UPDATE songs SET genre = ? WHERE id = ? AND genre = ?`);
+  const setChecked = d.prepare(
+    'UPDATE songs SET genre_tag_checked = 1, tango_tag_checked = 1 WHERE id = ?',
+  );
   let changed = 0;
   const tx = d.transaction(() => {
     for (const r of results) {
-      if (r.style) changed += setStyle.run(r.style, r.id).changes;
+      if (r.style) changed += setStyle.run(r.style, r.id, r.from).changes;
       setChecked.run(r.id);
     }
   });

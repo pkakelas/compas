@@ -19,6 +19,10 @@ const EXPECTED: Record<string, string> = {
   'Sin etiqueta': 'mixed', // no genre tag at all
   'Viejo porton': 'vals', // tagged "Tango", but its folder says Vals
   'La yumba': 'mixed', // tagged "Tango", but the DJ set its folder to Mixed
+  'Violetas': 'vals', // tagged "Vals" in a folder named Tangos
+  'Milonga de mis amores': 'milonga', // tagged "Milonga" in a folder named Tangos
+  'Recuerdo': 'tango', // tagged "Tango" in a folder named Tangos
+  'Sin etiqueta tango': 'tango', // no genre tag, in a folder named Tangos
 };
 
 /** An orchestra folder (no style in its name) whose songs carry genre tags. */
@@ -26,13 +30,20 @@ function makeTaggedFixture(root: string): void {
   const orquesta = join(root, 'Troilo');
   const valses = join(root, 'Biagi - Vals');
   const forcedMixed = join(root, 'Pugliese');
-  for (const dir of [orquesta, valses, forcedMixed]) mkdirSync(dir, {recursive: true});
+  const tangos = join(root, 'Tangos');
+  for (const dir of [orquesta, valses, forcedMixed, tangos]) mkdirSync(dir, {recursive: true});
   writeFlac(join(orquesta, 'Toda mi vida.flac'), 1, 'Tango');
   writeFlac(join(orquesta, 'Flor de lino.flac'), 1, 'Tango Vals');
   writeFlac(join(orquesta, 'Mano brava.flac'), 1, 'Milonga');
   writeWav(join(orquesta, 'Sin etiqueta.wav'));
   writeFlac(join(valses, 'Viejo porton.flac'), 1, 'Tango');
   writeFlac(join(forcedMixed, 'La yumba.flac'), 1, 'Tango');
+  // "Tango" names the whole genre too: a collection filed under it still has
+  // its valses and milongas, which keep the style their own tag gives.
+  writeFlac(join(tangos, 'Violetas.flac'), 1, 'Vals');
+  writeFlac(join(tangos, 'Milonga de mis amores.flac'), 1, 'Milonga');
+  writeFlac(join(tangos, 'Recuerdo.flac'), 1, 'Tango');
+  writeWav(join(tangos, 'Sin etiqueta tango.wav'));
 }
 
 const stylesByTitle = (p: Page): Promise<Record<string, string>> =>
@@ -81,12 +92,14 @@ test('songs in a folder without a style take it from their genre tag', async () 
 });
 
 test('a library imported before the tag was honoured is fixed on launch', async () => {
-  // Rewind to what the old import left behind: every song in the orchestra
-  // folder 'mixed', its tag never looked at.
+  // Rewind to what the old imports left behind: every song in the orchestra
+  // folder 'mixed' and every song in the Tangos folder tango, their tags never
+  // looked at.
   await app.close();
   execOnLibrary(
     userDataDir,
-    `UPDATE songs SET genre = 'mixed', genre_tag_checked = 0 WHERE folder = 'Troilo'`,
+    `UPDATE songs SET genre = 'mixed', genre_tag_checked = 0 WHERE folder = 'Troilo';
+     UPDATE songs SET genre = 'tango', tango_tag_checked = 0 WHERE folder = 'Tangos';`,
   );
 
   ({app, page} = await launchApp(userDataDir));

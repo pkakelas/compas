@@ -10,6 +10,7 @@ import {
   isAudioFile,
   looksLikeCortinaFolder,
   readTagStyle,
+  styleWithTag,
 } from '../services/scan.js';
 import {commonAncestor, displayFolderPath, playlistSourceFolders} from '../services/import-sources.js';
 import {clearAudioCache} from '../services/transcode.js';
@@ -44,7 +45,7 @@ import {
   keepTanda,
   listCollectionTandas,
   listLibraryRoots,
-  listMixedWithUncheckedTag,
+  listSongsOwedTagStyle,
   listPlaylists,
   listSongPaths,
   listTandas,
@@ -208,19 +209,22 @@ function buildImportTree(root: string, songs: ScannedSong[]): ImportTreeNode {
 }
 
 /**
- * Give songs left 'mixed' by an older import the style their own genre tag
- * names. Songs whose root or file is missing (e.g. an unplugged drive) are
- * skipped and retried on a later launch. Resolves to how many songs changed
- * style.
+ * Fix songs an older import typed without reading their own genre tag: songs
+ * left 'mixed' take the style their tag names, and songs a "Tango" folder made
+ * tango take the vals or milonga their tag names. Songs whose root or file is
+ * missing (e.g. an unplugged drive) are skipped and retried on a later launch.
+ * Resolves to how many songs changed style.
  */
 async function backfillTagStyles(): Promise<number> {
-  const results: {id: number; style: string | null}[] = [];
+  const results: {id: number; from: string; style: string | null}[] = [];
   const rootIsThere = new Map<string, boolean>();
-  for (const {id, path, root} of listMixedWithUncheckedTag()) {
+  for (const {id, path, root, genre} of listSongsOwedTagStyle()) {
     if (!rootIsThere.has(root)) rootIsThere.set(root, existsSync(root));
     if (!rootIsThere.get(root)) continue;
-    const style = await readTagStyle(path);
-    if (style !== undefined) results.push({id, style});
+    const tagStyle = await readTagStyle(path);
+    if (tagStyle === undefined) continue;
+    const style = genre === 'mixed' ? tagStyle : styleWithTag(genre, tagStyle);
+    results.push({id, from: genre, style: style === genre ? null : style});
   }
   return results.length ? applyTagStyles(results) : 0;
 }
@@ -341,7 +345,8 @@ export class IpcModule implements AppModule {
     // Commit the previewed import. `types` maps a relative folder path to its
     // style: the DJ's choice (which may be 'mixed') or the one its name gives.
     // A song whose folder has no entry takes the style its own genre tag names,
-    // and is 'mixed' only without one.
+    // and is 'mixed' only without one. A folder typed Tango still lets a song
+    // tagged vals or milonga keep that (see styleWithTag).
     // `cortinas` maps a folder path to its cortina flag (the per-folder toggle):
     // an explicit entry overrides the folder-name heuristic, and `true` is also
     // persisted in folder_flags so future imports into that folder inherit it.
@@ -357,11 +362,14 @@ export class IpcModule implements AppModule {
         const cortinas = (payload && payload.cortinas) || {};
         for (const {root, songs: scanned} of importPreview.roots) {
           const disp = (fp: string) => displayFolderPath(importPreview!.displayRoot, root, fp);
-          const songs = scanned.map(s => ({
-            ...s,
-            genre: types[disp(s.folderPath)] || s.tagStyle || 'mixed',
-            isCortina: disp(s.folderPath) in cortinas ? cortinas[disp(s.folderPath)] : s.isCortina,
-          }));
+          const songs = scanned.map(s => {
+            const chosen = types[disp(s.folderPath)];
+            return {
+              ...s,
+              genre: (chosen && styleWithTag(chosen, s.tagStyle ?? null)) || s.tagStyle || 'mixed',
+              isCortina: disp(s.folderPath) in cortinas ? cortinas[disp(s.folderPath)] : s.isCortina,
+            };
+          });
           // Persist the folder-level flags (root-relative) so re-imports /
           // dropped-in clips inherit.
           const prefix = relative(importPreview.displayRoot, root).split(sep).filter(Boolean).join(' / ');

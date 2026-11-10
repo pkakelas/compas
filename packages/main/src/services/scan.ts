@@ -149,14 +149,27 @@ export async function readTagStyle(file: string): Promise<string | null | undefi
   }
 }
 
+/**
+ * The style a song takes when its folder (by name, or by the DJ's choice on
+ * import) says `folderStyle` and its own genre tag says `tagStyle`. The folder
+ * wins, except that "Tango" is also the umbrella word for the whole genre: a
+ * "Tango" folder is often a whole collection, valses and milongas included, so
+ * a song whose own tag names the vals or the milonga keeps that.
+ */
+export function styleWithTag(folderStyle: string, tagStyle: string | null): string {
+  if (folderStyle === 'tango' && (tagStyle === 'vals' || tagStyle === 'milonga')) return tagStyle;
+  return folderStyle;
+}
+
 function mapGenre(segments: string[], tagStyle: string | null): string {
-  // The deepest folder name that names a style wins — except "mixed", which
-  // says nothing about any one song, so the song's own tag outranks it.
+  // The deepest folder name that names a style wins (see styleWithTag) —
+  // except "mixed", which says nothing about any one song, so the song's own
+  // tag outranks it.
   let folderStyle: string | null = null;
   for (let i = segments.length - 1; i >= 0 && !folderStyle; i--) {
     folderStyle = guessStyle(segments[i]);
   }
-  if (folderStyle && folderStyle !== 'mixed') return folderStyle;
+  if (folderStyle && folderStyle !== 'mixed') return styleWithTag(folderStyle, tagStyle);
   return tagStyle ?? folderStyle ?? 'tango';
 }
 
