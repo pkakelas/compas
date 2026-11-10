@@ -1,16 +1,22 @@
-// transcode.ts — makes audio formats Chromium can't demux playable.
+// transcode.ts — converts audio formats Chromium can't play into WAV.
 //
 // Electron's media stack (Chromium's trimmed ffmpeg build) decodes MP3,
-// AAC/M4A, FLAC, Ogg/Opus and WAV natively, but ships no AIFF demuxer: feeding
-// an AIFF song to the <audio> element fails with
-// `DEMUXER_ERROR_COULD_NOT_OPEN`. The first time such a song is requested we
-// convert it to PCM WAV with the bundled ffmpeg (already a dependency for
-// loudness analysis and tag editing) and serve the cached copy instead.
+// AAC/M4A, FLAC, Ogg/Opus and WAV natively, but two lossless formats DJs rip to
+// are missing from it:
+//  • AIFF — no demuxer at all; the <audio> element fails with
+//    `DEMUXER_ERROR_COULD_NOT_OPEN`.
+//  • Apple Lossless (ALAC) — the MP4 container opens, but there's no ALAC
+//    decoder, so it fails with `DEMUXER_ERROR_NO_SUPPORTED_STREAMS`. ALAC
+//    shares the `.m4a` extension with AAC, so it's detected by codec, not name.
+// The first time such a song is requested we convert it to PCM WAV with the
+// bundled ffmpeg (already a dependency for loudness analysis and tag editing)
+// and serve the cached copy instead.
 //
-// PCM → PCM is a byte shuffle, so a full song converts in well under a second.
-// The WAV keeps the source bit depth, and the cache lives in userData, is keyed
-// by the source file's identity (id + mtime + size, so a retag or replacement
-// invalidates it) and is capped by size with least-recently-played eviction.
+// Both are lossless and cheap to decode, so a full song converts in well under
+// a second. The WAV keeps the source bit depth, and the cache lives in
+// userData, is keyed by the source file's identity (id + mtime + size, so a
+// retag or replacement invalidates it) and is capped by size with
+// least-recently-played eviction.
 import {spawn} from 'node:child_process';
 import {mkdir, readdir, rename, rm, stat, unlink, utimes} from 'node:fs/promises';
 import {dirname, extname, join} from 'node:path';
@@ -25,24 +31,60 @@ const FFMPEG_PATH = (ffmpegStatic as unknown as string | null)?.replace(
   'app.asar.unpacked$1',
 );
 
-/** Extensions Chromium can't play directly; served via the WAV cache. */
+/** Extensions Chromium can't play at all; always served via the WAV cache. */
 const TRANSCODE_EXTENSIONS = new Set(['.aiff', '.aif', '.aifc']);
+
+/** MP4-family extensions whose codec decides: AAC plays as-is, ALAC doesn't. */
+const MP4_EXTENSIONS = new Set(['.m4a', '.mp4']);
+
+/** Codecs (as music-metadata names them) Chromium has no decoder for. */
+const TRANSCODE_CODECS = new Set(['ALAC']);
 
 /** Upper bound on the cache's total size before the oldest copies are evicted.
  * A 16-bit/44.1 kHz tango is ~30 MB as WAV; hi-res transfers a few times that,
- * so this comfortably holds a full night's worth of AIFF tracks. */
+ * so this comfortably holds a full night's worth of AIFF/ALAC tracks. */
 const MAX_CACHE_BYTES = 1.5 * 1024 * 1024 * 1024;
 
 export type Playable = {
-  /** File to stream to the renderer (the original, or a cached conversion). */
+  /** The cached conversion to stream to the renderer. */
   path: string;
-  /** MIME type of the converted file, or `null` to derive it from `path`. */
-  contentType: string | null;
+  /** MIME type of the converted file. */
+  contentType: string;
 };
 
-/** True if this file must be converted before the renderer can play it. */
-export function needsTranscode(filePath: string): boolean {
-  return TRANSCODE_EXTENSIONS.has(extname(filePath).toLowerCase());
+/** Per-file codec verdicts, so the many range requests a single playback makes
+ * don't each re-read the MP4 header. Keyed by path, checked against mtime+size
+ * so a replaced file is re-probed. */
+const codecVerdicts = new Map<string, {identity: string; transcode: boolean}>();
+const MAX_CODEC_VERDICTS = 5000;
+
+/**
+ * True if this file must be converted before the renderer can play it. `info`
+ * is the caller's `stat` of the file, used to tell when a cached verdict is
+ * stale. An `.m4a` whose header can't be read is served as-is, as before.
+ */
+export async function needsTranscode(
+  filePath: string,
+  info: {mtimeMs: number; size: number},
+): Promise<boolean> {
+  const ext = extname(filePath).toLowerCase();
+  if (TRANSCODE_EXTENSIONS.has(ext)) return true;
+  if (!MP4_EXTENSIONS.has(ext)) return false;
+
+  const identity = `${Math.floor(info.mtimeMs)}-${info.size}`;
+  const known = codecVerdicts.get(filePath);
+  if (known && known.identity === identity) return known.transcode;
+
+  let transcode = false;
+  try {
+    const meta = await parseFile(filePath, {duration: false, skipCovers: true});
+    transcode = TRANSCODE_CODECS.has(meta.format.codec ?? '');
+  } catch {
+    // unreadable header — let Chromium try the original
+  }
+  if (codecVerdicts.size >= MAX_CODEC_VERDICTS) codecVerdicts.clear();
+  codecVerdicts.set(filePath, {identity, transcode});
+  return transcode;
 }
 
 function cacheDir(): string {
@@ -54,13 +96,11 @@ function cacheDir(): string {
 const inFlight = new Map<string, Promise<void>>();
 
 /**
- * Resolve the file to stream for `filePath`. Returns the original for formats
- * the renderer decodes itself; otherwise returns the cached WAV, converting it
- * first if needed. Rejects if the source is unreadable or ffmpeg fails.
+ * Resolve the cached WAV conversion of `filePath`, converting it first if
+ * needed. Only call this for files {@link needsTranscode} accepts. Rejects if
+ * the source is unreadable or ffmpeg fails.
  */
 export async function resolvePlayable(songId: string, filePath: string): Promise<Playable> {
-  if (!needsTranscode(filePath)) return {path: filePath, contentType: null};
-
   const info = await stat(filePath);
   // `songId` was already validated against the DB, but normalise it to a plain
   // integer so the cache filename never carries anything odd from the URL.

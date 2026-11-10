@@ -3,7 +3,10 @@ import {mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {launchApp, stubFolderDialog, gotoView} from './helpers/app.js';
-import {makeMusicFixture, AIFF_FLAC_TITLES} from './helpers/wav.js';
+import {makeMusicFixture, AIFF_FLAC_TITLES, writeM4a} from './helpers/wav.js';
+
+/** The two codecs an `.m4a` can hold; only the fixture names tell them apart. */
+const M4A_TITLES = {aac: 'Poema', alac: 'Recuerdo'} as const;
 
 let app: ElectronApplication;
 let page: Page;
@@ -15,6 +18,8 @@ test.beforeAll(async () => {
 
   const musicRoot = mkdtempSync(join(tmpdir(), 'compas-music-'));
   makeMusicFixture(musicRoot);
+  writeM4a(join(musicRoot, 'Di Sarli - Tango', `${M4A_TITLES.aac}.m4a`), 'aac');
+  writeM4a(join(musicRoot, 'Di Sarli - Tango', `${M4A_TITLES.alac}.m4a`), 'alac');
   await stubFolderDialog(app, musicRoot);
   await gotoView(page, 'Tandas');
   await page.getByRole('button', {name: /Choose a folder/i}).click();
@@ -88,6 +93,29 @@ test('an AIFF track is converted to WAV and decodes', async () => {
   expect(r.found).toBe(true);
   expect(r.status).toBe(200);
   // Chromium has no AIFF demuxer; the protocol serves a cached WAV conversion.
+  expect(r.contentType).toBe('audio/wav');
+  expect(r.partialStatus).toBe(206);
+  expect(r.partialLength).toBe('100');
+  expect(r.ok, r.error).toBe(true);
+  expect(r.duration).toBeCloseTo(1, 1);
+});
+
+test('an AAC .m4a streams natively and decodes', async () => {
+  const r = await probeSong(M4A_TITLES.aac);
+  expect(r.found).toBe(true);
+  expect(r.status).toBe(200);
+  expect(r.contentType).toBe('audio/mp4');
+  expect(r.partialStatus).toBe(206);
+  expect(r.ok, r.error).toBe(true);
+  expect(r.duration).toBeCloseTo(1, 1);
+});
+
+test('an Apple Lossless (ALAC) .m4a is converted to WAV and decodes', async () => {
+  const r = await probeSong(M4A_TITLES.alac);
+  expect(r.found).toBe(true);
+  expect(r.status).toBe(200);
+  // Chromium's ffmpeg build has no ALAC decoder; the protocol serves a cached
+  // WAV conversion, picked by codec since the extension matches AAC's.
   expect(r.contentType).toBe('audio/wav');
   expect(r.partialStatus).toBe(206);
   expect(r.partialLength).toBe('100');

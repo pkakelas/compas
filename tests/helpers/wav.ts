@@ -126,3 +126,21 @@ export function writeFlac(path: string, seconds = 1, genre?: string): void {
     '-c:a', 'flac', path,
   ]);
 }
+
+/**
+ * Write an M4A file (mono, 44.1kHz sine) with the bundled ffmpeg. `codec` picks
+ * what's inside the MP4 container: `aac` (lossy, what iTunes sells) or `alac`
+ * (Apple Lossless, what iTunes/Music rips CDs to) — same extension, so only
+ * the codec tells them apart.
+ */
+export function writeM4a(path: string, codec: 'aac' | 'alac', seconds = 1): void {
+  const require = createRequire(new URL('../../packages/main/package.json', import.meta.url));
+  const ffmpeg = require('ffmpeg-static') as string;
+  execFileSync(ffmpeg, [
+    '-v', 'error', '-y',
+    '-f', 'lavfi', '-i', `sine=frequency=220:sample_rate=44100:duration=${seconds}`,
+    '-c:a', codec,
+    ...(codec === 'alac' ? ['-sample_fmt', 's16p'] : []),
+    path,
+  ]);
+}
