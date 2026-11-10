@@ -106,15 +106,16 @@ export class AudioProtocolModule implements AppModule {
         return new Response('Not found', {status: 404});
       }
 
-      // Formats Chromium can't demux (AIFF) are served from a cached WAV
-      // conversion instead of the original; everything else streams as-is.
+      // Formats Chromium can't play (AIFF, Apple Lossless .m4a) are served from
+      // a cached WAV conversion instead of the original; everything else
+      // streams as-is.
       let servePath = filePath;
       let contentType = contentTypeFor(filePath);
-      if (needsTranscode(filePath)) {
+      if (await needsTranscode(filePath, source)) {
         try {
           const playable = await resolvePlayable(songId, filePath);
           servePath = playable.path;
-          contentType = playable.contentType ?? contentTypeFor(playable.path);
+          contentType = playable.contentType;
         } catch (err) {
           console.error(`[audio] could not convert ${filePath}:`, err);
           return new Response('Could not convert audio', {status: 500});
