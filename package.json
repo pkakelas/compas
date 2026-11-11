@@ -4,6 +4,7 @@
   "version": "0.1.21",
   "private": true,
   "author": "pkakelas",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/pkakelas/compas.git"
