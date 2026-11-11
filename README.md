@@ -8,7 +8,7 @@
 
 ---
 
-Compás is the player I wanted when DJing milongas. It knows what a tanda and a
+Compás is the player you wanted when DJing milongas. It knows what a tanda and a
 cortina are, helps you clean up the tags on a messy tango library, and lets you
 build a night ahead of time and then run it live — with a headphone output for
 previewing the next tanda while the floor keeps dancing.
