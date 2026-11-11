@@ -35,8 +35,8 @@ jobs:
             platform: mac
           - os: windows-latest
             platform: win
-          # Unsigned AppImage (Linux has no signing step). Built natively so
-          # the bundled ffmpeg and SQLite binaries are the Linux ones.
+          # Unsigned deb + AppImage (Linux has no signing step). Built natively
+          # so the bundled ffmpeg and SQLite binaries are the Linux ones.
           - os: ubuntu-latest
             platform: linux
 
