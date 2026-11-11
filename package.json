@@ -23,6 +23,7 @@
     "compile": "pnpm run build && pnpm exec electron-builder build --config electron-builder.mjs",
     "compile:mac": "pnpm run build && pnpm exec electron-builder build --config electron-builder.mjs --mac",
     "compile:win": "pnpm run build && pnpm exec electron-builder build --config electron-builder.mjs --win",
+    "compile:linux": "pnpm run build && pnpm exec electron-builder build --config electron-builder.mjs --linux",
     "compile:dir": "pnpm run build && pnpm exec electron-builder build --config electron-builder.mjs --dir",
     "compile:publish": "pnpm run build && pnpm exec electron-builder build --config electron-builder.mjs --publish always",
     "postinstall": "electron-builder install-app-deps",

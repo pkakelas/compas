@@ -115,7 +115,20 @@ export default /** @type import('electron-builder').Configuration */
     allowToChangeInstallationDirectory: true,
   },
   linux: {
-    target: ['deb'],
+    // AppImage only: it needs no signing, runs on any distro, and is the one
+    // Linux format electron-updater replaces in place without asking for root.
+    // x64 only for now. Must be built on Linux (the release workflow's ubuntu
+    // runner) — ffmpeg-static bundles the binary for the machine doing the
+    // install, so a cross-build from macOS would ship a macOS ffmpeg.
+    // A .deb would additionally need a maintainer email (linux.maintainer).
+    target: [{target: 'AppImage', arch: ['x64']}],
+    // The menu category is derived from mac.category (music → Audio;AudioVideo).
+    // productName stays ASCII for file names; launchers show the real name.
+    desktop: {
+      entry: {
+        Name: 'Compás',
+      },
+    },
   },
   artifactName: 'Compas-${version}-${os}-${arch}.${ext}',
   files: [
