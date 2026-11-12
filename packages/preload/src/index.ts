@@ -255,6 +255,26 @@ function setKeepAwake(keepAwake: boolean) {
   return ipcRenderer.invoke('power:keepAwake', keepAwake);
 }
 
+/** DJ controllers (Mixxx mappings): the bundled index of supported devices. */
+function controllersIndex() {
+  return ipcRenderer.invoke('controllers:index');
+}
+
+/** Ids of the mappings whose files are already downloaded. */
+function controllersInstalled(): Promise<string[]> {
+  return ipcRenderer.invoke('controllers:installed');
+}
+
+/** Download (and verify) one mapping's files. Resolves {ok} or {ok:false, error}. */
+function controllersDownload(id: string) {
+  return ipcRenderer.invoke('controllers:download', id);
+}
+
+/** A downloaded mapping's XML and scripts, re-verified; null if unavailable. */
+function controllersLoad(id: string) {
+  return ipcRenderer.invoke('controllers:load', id);
+}
+
 /** Subscribe to "a new version has downloaded" events. The callback receives
  *  `{version, releaseNotes}`. Returns an unsubscribe function. */
 function onUpdateDownloaded(cb: (info: unknown) => void) {
@@ -467,6 +487,10 @@ function onCommunityChanged(cb: (state: unknown) => void) {
 }
 
 export {
+  controllersIndex,
+  controllersInstalled,
+  controllersDownload,
+  controllersLoad,
   getAppVersion,
   openExternal,
   setLocale,

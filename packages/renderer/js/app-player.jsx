@@ -1871,11 +1871,90 @@ function useCueEngine(monitorDeviceId) {
   return { song, playing, pos, dur, volume, cue, cueSongs, toggle, stop, seek, setVolume };
 }
 
+/* ============================ DJ CONTROLLERS ============================ */
+// What a DJ controller's knobs mean in Compás. Controllers run Mixxx mappings
+// (entries/controllers.js), which speak Mixxx's two-deck vocabulary; this
+// hook answers for it:
+//   deck 1 ([Channel1]) is the floor — play/pause, volume fader, mute and the
+//     low / mid / high EQ knobs (Compás' 60 Hz, 1 kHz and 12 kHz bands);
+//   deck 2 ([Channel2]) is the headphone pre-listen — play/pause and its
+//     volume fader is the cue volume.
+// The floor obeys the live-set lock exactly as it does for clicks (play/pause
+// is refused; volume and EQ stay live), and every fader and knob uses soft
+// takeover, so plugging in a controller with a fader at zero can't cut the floor.
+const EQ_KNOBS = [[1, 0], [2, 2], [3, 4]]; // Mixxx EQ parameterN → Compás band index
+const EQ_GROUP = "[EqualizerRack1_[Channel1]_Effect1]";
+const CONTROLLER_KEYS = {
+  "[Channel1],play": "value",
+  "[Channel1],volume": "value",
+  "[Channel1],mute": "value",
+  ...Object.fromEntries(EQ_KNOBS.map(([n]) => [`${EQ_GROUP},parameter${n}`, "param"])),
+  "[Channel2],play": "value",
+  "[Channel2],volume": "value",
+};
+const dbToParam = (db) => Math.min(1, Math.max(0, 0.5 + db / (EQ_GAIN_MAX - EQ_GAIN_MIN)));
+const paramToDb = (p) => (p - 0.5) * (EQ_GAIN_MAX - EQ_GAIN_MIN);
+const round3 = (x) => Math.round(x * 1000) / 1000;
+
+function useControllerHost(engine, cueEngine) {
+  const ref = useRef(null);
+  ref.current = { engine, cue: cueEngine };
+  const rt = window.compasControllers;
+
+  useEffect(() => {
+    if (!rt) return undefined;
+    const read = () => {
+      const { engine: e, cue: c } = ref.current;
+      const deck = (n, loaded, playing, pos, dur) => [
+        [`[Channel${n}]`, "track_loaded", loaded ? 1 : 0],
+        [`[Channel${n}]`, "play", playing ? 1 : 0],
+        [`[Channel${n}]`, "duration", loaded ? dur || 0 : 0],
+        [`[Channel${n}]`, "playposition", loaded && dur ? round3(Math.min(1, pos / dur)) : 0],
+      ];
+      return [
+        ...deck(1, !!e.now, e.playing, e.pos, e.dur),
+        ["[Channel1]", "volume", e.volume],
+        ["[Channel1]", "mute", e.muted ? 1 : 0],
+        ...EQ_KNOBS.map(([n, band]) => [EQ_GROUP, `parameter${n}`, dbToParam(e.eqBands[band] || 0)]),
+        ...deck(2, !!c.song, c.playing, c.pos, c.dur),
+        ["[Channel2]", "volume", c.volume],
+      ];
+    };
+    const apply = (changes) => {
+      const { engine: e, cue: c } = ref.current;
+      for (const [group, key, v] of changes) {
+        const id = `${group},${key}`;
+        if (id === "[Channel1],play") { if (!!v !== e.playing) e.playPause(); }
+        else if (id === "[Channel1],volume") e.setVolume(v);
+        else if (id === "[Channel1],mute") { if (!!v !== e.muted) e.toggleMute(); }
+        else if (group === EQ_GROUP) {
+          const knob = EQ_KNOBS.find(([n]) => key === `parameter${n}`);
+          if (!knob) continue;
+          const db = paramToDb(v);
+          e.setEqBand(knob[1], db);
+          // Turning an EQ knob is asking for EQ.
+          if (!e.eqEnabled && Math.abs(db) >= 1) e.setEqEnabled(true);
+        }
+        else if (id === "[Channel2],play") { if (!!v !== c.playing) c.toggle(); }
+        else if (id === "[Channel2],volume") c.setVolume(v);
+      }
+    };
+    return rt.attachHost({ keys: CONTROLLER_KEYS, read, apply });
+  }, [rt]);
+
+  // Tell running mappings whenever something they show has changed.
+  useEffect(() => { if (rt) rt.hostChanged(); }, [
+    rt, engine.now, engine.playing, engine.pos, engine.dur, engine.volume, engine.muted, engine.eqBands,
+    cueEngine.song, cueEngine.playing, cueEngine.pos, cueEngine.dur, cueEngine.volume,
+  ]);
+}
+
 function PlayerProvider({ children }) {
   const devices = useAudioDevices();
   const playback = usePlaybackSettings();
   const engine = usePlayerEngine(devices.mainDeviceId, playback);
   const cueEngine = useCueEngine(devices.monitorDeviceId);
+  useControllerHost(engine, cueEngine);
 
   // Turning pre-listen off tears down any in-progress cue immediately — stop()
   // clears the cue song, which makes the blue CueBar strip disappear at once.
