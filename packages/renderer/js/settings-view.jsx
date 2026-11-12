@@ -166,10 +166,30 @@ const CONTROLLER_ERRORS = { network: "ctrlErrNetwork", integrity: "ctrlErrIntegr
 const controllerError = (code) => tr("settings." + (CONTROLLER_ERRORS[code] || "ctrlErrStart"));
 
 function controllerStatus(d) {
-  if (d.status === "running") return <span className="tp-set-status ok">{tr("settings.ctrlRunning")}</span>;
-  if (d.status === "downloading") return <span className="tp-set-status">{tr("settings.ctrlDownloading")}</span>;
-  if (d.status === "starting") return <span className="tp-set-status">{tr("settings.ctrlStarting")}</span>;
+  if (d.status === "running") return <span className="tp-ctrl-badge ok"><i />{tr("settings.ctrlRunning")}</span>;
+  if (d.status === "downloading") return <span className="tp-ctrl-badge"><i />{tr("settings.ctrlDownloading")}</span>;
+  if (d.status === "starting") return <span className="tp-ctrl-badge"><i />{tr("settings.ctrlStarting")}</span>;
   return null;
+}
+
+// What each deck does in Compás, as a two-line legend.
+function ControllerDecks() {
+  const decks = [
+    { n: 1, to: tr("settings.ctrlFloor"), ds: tr("settings.ctrlFloorDesc") },
+    { n: 2, to: tr("settings.preListenLabel"), ds: tr("settings.ctrlPreListenDesc") },
+  ];
+  return (
+    <div className="tp-ctrl-decks">
+      {decks.map((d) => (
+        <div key={d.n} className="tp-ctrl-deck">
+          <span className="n">{tr("settings.ctrlDeckN", { n: d.n })}</span>
+          <I.chev s={12} />
+          <span className="to">{d.to}</span>
+          <span className="ds">{d.ds}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function ControllersCard() {
@@ -185,21 +205,25 @@ function ControllersCard() {
   };
   const midiOpts = [{ value: "", label: tr("settings.ctrlNoMapping") },
     ...snap.midiMappings.map((m) => ({ value: m.id, label: m.name }))];
+  const detectBtn = (label, cls) => (
+    <button className={"tp-btn sm " + cls} onClick={detect} disabled={busy || !snap.loaded}>
+      <I.download s={14} /> {busy ? tr("settings.ctrlDetecting") : label}
+    </button>
+  );
 
   return (
     <SettingsCard icon={<I.sliders s={17} />} title={tr("settings.ctrlTitle")} desc={tr("settings.ctrlDesc")}>
-      <div className="tp-set-actions">
-        <button className="tp-btn primary sm" onClick={detect} disabled={busy || !snap.loaded}>
-          <I.download s={14} /> {busy ? tr("settings.ctrlDetecting") : tr("settings.ctrlDetect")}
-        </button>
-      </div>
-      {result && result.found === 0 && <div className="tp-set-note">{tr("settings.ctrlNoneFound")}</div>}
-
-      {snap.devices.map((d) => (
+      {snap.devices.length === 0 ? (
+        <SetRow label={tr("settings.ctrlNoneTitle")}
+          desc={result && result.found === 0 ? tr("settings.ctrlNoneFound") : tr("settings.ctrlNoneDesc")}>
+          {detectBtn(tr("settings.ctrlDetect"), "")}
+        </SetRow>
+      ) : snap.devices.map((d) => (
         <SetRow key={d.key} label={d.label}
-          desc={d.mapping ? tr("settings.ctrlMapping", { name: d.mapping.name }) : tr("settings.ctrlNoMappingFound")}>
+          desc={d.status === "error"
+            ? <span className="tp-ctrl-err">{controllerError(d.error)}</span>
+            : d.mapping ? tr("settings.ctrlMapping", { name: d.mapping.name }) : tr("settings.ctrlNoMappingFound")}>
           {controllerStatus(d)}
-          {d.status === "error" && <span className="tp-set-status err">{controllerError(d.error)}</span>}
           {d.protocol === "midi" && (
             <SetSelect value={d.mapping ? d.mapping.id : ""} options={midiOpts}
               onChange={(id) => rt.setMidiMapping(d.key, id || null)} />
@@ -212,11 +236,17 @@ function ControllersCard() {
         </SetRow>
       ))}
 
-      <div className="tp-set-note">{tr("settings.ctrlDecks")}</div>
-      <div className="tp-set-note">
-        {tr("settings.ctrlCredit", { project: (snap.source && snap.source.project) || "Mixxx",
-          version: (snap.source && snap.source.tag) || "" })}
+      <ControllerDecks />
+
+      <div className="tp-ctrl-foot">
+        <span>{tr("settings.ctrlFootnote")}</span>
+        <span>{tr("settings.ctrlCredit", { project: (snap.source && snap.source.project) || "Mixxx",
+          version: (snap.source && snap.source.tag) || "" })}</span>
       </div>
+
+      {snap.devices.length > 0 && (
+        <div className="tp-set-actions">{detectBtn(tr("settings.ctrlDetectAgain"), "ghost")}</div>
+      )}
     </SettingsCard>
   );
 }
@@ -488,8 +518,6 @@ function SettingsView({ t, setTweak, onReplayTour, onOpenCommunity }) {
         <div className="tp-set-col">
           <AudioOutputsCard />
 
-          <ControllersCard />
-
           <MusicFilesCard t={t} setTweak={setTweak} />
 
           <SoundLevelingCard />
@@ -499,6 +527,8 @@ function SettingsView({ t, setTweak, onReplayTour, onOpenCommunity }) {
           <CortinaPlaybackCard />
 
           <LibraryDisplayCard t={t} setTweak={setTweak} />
+
+          <ControllersCard />
 
           <CommunityAccountCard onOpenCommunity={onOpenCommunity} />
 

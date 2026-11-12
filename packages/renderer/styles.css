@@ -2137,9 +2137,27 @@ button.tp-nav {
   background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: 9px; padding: 10px 12px;
 }
 .tp-set-actions { display: flex; gap: 10px; }
-.tp-set-status { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
-.tp-set-status.ok { color: var(--accent); font-weight: 600; }
-.tp-set-status.err { color: var(--accent-deep); white-space: normal; max-width: 260px; text-align: right; }
+
+/* DJ controllers card */
+.tp-ctrl-badge {
+  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; white-space: nowrap; color: var(--ink-2); background: var(--surface-2);
+}
+.tp-ctrl-badge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .7; }
+.tp-ctrl-badge.ok { color: var(--accent); background: var(--accent-soft); }
+.tp-ctrl-badge.ok i { opacity: 1; }
+.tp-ctrl-err { color: var(--accent-deep); }
+.tp-ctrl-decks {
+  display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+}
+.tp-ctrl-deck {
+  display: flex; align-items: center; gap: 8px; padding: 9px 12px; font-size: 12.5px; color: var(--ink-3s);
+}
+.tp-ctrl-deck + .tp-ctrl-deck { border-top: 1px solid var(--line); }
+.tp-ctrl-deck .n { font-weight: 600; color: var(--ink-2); min-width: 52px; }
+.tp-ctrl-deck .to { font-weight: 600; color: var(--ink); }
+.tp-ctrl-deck .ds { margin-left: auto; color: var(--ink-2); text-align: right; }
+.tp-ctrl-foot { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; color: var(--ink-2); line-height: 1.45; }
 
 /* About — a quiet, centered footer below the settings cards (no card chrome). */
 .tp-about {
