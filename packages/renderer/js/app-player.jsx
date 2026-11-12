@@ -2069,12 +2069,69 @@ function LivePlayer({ queueWidth, onQueueWidthChange }) {
   );
 }
 
+// Scroll-wheel volume: with the pointer over a volume control, turning the
+// wheel (or a two-finger scroll) nudges it without having to grab the slider.
+// Pushing the wheel forward, or sliding the fingers up, is louder. Returns a
+// ref for the control's wrapper. The listener is attached by hand because
+// React's onWheel is passive and couldn't stop the page behind from scrolling.
+const WHEEL_PX_PER_PCT = 2;   // scroll distance for one percent
+const WHEEL_MAX_STEP = 5;     // most a single wheel event may move it, in percent
+// macOS "natural scrolling" flips the deltas the page receives, so the same
+// push of the wheel would raise the volume on one machine and lower it on the
+// next. The main process knows the setting; it's re-read whenever the pointer
+// enters a volume control, since it can change while the app is open.
+let wheelNatural = false;
+function refreshWheelNatural() {
+  const ask = window.compas && window.compas.getNaturalScrolling;
+  if (ask) ask().then((on) => { wheelNatural = !!on; }).catch(() => {});
+}
+function useWheelVolume(pct, onPct) {
+  const ref = useRef(null);
+  const live = useRef({ pct, onPct });
+  live.current = { pct, onPct };
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let acc = 0;   // scroll distance not yet spent on a step
+    const onWheel = (e) => {
+      // ctrl+wheel is pinch-zoom; a sideways scroll isn't a volume gesture
+      if (e.ctrlKey || !e.deltaY || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      // deltaMode 1 reports lines rather than pixels
+      const px = (wheelNatural ? e.deltaY : -e.deltaY) * (e.deltaMode === 1 ? 40 : 1);
+      if (acc && Math.sign(px) !== Math.sign(acc)) acc = 0;
+      acc += px;
+      let step = Math.trunc(acc / WHEEL_PX_PER_PCT);
+      if (!step) return;
+      // A notched mouse sends one big delta per click and a trackpad a stream
+      // of small ones; capping the step keeps a single click from jumping the
+      // floor's level, and the remainder is dropped rather than carried over.
+      if (Math.abs(step) > WHEEL_MAX_STEP) { step = Math.sign(step) * WHEEL_MAX_STEP; acc = 0; }
+      else acc -= step * WHEEL_PX_PER_PCT;
+      const cur = live.current;
+      const next = Math.min(100, Math.max(0, cur.pct + step));
+      if (next === cur.pct) return;
+      cur.pct = next;   // several events can land before the next render
+      cur.onPct(next);
+    };
+    refreshWheelNatural();
+    el.addEventListener("pointerenter", refreshWheelNatural);
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("pointerenter", refreshWheelNatural);
+      el.removeEventListener("wheel", onWheel);
+    };
+  }, []);
+  return ref;
+}
+
 // Master output control, lives inside the transport bar's control cluster.
 function VolumeControl({ volume, muted, onVolume, onToggleMute }) {
   const off = muted || volume <= 0;
   const pct = Math.round((off ? 0 : volume) * 100);
+  const wheelRef = useWheelVolume(pct, (p) => onVolume(p / 100));
   return (
-    <div className="tp-nb-vol" title={tr("player.masterOutput")}>
+    <div className="tp-nb-vol" ref={wheelRef} title={tr("player.masterOutput")}>
       <button className="tp-vol-btn" onClick={onToggleMute} title={off ? tr("player.unmute") : tr("player.mute")}>
         {off ? <I.volX s={16} /> : <I.vol s={16} />}
       </button>
@@ -2145,6 +2202,22 @@ function EqualizerControl({ enabled, bands, onToggle, onBand, onReset }) {
   );
 }
 
+// Pre-listen volume, in the headphone monitor strip. Its own component so the
+// scroll-wheel listener mounts with the strip.
+function CueVolume({ volume, onVolume }) {
+  const off = volume <= 0;
+  const pct = Math.round(volume * 100);
+  const wheelRef = useWheelVolume(pct, (p) => onVolume(p / 100));
+  return (
+    <div className="tp-nb-vol" ref={wheelRef} title={tr("player.preListenVolume")}>
+      <span className="tp-vol-btn cue" aria-hidden="true">{off ? <I.volX s={15} /> : <I.headphones s={15} />}</span>
+      <input className="tp-vol-range cue" type="range" min="0" max="100" step="1" value={pct}
+        style={{ "--vfill": pct + "%" }}
+        onChange={(e) => onVolume(Number(e.target.value) / 100)} />
+    </div>
+  );
+}
+
 // Headphone monitor strip — a second, visually distinct transport that sits
 // above the floor's NowBar. Only mounts while a track is cued, so it stays out
 // of the way until the DJ auditions something.
@@ -2153,8 +2226,6 @@ function CueBar({ cue, monitorLabel }) {
   const song = cue.song;
   if (!song) return null;
   const remain = Math.max(0, (cue.dur || 0) - (cue.pos || 0));
-  const off = cue.volume <= 0;
-  const pct = Math.round(cue.volume * 100);
   return (
     <div className="tp-cuebar">
       <div className="tp-cb-meta">
@@ -2177,12 +2248,7 @@ function CueBar({ cue, monitorLabel }) {
           {cue.playing ? <I.pause s={18} /> : <I.play s={18} />}
         </button>
         <button className="tp-tbtn sm ghost" onClick={cue.stop} title={tr("player.closePreListen")}><I.x s={16} /></button>
-        <div className="tp-nb-vol" title={tr("player.preListenVolume")}>
-          <span className="tp-vol-btn cue" aria-hidden="true">{off ? <I.volX s={15} /> : <I.headphones s={15} />}</span>
-          <input className="tp-vol-range cue" type="range" min="0" max="100" step="1" value={pct}
-            style={{ "--vfill": pct + "%" }}
-            onChange={(e) => cue.setVolume(Number(e.target.value) / 100)} />
-        </div>
+        <CueVolume volume={cue.volume} onVolume={cue.setVolume} />
       </div>
     </div>
   );

@@ -1,171 +1,153 @@
-# Compás — Tango DJ Player
+<p align="center">
+  <img src="logo.svg" alt="Compás" width="96">
+</p>
 
-A desktop app (Electron) for DJing a milonga: a live tango player and a
-tanda-builder workspace. Built on the
+<h1 align="center">Compás</h1>
+
+<p align="center">A desktop music player for tango DJs.</p>
+
+---
+
+Compás is the player you wanted when DJing milongas. It knows what a tanda and a
+cortina are, helps you clean up the tags on a messy tango library, and lets you
+build a night ahead of time and then run it live — with a headphone output for
+previewing the next tanda while the floor keeps dancing.
+
+It runs on macOS and Windows. Your audio files are never moved, renamed or
+rewritten: everything Compás learns about them lives in its own database.
+
+## What it does
+
+- **Library cleanup.** Matches your tracks against a catalogue of tango
+  recordings and suggests the orquesta, singer, year and style. You review
+  every change before it's applied, and nothing is written back to your files.
+- **Tanda builder.** Put tandas together, tag them, filter them by orquesta,
+  singer, decade or mood, and keep the ones that work.
+- **Live player.** Queue tandas and cortinas for the night. Cortinas can play
+  as a short snippet and fade out on their own, and Compás warns you if you've
+  put two tandas back to back with no cortina between them. Silence at the
+  start and end of old transfers is trimmed at playback, so the gaps inside a
+  tanda stay tight.
+- **Pre-listen.** Send a second output to your headphones to audition tandas
+  without touching what's playing in the room.
+- **Community.** Optionally share tandas (song details only — never audio),
+  see which songs from other DJs' tandas you already own, and rebuild them
+  from your own files.
+
+The interface is available in English, Spanish, French, Italian, German, Greek,
+Turkish, Russian, Chinese, Hindi and Japanese.
+
+## Download
+
+Grab the latest installer from the
+[releases page](https://github.com/pkakelas/compas/releases/latest). Installed
+copies check for updates on launch.
+
+The macOS build isn't notarized yet, so macOS may refuse to open it the first
+time. Right-click the app and choose **Open** to get past that.
+
+## Building from source
+
+You'll need Node 23 or newer and pnpm (`corepack enable` will set it up).
+
+```bash
+git clone https://github.com/pkakelas/compas.git
+cd compas
+pnpm install
+pnpm start
+```
+
+`pnpm start` opens the app in development mode. Renderer changes reload the
+window; changes to the main process or preload restart Electron.
+
+To build installers for your own machine:
+
+```bash
+pnpm run compile       # everything configured for the current OS
+pnpm run compile:mac   # macOS dmg/zip, arm64 + x64
+pnpm run compile:win   # Windows installers, x64 + arm64
+pnpm run compile:dir   # unpacked app, quickest for debugging
+```
+
+Use those scripts rather than passing `--mac` or `--win` to `compile` — the
+flag won't make it through to electron-builder. If you cross-build for Windows
+on a Mac, run `pnpm run rebuild` before going back to `pnpm start`, otherwise
+the native SQLite module will be built for the wrong platform.
+
+### Community backend
+
+The Community features talk to a Supabase project. The development build points
+at a staging project through `packages/main/.env.development`. If you leave
+those values empty the app builds without Community and everything else works
+as normal. Database migrations are in `supabase/migrations`.
+
+## Project layout
+
+It's a pnpm workspace based on the
 [vite-electron-builder](https://github.com/cawa-93/vite-electron-builder)
-template — a secure, Vite-based Electron monorepo.
+template:
 
-The UI is React. The original design prototypes were authored as classic
-scripts that read a global `React` and publish their components onto `window`;
-that contract is preserved (see `packages/renderer/entries/globals.js`), so the
-design files in `packages/renderer/js/` are bundled unchanged.
-
-Uses **pnpm** workspaces.
-
-## Quick start
-
-```bash
-pnpm install     # installs all workspaces
-pnpm start       # dev mode with hot reload
+```
+packages/
+  main/        Electron main process — library, database, audio protocol, updates
+  preload/     the bridge between main and the UI
+  renderer/    the UI (React, built with Vite)
+supabase/      Community backend migrations
+tests/         end-to-end tests
 ```
 
-`pnpm start` runs `packages/dev-mode.js`, which:
+A quirk worth knowing about the renderer: the UI started life as design
+prototypes written as plain scripts that use a global `React` and attach their
+components to `window`. That's still how it works. `entries/globals.js` sets up
+the globals, `entries/main.jsx` loads the files in `js/` in order, and Vite
+compiles them with the classic JSX runtime. There are no imports between those
+files, so load order matters.
 
-- starts a Vite dev server for the renderer,
-- builds `packages/preload` and `packages/main` in watch mode,
-- launches Electron and **reloads the window** on renderer changes and
-  **restarts Electron** on main/preload changes.
+## Tests
 
-## Build & distribute
+The end-to-end tests drive the real, built Electron app with Playwright:
 
 ```bash
-pnpm run build                      # build all workspaces (no packaging)
-pnpm run compile                    # package for the current OS (all configured targets)
-pnpm run compile:mac                # macOS only: arm64 + x64 dmg/zip
-pnpm run compile:win                # Windows only: x64 + arm64 NSIS installers
-                                    # (on macOS, run `pnpm run rebuild` afterward before `pnpm start`)
-pnpm run compile:dir                # unpacked app dir (faster, for debugging)
+pnpm test:e2e
+pnpm test:e2e:headed   # if you want to watch
 ```
 
-Platform flags must use the scripts above — `pnpm run compile -- --mac` does not
-reach electron-builder because the `compile` script chains commands with `&&`.
+See [tests/README.md](tests/README.md) for what each spec covers. Community
+tests run against a local stub, never a real server.
 
-Config lives in `electron-builder.mjs`. App icons are in `buildResources/`.
+## Translations
 
-### Releases (GitHub Actions → website downloads)
+Every string in the UI lives in `packages/renderer/locales/<language>/`. English
+is the source; other languages fall back to it for anything missing. If you'd
+like to add or fix a language,
+[packages/renderer/locales/README.md](packages/renderer/locales/README.md)
+explains the conventions, and `pnpm run i18n:check` will tell you if anything
+is missing or unused.
 
-Binaries are built in CI and published to **GitHub Releases**. The Vercel
-marketing site should link there — Vercel is great for the site, but large
-`.dmg` / `.exe` files belong on GitHub’s release CDN.
+## Releasing
 
-**Ship a version**
-
-1. Bump `version` in `package.json` (e.g. `0.1.0` → `0.2.0`).
-2. Commit, tag, and push:
+1. Bump `version` in `package.json`.
+2. Tag and push:
    ```bash
    git tag v0.2.0
    git push origin main --tags
    ```
-3. The [Release workflow](.github/workflows/release.yml) runs on macOS and
-   Windows, uploads installers, and writes update metadata for the in-app
-   auto-updater.
 
-**Artifacts** (ASCII names for stable URLs):
+The [release workflow](.github/workflows/release.yml) builds the macOS and
+Windows installers and publishes them to GitHub Releases along with the update
+metadata the app checks against. A
+[separate workflow](.github/workflows/store-package.yml) builds the Microsoft
+Store package and submits it; the comments at the top of that file list the
+secrets it needs. Store installs are updated by the Store, so the in-app updater
+is switched off there.
 
-| Platform | File |
-|----------|------|
-| macOS (Apple Silicon) | `Compas-{version}-mac-arm64.dmg` |
-| macOS (Intel) | `Compas-{version}-mac-x64.dmg` |
-| Windows (Intel/AMD) | `Compas-{version}-win-x64.exe` |
-| Windows (ARM) | `Compas-{version}-win-arm64.exe` |
+## Contributing
 
-**Microsoft Store packages** are built by the separate
-[Store package workflow](.github/workflows/store-package.yml), which runs for
-every `v*` tag (or by hand). It bundles the x64 and arm64 packages into
-`Compas-{version}.msixbundle` and submits it to the Store for certification, so
-nothing is uploaded by hand; the packages are also attached to the run. It
-needs the repo variables `APPX_IDENTITY_NAME`, `APPX_PUBLISHER` and
-`APPX_PUBLISHER_DISPLAY_NAME` (values from Partner Center → Product identity),
-plus `APPX_DISPLAY_NAME` if the reserved app name is not "Compás". Submitting
-also needs the `STORE_PRODUCT_ID` variable and the `AZURE_AD_TENANT_ID`,
-`AZURE_AD_APPLICATION_CLIENT_ID`, `AZURE_AD_APPLICATION_SECRET` and `SELLER_ID`
-secrets, for an Entra app added in Partner Center → User management with the
-Manager role; without them the workflow only builds. A submission started by
-hand in Partner Center blocks it, so delete such a draft first. A Store
-install is updated by the Store, so the in-app updater is off there.
+Bug reports and pull requests are welcome. If you're planning something larger
+than a fix, open an issue first so we can talk it through. If you DJ tango and
+something in Compás doesn't match how you actually work, that's worth an issue
+too.
 
-**Download links on Vercel** — point buttons at GitHub:
+## License
 
-```html
-<a href="https://github.com/pkakelas/compas/releases/latest/download/Compas-0.2.0-mac-arm64.dmg">
-  Download for Mac (Apple Silicon)
-</a>
-<a href="https://github.com/pkakelas/compas/releases/latest/download/Compas-0.2.0-mac-x64.dmg">
-  Download for Mac (Intel)
-</a>
-<a href="https://github.com/pkakelas/compas/releases/latest/download/Compas-0.2.0-win-x64.exe">
-  Download for Windows
-</a>
-```
-
-`releases/latest/download/…` always serves the newest tag, but the filename
-still includes the version. For a version-agnostic redirect, add a small
-Vercel API route that calls the
-[GitHub Releases API](https://docs.github.com/en/rest/releases/releases) and
-`302` redirects to the matching asset.
-
-Installed apps check GitHub Releases on launch (`electron-updater`) and prompt
-to update when a newer tag exists.
-
-> macOS signing note: the app is packaged **unsigned / ad-hoc** (no Apple
-> Developer ID). Recent macOS may refuse to launch an ad-hoc-signed bundle. For
-> real distribution, add a Developer ID certificate and enable notarization.
-> Development (`pnpm start`) is unaffected.
-
-## Project structure
-
-```
-.
-├─ package.json            # root workspace: scripts + electron-builder devdeps
-├─ pnpm-workspace.yaml     # workspace globs + allowed build scripts
-├─ .npmrc                  # hoisted node-linker + workspace linking
-├─ electron-builder.mjs    # packaging config (appId, targets)
-├─ buildResources/         # app icons for electron-builder
-├─ types/                  # ambient TS types (import.meta.env, etc.)
-├─ packages/
-│  ├─ entry-point.mjs      # production entry: wires renderer + preload into main
-│  ├─ dev-mode.js          # dev orchestrator (renderer server + watch builds)
-│  ├─ main/                # Electron main process (TS, modular)
-│  ├─ preload/             # preload scripts (contextBridge auto-expose)
-│  ├─ electron-versions/   # helper to read bundled Chrome/Node versions
-│  └─ renderer/            # the UI — a standalone Vite app (@app/renderer)
-│     ├─ index.html        # the app
-│     ├─ styles.css        # design system styles
-│     ├─ vite.config.js    # classic JSX runtime
-│     ├─ entries/          # globals (React→window) + main entry module
-│     ├─ locales/          # translations: <locale>/<namespace>.json
-│     └─ js/               # the design source (*.jsx), bundled as-is
-└─ screenshots/            # reference renders
-```
-
-## How the renderer is wired
-
-- `packages/renderer` is a plain Vite app. `vite.config.js` uses
-  `@vitejs/plugin-react` with the **classic** JSX runtime so JSX compiles to
-  `React.createElement` against the global `React` — matching the original
-  design files, which have no `import`/`export`.
-- `entries/globals.js` sets `window.React` / `window.ReactDOM` before the design
-  modules load; `entries/main.jsx` then imports the design files in order, each
-  of which attaches its components to `window`. `app-shell.jsx` mounts the app
-  into `#root`.
-- In dev the main process loads the Vite dev-server URL; in production it loads
-  the built `dist/index.html` (resolved via the `@app/renderer` package
-  `exports`).
-
-### Languages
-
-The UI is translated into English (default), Chinese, Hindi, Spanish, French,
-Greek, Italian, German, Turkish, Russian and Japanese; the DJ picks one in **Settings ▸ Appearance ▸ Language**. Strings live in
-`packages/renderer/locales/<locale>/<namespace>.json` and are read through the
-global `tr()` / `trx()` helpers (`entries/i18n.js`). The few native strings (View
-menu, file dialogs) are in `packages/main/src/i18n.ts`. See
-[`packages/renderer/locales/README.md`](packages/renderer/locales/README.md) for
-the conventions and how to add a language; `pnpm run i18n:check` validates that
-every locale matches English and every key used in code exists.
-
-### Using native APIs later
-
-This template exposes anything you `export` from `packages/preload` to the
-renderer via `contextBridge` automatically (see the template docs). Add
-Node-powered features (reading audio folders, persisting state) in the preload
-package and import them from the renderer.
+[MIT](LICENSE)

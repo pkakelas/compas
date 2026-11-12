@@ -21,6 +21,12 @@ function getAppVersion(): Promise<string> {
   return ipcRenderer.invoke('app:version');
 }
 
+/** Whether macOS "natural scrolling" is on (always false elsewhere), so wheel
+ *  gestures can be read as the hand moved rather than as the page would scroll. */
+function getNaturalScrolling(): Promise<boolean> {
+  return ipcRenderer.invoke('app:naturalScrolling');
+}
+
 /** Open a vetted external link (About footer website / email) in the OS handler. */
 function openExternal(url: string): Promise<void> {
   return ipcRenderer.invoke('app:openExternal', url);
@@ -492,6 +498,7 @@ export {
   controllersDownload,
   controllersLoad,
   getAppVersion,
+  getNaturalScrolling,
   openExternal,
   setLocale,
   getLibrary,

@@ -1,6 +1,6 @@
 import type {AppModule} from '../AppModule.js';
 import type {ModuleContext} from '../ModuleContext.js';
-import {BrowserWindow, dialog, ipcMain, shell} from 'electron';
+import {BrowserWindow, dialog, ipcMain, shell, systemPreferences} from 'electron';
 import {basename, dirname, extname, relative, sep} from 'node:path';
 import {existsSync} from 'node:fs';
 import {access, constants as fsConstants, readFile, stat, writeFile} from 'node:fs/promises';
@@ -447,6 +447,15 @@ export class IpcModule implements AppModule {
 
     // App version (from the packaged app's package.json) for the About card.
     ipcMain.handle('app:version', (): string => app.getVersion());
+
+    // Whether macOS "natural scrolling" is on, which flips the wheel deltas the
+    // renderer sees. Scroll-wheel volume asks so that pushing the wheel forward
+    // is louder either way. Read as a string because the setting is absent
+    // until the user first changes it, and absent means on.
+    ipcMain.handle('app:naturalScrolling', (): boolean => {
+      if (process.platform !== 'darwin') return false;
+      return systemPreferences.getUserDefault('com.apple.swipescrolldirection', 'string') !== '0';
+    });
 
     // The renderer owns the language choice; it reports it on launch and on
     // every change so the native menu and file dialogs follow along.
