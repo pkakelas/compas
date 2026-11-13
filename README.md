@@ -13,8 +13,9 @@ cortina are, helps you clean up the tags on a messy tango library, and lets you
 build a night ahead of time and then run it live — with a headphone output for
 previewing the next tanda while the floor keeps dancing.
 
-It runs on macOS and Windows. Your audio files are never moved, renamed or
-rewritten: everything Compás learns about them lives in its own database.
+It runs on macOS and Windows, with a Linux build (x64 deb and AppImage) in
+beta. Your audio files are never moved, renamed or rewritten: everything Compás
+learns about them lives in its own database.
 
 ## What it does
 
@@ -46,6 +47,11 @@ copies check for updates on launch.
 The macOS build isn't notarized yet, so macOS may refuse to open it the first
 time. Right-click the app and choose **Open** to get past that.
 
+On Ubuntu, Debian and their derivatives, install the `.deb`
+(`sudo apt install ./Compas-*.deb`). On other distros, download the `.AppImage`,
+make it executable (`chmod +x Compas-*.AppImage`) and run it; some need
+`libfuse2` installed for AppImages to start.
+
 ## Building from source
 
 You'll need Node 23 or newer and pnpm (`corepack enable` will set it up).
@@ -66,13 +72,16 @@ To build installers for your own machine:
 pnpm run compile       # everything configured for the current OS
 pnpm run compile:mac   # macOS dmg/zip, arm64 + x64
 pnpm run compile:win   # Windows installers, x64 + arm64
+pnpm run compile:linux # Linux deb + AppImage, x64 — run it on Linux
 pnpm run compile:dir   # unpacked app, quickest for debugging
 ```
 
 Use those scripts rather than passing `--mac` or `--win` to `compile` — the
 flag won't make it through to electron-builder. If you cross-build for Windows
 on a Mac, run `pnpm run rebuild` before going back to `pnpm start`, otherwise
-the native SQLite module will be built for the wrong platform.
+the native SQLite module will be built for the wrong platform. The Linux build
+can't be cross-built that way: the bundled ffmpeg is the one for the machine
+that ran `pnpm install`, so build it on Linux.
 
 ### Community backend
 
@@ -133,8 +142,8 @@ is missing or unused.
    git push origin main --tags
    ```
 
-The [release workflow](.github/workflows/release.yml) builds the macOS and
-Windows installers and publishes them to GitHub Releases along with the update
+The [release workflow](.github/workflows/release.yml) builds the macOS,
+Windows and Linux installers and publishes them to GitHub Releases along with the update
 metadata the app checks against. A
 [separate workflow](.github/workflows/store-package.yml) builds the Microsoft
 Store package and submits it; the comments at the top of that file list the

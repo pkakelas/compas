@@ -115,7 +115,31 @@ export default /** @type import('electron-builder').Configuration */
     allowToChangeInstallationDirectory: true,
   },
   linux: {
-    target: ['deb'],
+    // Two formats, x64 only for now, neither signed:
+    //  • deb — for Ubuntu/Debian and derivatives. Its install script sets up
+    //    the Chromium sandbox (including the AppArmor profile Ubuntu 24.04+
+    //    needs), which an AppImage can't do for itself. Updates install through
+    //    dpkg, so the DJ gets a password prompt.
+    //  • AppImage — runs on any distro and updates in place without root.
+    // electron-updater picks its updater from the `package-type` file the deb
+    // carries, and both files are listed in the one latest-linux.yml.
+    // Must be built on Linux (the release workflow's ubuntu runner) —
+    // ffmpeg-static bundles the binary for the machine doing the install, so a
+    // cross-build from macOS would ship a macOS ffmpeg.
+    target: [
+      {target: 'deb', arch: ['x64']},
+      {target: 'AppImage', arch: ['x64']},
+    ],
+    // Required by the deb target, which refuses to build without a contact
+    // address (package.json's author has none). Shown by `apt show compas`.
+    maintainer: 'Dimitris Lamprinos <pkakelas@gmail.com>',
+    // The menu category is derived from mac.category (music → Audio;AudioVideo).
+    // productName stays ASCII for file names; launchers show the real name.
+    desktop: {
+      entry: {
+        Name: 'Compás',
+      },
+    },
   },
   artifactName: 'Compas-${version}-${os}-${arch}.${ext}',
   files: [
