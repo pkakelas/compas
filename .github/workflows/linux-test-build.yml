@@ -1,0 +1,52 @@
+name: Linux test build
+
+# Builds the Linux packages on demand and attaches them to the run, without
+# publishing anything: no release, no update metadata, so installed copies
+# never see it. For handing a build to a tester between releases — run it from
+# the Actions tab (or `gh workflow run linux-test-build.yml`) and download the
+# artifact from the run page.
+#
+# The packages carry the version in package.json, so a tester's copy updates
+# itself normally once a later release ships Linux builds.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: |
+          pnpm run build
+          pnpm exec electron-builder build --config electron-builder.mjs --linux --publish never
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: compas-linux-x64
+          path: |
+            dist/*.deb
+            dist/*.AppImage
+          if-no-files-found: error
+          retention-days: 14
