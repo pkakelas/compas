@@ -64,6 +64,14 @@ window.compas = {
   // Hold the display awake while playing so the screen never sleeps mid-set
   // (and the renderer never gets occluded + throttled).
   setKeepAwake: preload.setKeepAwake,
+  // DJ controllers: the index of Mixxx mappings Compás can download, and the
+  // download/load calls (the files are fetched and hash-checked in main).
+  controllers: {
+    index: preload.controllersIndex,
+    installed: preload.controllersInstalled,
+    download: preload.controllersDownload,
+    load: preload.controllersLoad,
+  },
   // URL the audio engine can stream a song from (range requests supported).
   audioUrl: (id) => `${AUDIO_SCHEME}://song/${id}`,
   // Compás Community: accounts (and, later, the shared-tanda feed). All network

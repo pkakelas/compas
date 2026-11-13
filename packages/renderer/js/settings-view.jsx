@@ -151,6 +151,150 @@ function AudioOutputsCard() {
   );
 }
 
+/* ============================ DJ CONTROLLERS ============================ */
+// DJ controllers run Mixxx's community mappings (entries/controllers.js). The
+// DJ never picks files: "Detect and download" finds what's plugged in and
+// fetches just that controller's mapping, which then works offline.
+function useControllers() {
+  const rt = window.compasControllers;
+  const noop = React.useCallback(() => () => {}, []);
+  const empty = React.useMemo(() => ({ supported: false, devices: [], midiMappings: [], offer: null }), []);
+  return React.useSyncExternalStore(rt ? rt.subscribe : noop, rt ? rt.getSnapshot : () => empty);
+}
+
+const CONTROLLER_ERRORS = { network: "ctrlErrNetwork", integrity: "ctrlErrIntegrity", open: "ctrlErrOpen" };
+const controllerError = (code) => tr("settings." + (CONTROLLER_ERRORS[code] || "ctrlErrStart"));
+
+function controllerStatus(d) {
+  if (d.status === "running") return <span className="tp-ctrl-badge ok"><i />{tr("settings.ctrlRunning")}</span>;
+  if (d.status === "downloading") return <span className="tp-ctrl-badge"><i />{tr("settings.ctrlDownloading")}</span>;
+  if (d.status === "starting") return <span className="tp-ctrl-badge"><i />{tr("settings.ctrlStarting")}</span>;
+  return null;
+}
+
+// What each deck does in Compás, as a two-line legend.
+function ControllerDecks() {
+  const decks = [
+    { n: 1, to: tr("settings.ctrlFloor"), ds: tr("settings.ctrlFloorDesc") },
+    { n: 2, to: tr("settings.preListenLabel"), ds: tr("settings.ctrlPreListenDesc") },
+  ];
+  return (
+    <div className="tp-ctrl-decks">
+      {decks.map((d) => (
+        <div key={d.n} className="tp-ctrl-deck">
+          <span className="n">{tr("settings.ctrlDeckN", { n: d.n })}</span>
+          <I.chev s={12} />
+          <span className="to">{d.to}</span>
+          <span className="ds">{d.ds}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ControllersCard() {
+  const snap = useControllers();
+  const rt = window.compasControllers;
+  const [busy, setBusy] = React.useState(false);
+  const [result, setResult] = React.useState(null); // {found, failed} after a detect
+  if (!snap.supported) return null;
+
+  const detect = async () => {
+    setBusy(true); setResult(null);
+    try { setResult(await rt.detectAndInstall()); } finally { setBusy(false); }
+  };
+  const midiOpts = [{ value: "", label: tr("settings.ctrlNoMapping") },
+    ...snap.midiMappings.map((m) => ({ value: m.id, label: m.name }))];
+  const detectBtn = (label, cls) => (
+    <button className={"tp-btn sm " + cls} onClick={detect} disabled={busy || !snap.loaded}>
+      <I.download s={14} /> {busy ? tr("settings.ctrlDetecting") : label}
+    </button>
+  );
+
+  return (
+    <SettingsCard icon={<I.sliders s={17} />} title={tr("settings.ctrlTitle")} desc={tr("settings.ctrlDesc")}>
+      {snap.devices.length === 0 ? (
+        <SetRow label={tr("settings.ctrlNoneTitle")}
+          desc={result && result.found === 0 ? tr("settings.ctrlNoneFound") : tr("settings.ctrlNoneDesc")}>
+          {detectBtn(tr("settings.ctrlDetect"), "")}
+        </SetRow>
+      ) : snap.devices.map((d) => (
+        <SetRow key={d.key} label={d.label}
+          desc={d.status === "error"
+            ? <span className="tp-ctrl-err">{controllerError(d.error)}</span>
+            : d.mapping ? tr("settings.ctrlMapping", { name: d.mapping.name }) : tr("settings.ctrlNoMappingFound")}>
+          {controllerStatus(d)}
+          {d.protocol === "midi" && (
+            <SetSelect value={d.mapping ? d.mapping.id : ""} options={midiOpts}
+              onChange={(id) => rt.setMidiMapping(d.key, id || null)} />
+          )}
+          {d.mapping && (d.status === "idle" || d.status === "error") && (
+            <button className="tp-btn sm" onClick={() => rt.install(d.key)}>
+              {d.status === "error" ? tr("settings.ctrlRetry") : d.installed ? tr("settings.ctrlStart") : tr("settings.ctrlDownload")}
+            </button>
+          )}
+        </SetRow>
+      ))}
+
+      <ControllerDecks />
+
+      <div className="tp-ctrl-foot">
+        <span>{tr("settings.ctrlFootnote")}</span>
+        <span>{tr("settings.ctrlCredit", { project: (snap.source && snap.source.project) || "Mixxx",
+          version: (snap.source && snap.source.tag) || "" })}</span>
+      </div>
+
+      {snap.devices.length > 0 && (
+        <div className="tp-set-actions">{detectBtn(tr("settings.ctrlDetectAgain"), "ghost")}</div>
+      )}
+    </SettingsCard>
+  );
+}
+
+// Shown once, the first time a controller Compás has a mapping for is plugged
+// in, if that mapping isn't downloaded yet. Rendered by the app shell.
+function ControllerOfferModal() {
+  const snap = useControllers();
+  const rt = window.compasControllers;
+  const d = snap.offer;
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  React.useEffect(() => { setBusy(false); setError(null); }, [d && d.key]);
+  React.useEffect(() => {
+    if (!d) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); rt.dismissOffer(); } };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [d, rt]);
+  if (!d || !d.mapping) return null;
+
+  const setUp = async () => {
+    setBusy(true); setError(null);
+    const ok = await rt.install(d.key);
+    setBusy(false);
+    if (ok) return; // install() clears the offer
+    const now = rt.getSnapshot().devices.find((x) => x.key === d.key);
+    setError(controllerError(now && now.error));
+  };
+  return (
+    <div className="tp-modal-scrim" onMouseDown={() => !busy && rt.dismissOffer()}>
+      <div className="tp-modal" role="alertdialog" aria-modal="true" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="tp-modal-icon accent"><I.sliders s={20} /></div>
+        <div className="tp-modal-title">{tr("settings.ctrlOfferTitle")}</div>
+        <div className="tp-modal-msg">{tr("settings.ctrlOfferMsg", { device: d.label })}</div>
+        <div className="tp-modal-msg">{tr("settings.ctrlDecks")}</div>
+        {error && <div className="tp-set-warn" style={{ marginTop: 10 }}>{error}</div>}
+        <div className="tp-modal-actions">
+          <button className="tp-modal-cancel" onClick={rt.dismissOffer} disabled={busy}>{tr("settings.ctrlOfferLater")}</button>
+          <button className="tp-modal-confirm accent" onClick={setUp} disabled={busy} autoFocus>
+            <I.download s={14} /> {busy ? tr("settings.ctrlDownloading") : error ? tr("settings.ctrlRetry") : tr("settings.ctrlOfferSetUp")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ============================ CORTINA PLAYBACK ============================ */
 // Let the DJ play only the first few seconds of every cortina, then auto-fade to
 // the next tanda — handy when cortinas are just a floor-clearing cue, not a song.
@@ -384,6 +528,8 @@ function SettingsView({ t, setTweak, onReplayTour, onOpenCommunity }) {
 
           <LibraryDisplayCard t={t} setTweak={setTweak} />
 
+          <ControllersCard />
+
           <CommunityAccountCard onOpenCommunity={onOpenCommunity} />
 
           <SettingsCard icon={<I.spark s={16} />} title={tr("settings.appearanceTitle")}
@@ -447,4 +593,4 @@ function SettingsView({ t, setTweak, onReplayTour, onOpenCommunity }) {
 }
 
 // SettingsCard / SetRow are shared with the Community account card (community-view.jsx).
-Object.assign(window, { SettingsView, SettingsCard, SetRow });
+Object.assign(window, { SettingsView, SettingsCard, SetRow, ControllerOfferModal });
