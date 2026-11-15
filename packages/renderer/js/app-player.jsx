@@ -174,6 +174,23 @@ function firstLiveSong(item) {
   if (item.type !== "tanda") return 0;
   return nextLiveSong((item.data && item.data.songs) || [], 0);
 }
+// Walking backwards: the nearest song at or before `from` that isn't skipped.
+function prevLiveSong(songs, from) {
+  for (let i = Math.min(from, songs.length - 1); i >= 0; i--) if (!songs[i].skip) return i;
+  return -1;
+}
+// Last song a queue item would play, for stepping back into it from after.
+function lastLiveSong(item) {
+  if (!item) return -1;
+  if (item.type !== "tanda") return 0;
+  const songs = (item.data && item.data.songs) || [];
+  return prevLiveSong(songs, songs.length - 1);
+}
+// First queue index (from `from` on) that has something to play, or -1.
+function firstLiveItem(queue, from = 0) {
+  for (let j = Math.max(0, from); j < queue.length; j++) if (firstLiveSong(queue[j]) >= 0) return j;
+  return -1;
+}
 
 // Does the single-song item at `index` play the cortina role? Yes if and only if
 // it sits directly between two tandas (the item immediately before AND after it
@@ -828,9 +845,11 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
 
 /* ============================ NOW BAR (bottom) ============================ */
 
+// The next tanda that will actually play — one whose songs are all marked skip
+// is passed over, exactly as live advancing would.
 function nextTandaAfter(queue, key) {
   const i = queue.findIndex(x => x.key === key);
-  for (let j = i + 1; j < queue.length; j++) if (queue[j].type === "tanda") return queue[j];
+  for (let j = i + 1; j < queue.length; j++) if (queue[j].type === "tanda" && firstLiveSong(queue[j]) >= 0) return queue[j];
   return null;
 }
 
@@ -850,7 +869,7 @@ function SeekBar({ pos, dur, onSeek, className = "tp-nb-bar" }) {
   );
 }
 
-function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, locked, onToggleLock, onPlayPause, onPrev, onNext, onSeek, onFadeToTanda, onVolume, onToggleMute, cortinaSnippetEnabled, cortinaSnippetSec, eqEnabled, eqBands, onToggleEq, onEqBand, onResetEq }) {
+function NowBar({ now, nowIx, queue, playing, canNext, pos, dur, volume, muted, locked, onToggleLock, onPlayPause, onPrev, onNext, onSeek, onFadeToTanda, onVolume, onToggleMute, cortinaSnippetEnabled, cortinaSnippetSec, eqEnabled, eqBands, onToggleEq, onEqBand, onResetEq }) {
   const eqProps = { enabled: eqEnabled, bands: eqBands, onToggle: onToggleEq, onBand: onEqBand, onReset: onResetEq };
   const songTitle = useSongTitle();
   // The bar shows on every tab, so the lock is visible — and can be released —
@@ -934,7 +953,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, locked, o
           <button className="tp-tbtn nb play" onClick={onPlayPause} disabled={locked}>
             {playing ? <I.pause s={22} /> : <I.play s={22} />}
           </button>
-          <button className="tp-tbtn nb" onClick={onNext} disabled={locked}><I.next s={16} /></button>
+          <button className="tp-tbtn nb" onClick={onNext} disabled={locked || !canNext}><I.next s={16} /></button>
           <button className="tp-chip warn" style={{ marginLeft: 6 }} onClick={onFadeToTanda} disabled={!upcoming}>
             <I.fwd s={15} /> {tr("player.fadeToNextTanda")}{upcoming ? <span className="tp-chip-tail"> · {tandaMeta(upcoming.data).orq}</span> : null}
           </button>
@@ -984,7 +1003,7 @@ function NowBar({ now, nowIx, queue, playing, pos, dur, volume, muted, locked, o
         <button className="tp-tbtn nb play" onClick={onPlayPause} disabled={locked}>
           {playing ? <I.pause s={22} /> : <I.play s={22} />}
         </button>
-        <button className="tp-tbtn nb" onClick={onNext} disabled={locked}><I.next s={16} /></button>
+        <button className="tp-tbtn nb" onClick={onNext} disabled={locked || !canNext}><I.next s={16} /></button>
         <EqualizerControl {...eqProps} /><VolumeControl volume={volume} muted={muted} onVolume={onVolume} onToggleMute={onToggleMute} />
       </div>
     </div>
@@ -1052,6 +1071,7 @@ function usePlayerEngine(mainDeviceId, playback) {
   const trimStartAppliedRef = useRef(false); // seek-past-intro done once per song
   const trimEndFiredRef = useRef(false);     // end-trim advance fired once per song
   const gapTimerRef = useRef(null);          // pending inter-song silence gap
+  const fadeTimerRef = useRef(null);         // pending "fade to next tanda" handover
 
   const queueNow = queue.find((i) => i.key === nowKey) || null;
   // A preview is shown in the bar as a one-song pseudo-tanda so the existing UI just works.
@@ -1232,16 +1252,27 @@ function usePlayerEngine(mainDeviceId, playback) {
     const fadeSec = stateRef.current.cortinaFadeSec;
     const fadeMs = Number.isFinite(fadeSec) && fadeSec >= 0
       ? Math.round(fadeSec * 1000) : FADE_TO_TANDA_MS;
+    // Land on the tanda's first song that isn't marked skip. Read the queue at
+    // handover time, so a skip toggled mid-fade still counts.
+    const handOver = () => {
+      const target = stateRef.current.queue.find((i) => i.key === targetKey);
+      setPreview(null); setNowKey(targetKey); setNowIx(Math.max(0, firstLiveSong(target))); setPlaying(true);
+    };
+    clearFadeTimer();
     if (h && h.playing()) {
       advancingRef.current = true;
       h.fade(h.volume(), 0, fadeMs);
-      setTimeout(() => {
+      fadeTimerRef.current = setTimeout(() => {
+        fadeTimerRef.current = null;
         advancingRef.current = false;
-        setPreview(null); setNowKey(targetKey); setNowIx(0); setPlaying(true);
+        handOver();
       }, fadeMs);
     } else {
-      setPreview(null); setNowKey(targetKey); setNowIx(0); setPlaying(true);
+      handOver();
     }
+  }
+  function clearFadeTimer() {
+    if (fadeTimerRef.current) { clearTimeout(fadeTimerRef.current); fadeTimerRef.current = null; }
   }
 
   const flashError = (msg) => {
@@ -1270,6 +1301,9 @@ function usePlayerEngine(mainDeviceId, playback) {
   useEffect(() => {
     stopTick();
     clearGapTimer();
+    // A fade still pending from the previous song (e.g. the DJ pressed Next
+    // mid-fade) must not yank playback back to its target afterwards.
+    clearFadeTimer();
     if (howlRef.current) { howlRef.current.unload(); howlRef.current = null; }
     setPos(0); setDur(0);
     advancingRef.current = false;
@@ -1387,7 +1421,7 @@ function usePlayerEngine(mainDeviceId, playback) {
     // eslint-disable-next-line
   }, [eqEnabled]);
 
-  useEffect(() => () => { stopTick(); clearGapTimer(); if (howlRef.current) howlRef.current.unload(); }, []);
+  useEffect(() => () => { stopTick(); clearGapTimer(); clearFadeTimer(); if (howlRef.current) howlRef.current.unload(); }, []);
 
   // Persist the live working set so it's still here after a restart. We store
   // the queue plus which item/song is current; playback resumes paused.
@@ -1497,8 +1531,9 @@ function usePlayerEngine(mainDeviceId, playback) {
     if (locked) return;
     if (preview) { setPlaying((p) => !p); return; }
     if (!nowKey) {
-      const first = queue[0];
-      if (first) { setNowKey(first.key); setNowIx(0); setPlaying(true); }
+      // Start the set at the first song that isn't marked skip.
+      const j = firstLiveItem(queue);
+      if (j >= 0) { setNowKey(queue[j].key); setNowIx(firstLiveSong(queue[j])); setPlaying(true); }
       return;
     }
     setPlaying((p) => !p);
@@ -1506,15 +1541,24 @@ function usePlayerEngine(mainDeviceId, playback) {
   const prev = () => {
     if (locked) return;
     if (preview) { const h = howlRef.current; if (h) h.seek(0); setPos(0); return; }
-    if (queueNow && queueNow.type === "tanda" && nowIx > 0) { setNowIx(nowIx - 1); setPlaying(true); return; }
+    // Step back over songs marked skip, just as advancing steps forward over them.
+    if (queueNow && queueNow.type === "tanda") {
+      const pi = prevLiveSong(queueNow.data.songs || [], nowIx - 1);
+      if (pi >= 0) { setNowIx(pi); setPlaying(true); return; }
+    }
     const idx = queue.findIndex((i) => i.key === nowKey);
-    const p = idx > 0 ? queue[idx - 1] : null;
-    if (p) { setNowKey(p.key); setNowIx(p.type === "tanda" ? Math.max(0, p.data.songs.length - 1) : 0); setPlaying(true); }
-    else { const h = howlRef.current; if (h) h.seek(0); setPos(0); }
+    for (let j = idx - 1; j >= 0; j--) {
+      const li = lastLiveSong(queue[j]);
+      if (li >= 0) { setNowKey(queue[j].key); setNowIx(li); setPlaying(true); return; }
+    }
+    const h = howlRef.current; if (h) h.seek(0); setPos(0);
   };
   const next = () => {
     if (locked) return;
     if (preview) { setPreview(null); setPlaying(false); return; }
+    // Nothing left to play: leave the song on the floor alone (the button is
+    // disabled in this state, see canNext).
+    if (!hasNext()) return;
     advancingRef.current = false; advance(); setPlaying(true);
   };
   // UI seconds are relative to the trimmed window; map back to real file time.
@@ -1562,17 +1606,22 @@ function usePlayerEngine(mainDeviceId, playback) {
   const loadPlaylist = (items) => {
     if (locked || !items || !items.length) return;
     const q = items.map((it) => mk(it.type, it.data));
+    const j = Math.max(0, firstLiveItem(q));
     setPreview(null);
     setQueue(q);
-    setNowKey(q[0].key);
-    setNowIx(0);
+    setNowKey(q[j].key);
+    setNowIx(Math.max(0, firstLiveSong(q[j])));
     setPlaying(true);
   };
 
   const livePlaying = playing && !preview && !!queueNow;
+  // Next ends a preview, or moves to the next song that will play. With
+  // nothing after the current song it has nothing to do. (stateRef is current
+  // for this render, which is what hasNext reads.)
+  const canNext = !!preview || hasNext();
 
   return {
-    queue, now, nowKey: displayKey, nowIx: displayIx, playing, livePlaying, pos, dur, flash,
+    queue, now, nowKey: displayKey, nowIx: displayIx, playing, livePlaying, canNext, pos, dur, flash,
     cortinaSnippetEnabled, cortinaSnippetSec,
     error, dismissError: () => { clearTimeout(errTimer.current); setError(null); },
     volume, muted, setVolume: (v) => { setVolume(Math.min(1, Math.max(0, v))); if (v > 0) setMuted(false); },
@@ -2188,7 +2237,7 @@ function PlayerBar() {
         </div>
       )}
       <CueBar cue={p.cue} monitorLabel={p.devices.labelFor(p.devices.monitorDeviceId)} />
-      <NowBar now={p.now} nowIx={p.nowIx} queue={p.queue} playing={p.playing} pos={p.pos} dur={p.dur}
+      <NowBar now={p.now} nowIx={p.nowIx} queue={p.queue} playing={p.playing} canNext={p.canNext} pos={p.pos} dur={p.dur}
         volume={p.volume} muted={p.muted} locked={p.locked} onToggleLock={p.toggleLock}
         cortinaSnippetEnabled={p.cortinaSnippetEnabled} cortinaSnippetSec={p.cortinaSnippetSec}
         eqEnabled={p.eqEnabled} eqBands={p.eqBands}
