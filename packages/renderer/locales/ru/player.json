@@ -40,6 +40,8 @@
   "songCount_many": "{count} треков",
   "songCount_other": "{count} трека",
   "remove": "Убрать",
+  "removeFromTanda": "Убрать из этой tanda (только сегодня)",
+  "cantRemoveLastSong": "В tanda должен остаться хотя бы один трек — уберите всю tanda",
   "lockedUnlockToPlay": "Сет заблокирован — разблокируйте, чтобы воспроизвести",
   "cortinaPlaying": "Cortina · играет",
   "cortinaPaused": "Cortina · пауза",

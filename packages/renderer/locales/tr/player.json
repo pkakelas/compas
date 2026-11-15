@@ -34,6 +34,8 @@
   "songCount_one": "{count} şarkı",
   "songCount_other": "{count} şarkı",
   "remove": "Kaldır",
+  "removeFromTanda": "Bu tandadan kaldır (yalnızca bu gece)",
+  "cantRemoveLastSong": "Bir tandada en az bir şarkı olmalı — bunun yerine tandanın tamamını kaldırın",
   "lockedUnlockToPlay": "Canlı set kilitli — çalmak için kilidi açın",
   "cortinaPlaying": "Cortina · çalıyor",
   "cortinaPaused": "Cortina · duraklatıldı",

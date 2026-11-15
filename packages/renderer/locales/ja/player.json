@@ -34,6 +34,8 @@
   "songCount_one": "{count}曲",
   "songCount_other": "{count}曲",
   "remove": "キューから削除",
+  "removeFromTanda": "この tanda から削除（今夜のみ）",
+  "cantRemoveLastSong": "tanda には少なくとも1曲が必要です。tanda ごと削除してください",
   "lockedUnlockToPlay": "ライブセットはロック中です。再生するにはロックを解除してください",
   "cortinaPlaying": "Cortina · 再生中",
   "cortinaPaused": "Cortina · 一時停止中",

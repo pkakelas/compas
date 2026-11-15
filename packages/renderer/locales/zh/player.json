@@ -34,6 +34,8 @@
   "songCount_one": "{count} 首歌曲",
   "songCount_other": "{count} 首歌曲",
   "remove": "移除",
+  "removeFromTanda": "从此 tanda 中移除（仅限今晚）",
+  "cantRemoveLastSong": "tanda 至少需要一首歌曲——请改为移除整个 tanda",
   "lockedUnlockToPlay": "现场已锁定，解锁后才能播放",
   "cortinaPlaying": "Cortina · 播放中",
   "cortinaPaused": "Cortina · 已暂停",

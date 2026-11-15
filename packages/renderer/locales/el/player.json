@@ -34,6 +34,8 @@
   "songCount_one": "{count} τραγούδι",
   "songCount_other": "{count} τραγούδια",
   "remove": "Αφαίρεση",
+  "removeFromTanda": "Αφαίρεση από αυτή την tanda (μόνο απόψε)",
+  "cantRemoveLastSong": "Μια tanda χρειάζεται τουλάχιστον ένα τραγούδι — αφαίρεσε ολόκληρη την tanda",
   "lockedUnlockToPlay": "Το live set είναι κλειδωμένο — ξεκλειδώστε το για να παίξετε",
   "cortinaPlaying": "Cortina · παίζει",
   "cortinaPaused": "Cortina · σε παύση",
