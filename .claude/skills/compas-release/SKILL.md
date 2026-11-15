@@ -71,7 +71,8 @@ Each item is one of:
 
 - a **plain string**, for a small change: `"Plays Apple Lossless .m4a files"`
 - **`{ icon, title, text }`**, for a change worth one sentence of explanation.
-  - `title`: short, sentence case, no full stop.
+  - `title`: short, sentence case, no full stop. Bug fixes may start with
+    "Fixed", for example "Fixed skipped songs bug".
   - `text`: one or two plain sentences ending in a full stop, saying what to
     do or what's different. `text` is optional.
   - `icon`: a name from the `I` set in `packages/renderer/js/shared.jsx`, for
@@ -90,27 +91,52 @@ Also propose the **version**: by default a patch bump of `LAST`
 (0.1.21 → 0.1.22). Suggest a minor bump only if the user asks for one or the
 release is unusually large.
 
-## 4. Agree it with the user
+## 4. Have the user review the changelog
 
-Show the draft in chat, in this shape:
+The user must read the changelog before anything is released. This is a stop
+in the conversation, not a formality: end your turn with the draft and wait.
+
+Make the **full draft the main body of your message**, one item per entry,
+each with its title, its text and its icon, in this shape:
 
 > **Compás 0.1.22**: proposed "What's new"
 >
-> 1. **Scroll to change the volume**: Point at the master or pre-listen volume and use the mouse wheel or a two-finger scroll, no need to grab the slider. *(vol)*
-> 2. Plays Apple Lossless .m4a files
+> 1. **Edit a queued tanda during the set** *(icon: drag)*
+>    In the Live queue, drag a tanda’s songs to reorder them, drop a library song in to add it, or remove one.
 >
-> **Left out:** Linux test build workflow (CI only), README rewrite, MIT license.
+> 2. **Fixed skipped songs bug** *(icon: skip)*
+>    Cortina fades, Prev and Play from a stop now pass over songs marked skip.
+>
+> 3. Plays Apple Lossless .m4a files
+>
+> **Left out:**
+> - the Linux test-build workflow (CI only);
+> - the README rewrite and MIT license.
 >
 > Commits covered: `abc1234`…`def5678` (9 commits since v0.1.21).
 
-Then ask whether it's good to release, and how. In the desktop app, use the
-wrap-up question with buttons such as "Release 0.1.22" and "Change it".
-Otherwise, ask in chat.
+Then, in the same message, ask in plain text whether this draft is good to
+release as that version, or what to change. Rules for asking:
 
-Change the draft as the user asks, and show the whole draft again after each
-change. Go on to step 5 only after the user clearly approves this draft and
-this version. Their approval is the go-ahead to push to main and to tag. If
-the user changes anything afterwards, ask again.
+- **No buttons.** Don't use a wrap-up question with actions, AskUserQuestion
+  or any other one-click answer. A button can be clicked without the draft
+  having been read, and that already happened once.
+- **Don't summarise.** Don't shorten the draft to a recap or a count of
+  items, and don't put it only in a file or a pane. The user should be able
+  to review it in the message itself.
+- **Approval must come after the draft.** It has to be a reply to a message
+  that showed this exact draft. "Release" said before the draft was shown,
+  or about an earlier draft, doesn't count.
+
+When the user asks for changes, apply them and show the **whole** draft again,
+not just the changed line, and ask again. Use the user's wording for titles
+they name. Only adjust the tense so it doesn't read as an instruction (for
+example, "Fix skipped songs bug" becomes "Fixed skipped songs bug"), and say
+that you did.
+
+Go on to step 5 only when the user approves the latest full draft and the
+version. That approval is the go-ahead to push to main and to tag. Until
+then, write nothing in `$REL`.
 
 ## 5. Write the bump
 
