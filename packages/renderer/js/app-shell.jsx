@@ -284,6 +284,7 @@ function AppBody({ t, setTweak }) {
       <PlaylistImportHost onDone={() => setView("Playlists")} />
       <FileWriteChoiceHost />
       {update && <UpdateModal update={update} onDismiss={dismissUpdate} />}
+      {!showOnboarding && <ControllerOfferModal />}
       {showOnboarding && <OnboardingWizard onClose={dismissOnboarding} />}
     </div>
   );

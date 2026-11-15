@@ -3,9 +3,13 @@ import type {ModuleContext} from '../ModuleContext.js';
 import {session} from 'electron';
 
 const AUDIO_PERMISSIONS = new Set(['media', 'audioCapture', 'speaker-selection']);
+// DJ controllers: Web MIDI (with sysex, which some mappings use for their
+// lights) and WebHID. Which HID devices may be opened is decided separately, by
+// the device permission handler in Controllers.ts.
+const CONTROLLER_PERMISSIONS = ['midi', 'midiSysex', 'hid'];
 // Writing plain text to the clipboard (the Community's "Copy song list"). Only
 // writing: nothing in the app reads the clipboard.
-const ALLOWED = new Set([...AUDIO_PERMISSIONS, 'clipboard-sanitized-write']);
+const ALLOWED = new Set([...AUDIO_PERMISSIONS, ...CONTROLLER_PERMISSIONS, 'clipboard-sanitized-write']);
 
 /**
  * Lets the renderer enumerate audio output devices (with real labels) and route
