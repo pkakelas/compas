@@ -408,6 +408,27 @@ button.tp-nav {
 .tp-song-skip:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
 .tp-song-skip.is-on { color: var(--accent); }
 .tp-song-skip:disabled { cursor: default; opacity: 0; }
+/* Editing tonight's copy of a queued tanda: songs not yet played can be
+   dragged within it (grip on hover) or removed. */
+.tp-songrow.is-movable { position: relative; }
+.tp-songrow .tp-song-grip { position: absolute; left: 1px; top: 50%; transform: translateY(-50%);
+  margin: 0; opacity: 0; transition: opacity .12s; }
+.tp-songrow.is-movable:hover .tp-song-grip { opacity: .55; }
+.tp-songrow.is-movable { cursor: grab; }
+.tp-songrow.is-movable.is-clickable { cursor: pointer; }
+.tp-songrow.is-dragging { opacity: .35; }
+.tp-song-x {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0; margin-left: -8px; border: none; border-radius: 7px;
+  background: transparent; color: var(--ink-3s); cursor: pointer;
+  opacity: 0; transition: opacity .12s, background .12s, color .12s;
+}
+.tp-songrow:hover .tp-song-x, .tp-song-x:focus-visible { opacity: 1; }
+.tp-song-x:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.tp-songrow:hover .tp-song-x:disabled { opacity: .35; cursor: default; }
+/* Drop gaps between a tanda's songs: flush rows, so no list gap to cancel. */
+.tp-tanda-songs .tp-dropgap { --drop-gap: 0px; border-radius: 0; }
+.tp-tanda-songs .tp-dropgap.is-open { height: 38px; }
 /* A song marked to be skipped: struck through and dimmed, but still listed. */
 .tp-songrow.is-skip .tp-song-title { text-decoration: line-through; color: var(--ink-3s); }
 .tp-songrow.is-skip .tp-song-dur { text-decoration: line-through; }

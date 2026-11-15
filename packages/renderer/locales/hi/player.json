@@ -34,6 +34,8 @@
   "songCount_one": "{count} गाना",
   "songCount_other": "{count} गाने",
   "remove": "हटाएँ",
+  "removeFromTanda": "इस tanda से हटाएँ (सिर्फ़ आज रात)",
+  "cantRemoveLastSong": "tanda में कम से कम एक गाना होना चाहिए — इसके बजाय पूरी tanda हटाएँ",
   "lockedUnlockToPlay": "लाइव सेट लॉक है — चलाने के लिए अनलॉक करें",
   "cortinaPlaying": "Cortina · चल रहा है",
   "cortinaPaused": "Cortina · रुका हुआ",

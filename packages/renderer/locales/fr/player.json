@@ -34,6 +34,8 @@
   "songCount_one": "{count} morceau",
   "songCount_other": "{count} morceaux",
   "remove": "Retirer",
+  "removeFromTanda": "Retirer de cette tanda (ce soir seulement)",
+  "cantRemoveLastSong": "Une tanda doit garder au moins un morceau — retirez plutôt toute la tanda",
   "lockedUnlockToPlay": "Set live verrouillé — déverrouillez pour lire",
   "cortinaPlaying": "Cortina · en lecture",
   "cortinaPaused": "Cortina · en pause",

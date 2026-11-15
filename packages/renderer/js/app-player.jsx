@@ -5,7 +5,11 @@ const { useState, useRef, useMemo, useEffect, useCallback } = React;
 
 let _kid = 100;
 const kid = () => "q" + (_kid++);
-const mk = (type, data) => ({ key: kid(), type, data });
+// A queued tanda is the DJ's own copy for tonight: its songs can be reordered,
+// removed or added to without touching the saved tanda. Each queued song gets a
+// key of its own (`qk`), since a tanda may hold the same recording twice.
+const withSongKeys = (t) => ({ ...t, songs: ((t && t.songs) || []).map((s) => (s.qk ? s : { ...s, qk: kid() })) });
+const mk = (type, data) => ({ key: kid(), type, data: type === "tanda" ? withSongKeys(data) : data });
 
 const FADE_TO_TANDA_MS = 2500;   // fallback fade when no preference is set
 
@@ -63,11 +67,18 @@ function loadLiveState() {
     // Restored keys came from a previous session's counter; advance _kid past
     // the highest so newly added items can never collide with restored ones.
     let max = 0;
-    data.queue.forEach((it) => {
-      const n = it && typeof it.key === "string" ? parseInt(it.key.slice(1), 10) : NaN;
+    const seen = (k) => {
+      const n = typeof k === "string" ? parseInt(k.slice(1), 10) : NaN;
       if (Number.isFinite(n) && n > max) max = n;
+    };
+    data.queue.forEach((it) => {
+      if (!it) return;
+      seen(it.key);
+      if (it.type === "tanda" && it.data) (it.data.songs || []).forEach((s) => seen(s && s.qk));
     });
     if (max >= _kid) _kid = max + 1;
+    // Queues saved before songs had keys of their own get them now.
+    data.queue = data.queue.map((it) => (it && it.type === "tanda" && it.data ? { ...it, data: withSongKeys(it.data) } : it));
     return data;
   } catch (_e) {
     return {};
@@ -387,13 +398,18 @@ function QueueResizer({ width, min, max, onResize, onCommit }) {
   );
 }
 
-function QSong({ n, title, dur, state, playing, skip, onPlay, onSkip }) {
+// `drag` (optional) makes the row movable within its tanda; `onRemove` (optional)
+// adds a remove button, `removeTitle` explains a disabled one.
+function QSong({ n, title, dur, state, playing, skip, onPlay, onSkip, onRemove, removeTitle, drag }) {
   const isNow = state === "now";
+  const { className: dragCls = "", ...dragHandlers } = drag || {};
   return (
-    <div className={"tp-songrow" + (isNow ? " is-now" : "") + (state === "done" ? " is-done" : "") + (skip ? " is-skip" : "") + (onPlay ? " is-clickable" : "")}
+    <div className={"tp-songrow" + (isNow ? " is-now" : "") + (state === "done" ? " is-done" : "") + (skip ? " is-skip" : "") + (onPlay ? " is-clickable" : "") + (drag ? " is-movable " + dragCls : "")}
+      {...dragHandlers}
       onClick={onPlay ? (e) => { e.stopPropagation(); onPlay(); } : undefined}
       {...(onPlay ? clickKeys(onPlay) : {})}
       title={onPlay ? tr("player.playThisSong") : undefined}>
+      {drag && <span className="tp-grip tp-song-grip" title={tr("player.dragToReorder")}><I.grip s={13} /></span>}
       <span className="n">{isNow && playing ? <EQ /> : <><span className="qn">{n}</span><I.play s={12} /></>}</span>
       <span className="tt"><div className="tp-song-title">{title}</div></span>
       <span className="tp-song-dur">{dur}</span>
@@ -404,12 +420,94 @@ function QSong({ n, title, dur, state, playing, skip, onPlay, onSkip }) {
           <I.skip s={13} />
         </button>
       )}
+      {(onRemove || removeTitle) && (
+        <button className="tp-song-x" disabled={!onRemove}
+          onClick={(e) => { e.stopPropagation(); if (onRemove) onRemove(); }}
+          title={removeTitle || tr("player.removeFromTanda")}>
+          <I.x s={13} />
+        </button>
+      )}
     </div>
   );
 }
 
-function QueueTanda({ item, ix, now, playing, nowIx, onPlaySong, onSkipSong, onRemove, drag }) {
+// The drag type a queued tanda's song row carries while it's being moved, so
+// the queue around it knows to leave that drag to the tanda.
+const QSONG_DRAG = "application/x-compas-qsong";
+const hasDragType = (e, type) => Array.from((e.dataTransfer && e.dataTransfer.types) || []).includes(type);
+
+/* ---------- drag & drop inside a queued tanda ----------
+ * A tanda's song list is a drop zone of its own, nested in the queue's: its
+ * songs reorder within it, and a library song dropped on it joins the tanda
+ * (dropped between queue items, a song still goes in on its own). Gaps before
+ * `minGap` are closed — those are the songs already played and the one on air,
+ * which stay put; a drop there lands just after them. Anything else dragged
+ * over the tanda (a queue row, a library tanda) is left to the queue: we mark
+ * the events we take (nativeEvent.compasTandaDrop) and useQueueDrop skips them. */
+function useTandaSongDrop({ count, minGap, zoneRef, onMove, onInsert }) {
+  const [drag, setDrag] = useState(null);
+  const dragRef = useRef(null);
+  const [over, setOver] = useState(null);
+  const clear = () => { dragRef.current = null; setDrag(null); setOver(null); };
+  const takes = (e) => dragRef.current !== null || hasDragType(e, "application/x-compas-song");
+  const gapAt = (clientY) => {
+    const els = zoneRef.current ? zoneRef.current.querySelectorAll(".tp-songrow") : [];
+    let g = count;
+    for (let i = 0; i < els.length; i++) {
+      const r = els[i].getBoundingClientRect();
+      if (clientY < r.top + r.height / 2) { g = i; break; }
+    }
+    return Math.max(g, minGap);
+  };
+  const open = over !== null && (drag === null || (over !== drag && over !== drag + 1)) ? over : null;
+  return {
+    slot: (i) => i < minGap ? null : {
+      className: drag === i ? "is-dragging" : "",
+      draggable: true,
+      onDragStart: (e) => {
+        // Don't let the tanda card start a drag of its own.
+        e.stopPropagation();
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData(QSONG_DRAG, String(i));
+        dragRef.current = i; setDrag(i);
+      },
+      onDragEnd: (e) => { e.stopPropagation(); clear(); },
+    },
+    gapOpen: (i) => open === i,
+    zone: {
+      onDragOver: (e) => {
+        if (!takes(e)) return;
+        e.preventDefault();
+        e.nativeEvent.compasTandaDrop = true;
+        const at = gapAt(e.clientY);
+        if (over !== at) setOver(at);
+      },
+      onDrop: (e) => {
+        if (!takes(e)) return;
+        e.preventDefault();
+        e.nativeEvent.compasTandaDrop = true;
+        const at = gapAt(e.clientY);
+        if (dragRef.current !== null) {
+          onMove(dragRef.current, at);
+        } else {
+          const lib = /^song:(.+)$/.exec(e.dataTransfer.getData("text/plain") || "");
+          const s = lib && Store.songById(lib[1]);
+          if (s) onInsert(s, at);
+        }
+        clear();
+      },
+      onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(null); },
+    },
+  };
+}
+
+function QueueTanda({ item, ix, now, playing, nowIx, onPlaySong, onSkipSong, onMoveSong, onInsertSong, onRemoveSong, onRemove, drag }) {
   const t = item.data;
+  // Tonight's copy of the tanda can be edited, but not behind the music: the
+  // songs already played and the one on air stay where they are.
+  const minGap = now ? nowIx + 1 : 0;
+  const zoneRef = useRef(null);
+  const sdnd = useTandaSongDrop({ count: t.songs.length, minGap, zoneRef, onMove: onMoveSong, onInsert: onInsertSong });
   const m = tandaMeta(t);
   // Skipped songs are passed over during live playback, so the header counts
   // only the songs that will actually play — toggling a song's skip updates it.
@@ -451,12 +549,27 @@ function QueueTanda({ item, ix, now, playing, nowIx, onPlaySong, onSkipSong, onR
         <span className="tp-tanda-dur tp-mono">{m.total}</span>
         {!now && <button className="tp-qx" onClick={(e) => { e.stopPropagation(); onRemove(); }} title={tr("player.remove")}><I.x s={14} /></button>}
       </div>
-      {!collapsed && t.songs.map((s, i) => (
-        <QSong key={s.id} n={i + 1} title={songTitle(s)} dur={s.dur || "—"}
-          state={now ? (i < nowIx ? "done" : i === nowIx ? "now" : "up") : "up"}
-          playing={playing} skip={!!s.skip}
-          onPlay={onPlaySong ? () => onPlaySong(i) : undefined} onSkip={() => onSkipSong(i)} />
-      ))}
+      {!collapsed && (
+        <div ref={zoneRef} className="tp-tanda-songs" {...sdnd.zone}>
+          {t.songs.map((s, i) => {
+            const editable = i >= minGap;
+            const last = t.songs.length <= 1;
+            return (
+              <React.Fragment key={s.qk || s.id + ":" + i}>
+                <DropGap open={sdnd.gapOpen(i)} />
+                <QSong n={i + 1} title={songTitle(s)} dur={s.dur || "—"}
+                  state={now ? (i < nowIx ? "done" : i === nowIx ? "now" : "up") : "up"}
+                  playing={playing} skip={!!s.skip}
+                  onPlay={onPlaySong ? () => onPlaySong(i) : undefined} onSkip={() => onSkipSong(i)}
+                  drag={sdnd.slot(i)}
+                  onRemove={editable && !last ? () => onRemoveSong(i) : undefined}
+                  removeTitle={editable && last ? tr("player.cantRemoveLastSong") : undefined} />
+              </React.Fragment>
+            );
+          })}
+          <DropGap open={sdnd.gapOpen(t.songs.length)} />
+        </div>
+      )}
     </div>
   );
 }
@@ -597,12 +710,16 @@ function useQueueDrop({ count, scrollRef, onReorder, onInsertSong, onInsertItem,
     // The whole list is the drop zone; rows only start drags.
     list: {
       onDragOver: (e) => {
-        e.preventDefault();
         autoScroll(e.clientY);
+        // A queued tanda took this one (useTandaSongDrop), or it's a tanda's
+        // song being moved, which only its own tanda takes.
+        if (e.nativeEvent.compasTandaDrop || hasDragType(e, QSONG_DRAG)) { if (over !== null) setOver(null); return; }
+        e.preventDefault();
         const at = gapAt(e.clientY);
         if (over !== at) setOver(at);
       },
       onDrop: (e) => {
+        if (e.nativeEvent.compasTandaDrop || hasDragType(e, QSONG_DRAG)) { clear(); return; }
         e.preventDefault();
         const at = gapAt(e.clientY);
         const raw = e.dataTransfer.getData("text/plain") || "";
@@ -631,6 +748,9 @@ function useLibraryDrag() {
   const makeDrag = (it, kind = "song") => ({
     onDragStart: (e) => {
       e.dataTransfer.setData("text/plain", kind + ":" + it.id);
+      // The kind as a type of its own too: unlike the data, types can be read
+      // during dragover (a queued tanda takes songs, but not tandas).
+      e.dataTransfer.setData("application/x-compas-" + kind, it.id);
       e.dataTransfer.effectAllowed = "copy";
       setDraggingId(kind === "song" ? it.id : kind + ":" + it.id);
     },
@@ -653,7 +773,7 @@ function defaultPlaylistName() {
 
 const lockTitle = (locked) => locked ? tr("player.lockOnTitle") : tr("player.lockOffTitle");
 
-function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, onPlaySongAt, onSkipSong, onRemove, onReorder, onInsertSong, onInsertItem, onSavePlaylist, onClearQueue, onBrowse, locked, onToggleLock }) {
+function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, onPlaySongAt, onSkipSong, onMoveSong, onInsertTandaSong, onRemoveSong, onRemove, onReorder, onInsertSong, onInsertItem, onSavePlaylist, onClearQueue, onBrowse, locked, onToggleLock }) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [savingNow, setSavingNow] = useState(false);
@@ -803,7 +923,7 @@ function QueuePanel({ queue, nowKey, nowIx, now, playing, pos, width, onPlay, on
           // (between tandas, or flagged cortina material); otherwise it's a song.
           const role = item.type === "tanda" ? "tanda" : (actsAsCortina(queue, i) ? "cortina" : "song");
           const row = role === "tanda"
-            ? <QueueTanda key={item.key} item={item} ix={tIx} now={isNow} playing={playing} nowIx={isNow ? nowIx : 0} onPlaySong={locked ? undefined : (ix) => onPlaySongAt(item.key, ix)} onSkipSong={(ix) => onSkipSong(item.key, ix)} onRemove={() => onRemove(item.key)} drag={dp} />
+            ? <QueueTanda key={item.key} item={item} ix={tIx} now={isNow} playing={playing} nowIx={isNow ? nowIx : 0} onPlaySong={locked ? undefined : (ix) => onPlaySongAt(item.key, ix)} onSkipSong={(ix) => onSkipSong(item.key, ix)} onMoveSong={(from, at) => onMoveSong(item.key, from, at)} onInsertSong={(s, at) => onInsertTandaSong(item.key, s, at)} onRemoveSong={(ix) => onRemoveSong(item.key, ix)} onRemove={() => onRemove(item.key)} drag={dp} />
             : role === "cortina"
               ? <QueueCortina key={item.key} item={item} now={isNow} playing={playing} onPlay={locked ? undefined : () => onPlay(item.key)} onRemove={locked && isNow ? undefined : () => onRemove(item.key)} drag={dp} />
               : <QueueSong key={item.key} item={item} now={isNow} playing={playing} onPlay={locked ? undefined : () => onPlay(item.key)} onRemove={() => onRemove(item.key)} drag={dp} />;
@@ -1485,6 +1605,51 @@ function usePlayerEngine(mainDeviceId, playback) {
       return { ...it, data: { ...it.data, songs } };
     }));
   };
+  // Edit the songs of a queued tanda. This changes tonight's copy only — the
+  // saved tanda is untouched. Like skip, it works while the set is locked: it
+  // never changes the song on the floor. The queue panel keeps the songs
+  // already played and the one on air in place; if the tanda on air changes
+  // anyway (e.g. while a preview plays), nowIx follows the current song by key.
+  const editTandaSongs = (key, fn) => {
+    const s = stateRef.current;
+    const item = s.queue.find((i) => i.key === key);
+    if (!item || item.type !== "tanda") return;
+    const songs = (item.data && item.data.songs) || [];
+    const next = fn(songs);
+    if (!next || next === songs) return;
+    setQueue((q) => q.map((it) => (it.key === key ? { ...it, data: { ...it.data, songs: next } } : it)));
+    if (key === s.nowKey) {
+      const cur = songs[s.nowIx];
+      const ix = cur ? next.findIndex((x) => x.qk === cur.qk) : -1;
+      const to = ix >= 0 ? ix : Math.min(s.nowIx, Math.max(0, next.length - 1));
+      if (to !== s.nowIx) setNowIx(to);
+    }
+  };
+  // Move song `from` into gap `at` (gap i sits in front of song i).
+  const moveTandaSong = (key, from, at) => editTandaSongs(key, (songs) => {
+    if (from < 0 || from >= songs.length || at === from || at === from + 1) return songs;
+    const copy = songs.slice();
+    const [m] = copy.splice(from, 1);
+    copy.splice(from < at ? at - 1 : at, 0, m);
+    return copy;
+  });
+  // A library song dropped into a queued tanda joins it at that gap.
+  const insertTandaSong = (key, song, at) => {
+    if (!song) return;
+    editTandaSongs(key, (songs) => {
+      const copy = songs.slice();
+      copy.splice(Math.max(0, Math.min(at, copy.length)), 0, { ...song, qk: kid() });
+      return copy;
+    });
+  };
+  // The song on air can't be removed, and a tanda keeps at least one song
+  // (remove the whole tanda for that).
+  const removeTandaSong = (key, ix) => editTandaSongs(key, (songs) => {
+    const s = stateRef.current;
+    if (!s.preview && key === s.nowKey && ix === s.nowIx) return songs;
+    if (songs.length <= 1 || ix < 0 || ix >= songs.length) return songs;
+    return songs.filter((_, i) => i !== ix);
+  });
   // Jump straight to a specific song inside a queued item (e.g. tapping the 3rd
   // song of a tanda). Clicking the song that's already playing toggles play/pause.
   const playItemAt = (key, ix) => {
@@ -1590,7 +1755,7 @@ function usePlayerEngine(mainDeviceId, playback) {
     locked, toggleLock: () => setLocked((v) => !v),
     notify: flashError,
     addTanda, addCortina, addPlaylist, insertSong, insertTanda, insertPlaylist, remove, reorder, clearQueue,
-    playItem, playItemAt, toggleSkip, playPause, prev, next, seek, fadeToTanda,
+    playItem, playItemAt, toggleSkip, moveTandaSong, insertTandaSong, removeTandaSong, playPause, prev, next, seek, fadeToTanda,
     previewSong, loadPlaylist, saveQueueAsPlaylist,
   };
 }
@@ -1985,7 +2150,7 @@ function LivePlayer({ queueWidth, onQueueWidthChange }) {
         makeDrag={makeDrag} draggingId={draggingId} preview={preview} flash={p.flash} />
       <QueueResizer width={qW} min={LIVE_QUEUE_MIN_W} max={LIVE_QUEUE_MAX_W}
         onResize={setQW} onCommit={commitQW} />
-      <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} playing={p.playing} pos={p.pos} width={qW} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onSkipSong={p.toggleSkip} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onInsertItem={insertItem} onSavePlaylist={p.saveQueueAsPlaylist} onClearQueue={p.clearQueue} onBrowse={setTab} locked={p.locked} onToggleLock={p.toggleLock} />
+      <QueuePanel queue={p.queue} nowKey={p.nowKey} nowIx={p.nowIx} now={p.now} playing={p.playing} pos={p.pos} width={qW} onPlay={p.playItem} onPlaySongAt={p.playItemAt} onSkipSong={p.toggleSkip} onMoveSong={p.moveTandaSong} onInsertTandaSong={p.insertTandaSong} onRemoveSong={p.removeTandaSong} onRemove={p.remove} onReorder={p.reorder} onInsertSong={p.insertSong} onInsertItem={insertItem} onSavePlaylist={p.saveQueueAsPlaylist} onClearQueue={p.clearQueue} onBrowse={setTab} locked={p.locked} onToggleLock={p.toggleLock} />
     </div>
   );
 }

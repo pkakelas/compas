@@ -34,6 +34,8 @@
   "songCount_one": "{count} Song",
   "songCount_other": "{count} Songs",
   "remove": "Entfernen",
+  "removeFromTanda": "Aus dieser Tanda entfernen (nur heute Abend)",
+  "cantRemoveLastSong": "Eine Tanda braucht mindestens ein Lied – entferne stattdessen die ganze Tanda",
   "lockedUnlockToPlay": "Live-Set gesperrt – zum Abspielen entsperren",
   "cortinaPlaying": "Cortina · läuft",
   "cortinaPaused": "Cortina · pausiert",

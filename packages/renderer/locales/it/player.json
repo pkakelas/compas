@@ -34,6 +34,8 @@
   "songCount_one": "{count} brano",
   "songCount_other": "{count} brani",
   "remove": "Rimuovi",
+  "removeFromTanda": "Rimuovi da questa tanda (solo stasera)",
+  "cantRemoveLastSong": "Una tanda deve avere almeno un brano: rimuovi invece l’intera tanda",
   "lockedUnlockToPlay": "Set live bloccato: sbloccalo per riprodurre",
   "cortinaPlaying": "Cortina · in riproduzione",
   "cortinaPaused": "Cortina · in pausa",
