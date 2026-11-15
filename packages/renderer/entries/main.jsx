@@ -31,4 +31,5 @@ import "../js/community-feed.jsx";
 import "../js/community-view.jsx";
 import "../js/settings-view.jsx";
 import "../js/onboarding.jsx";
+import "../js/whats-new.jsx";
 import "../js/app-shell.jsx";

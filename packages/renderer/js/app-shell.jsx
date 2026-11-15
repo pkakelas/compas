@@ -210,6 +210,7 @@ function AppBody({ t, setTweak }) {
   const player = usePlayer();
   const [update, dismissUpdate] = useUpdateNotice();
   const [showOnboarding, dismissOnboarding, startOnboarding] = useOnboarding();
+  const [whatsNew, dismissWhatsNew] = useWhatsNew();
   const community = useCommunity();
   // Any view can ask for a tab switch (e.g. "Sign in to share" → Community).
   React.useEffect(() => {
@@ -285,6 +286,10 @@ function AppBody({ t, setTweak }) {
       <FileWriteChoiceHost />
       {update && <UpdateModal update={update} onDismiss={dismissUpdate} />}
       {showOnboarding && <OnboardingWizard onClose={dismissOnboarding} />}
+      {/* One dialog at a time: the tour and "update ready" go first. */}
+      {whatsNew && !showOnboarding && !update && (
+        <WhatsNewModal version={whatsNew.version} entries={whatsNew.entries} onDismiss={dismissWhatsNew} />
+      )}
     </div>
   );
 }
