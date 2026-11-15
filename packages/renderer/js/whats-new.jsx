@@ -16,6 +16,31 @@ const CHANGELOG = [
   //   { icon: "vol", title: "Scroll to change the volume", text: "Point at a volume and use the mouse wheel." },
   //   "Faster library search",
   // ] },
+  {
+    version: "0.1.22",
+    items: [
+      {
+        icon: "drag",
+        title: "Edit a queued tanda during the set",
+        text: "In the Live queue, drag a tanda’s songs to reorder them, drop a library song in to add it, or remove one. Only tonight’s set changes; the saved tanda stays as it was.",
+      },
+      {
+        icon: "skip",
+        title: "Fixed skipped songs bug",
+        text: "Cortina fades, Prev and Play from a stop now pass over songs marked skip, so a skipped opener no longer plays.",
+      },
+      {
+        icon: "vol",
+        title: "Scroll to change the volume",
+        text: "Point at the master or pre-listen volume and use the mouse wheel or a two-finger scroll — no need to grab the slider.",
+      },
+      {
+        icon: "download",
+        title: "Compás on Linux",
+        text: "Compás now also runs on Linux, as a .deb package or an AppImage.",
+      },
+    ],
+  },
 ];
 
 const LAST_SEEN_KEY = "compas.lastSeenVersion";
